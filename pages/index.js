@@ -177,7 +177,7 @@ export default function Dashboard(){
   const[autoOn,setAutoOn]=useState(false);
   const[intv,setIntv]=useState(3);
   const[showLog,setShowLog]=useState(false);
-  const[logs,setLogs]=useState([{ts:new Date().toLocaleTimeString("ko"),msg:"시스템 로드 완료 (Yahoo Finance)",c:"ok"}]);
+  const[logs,setLogs]=useState(()=>[{ts:new Date().toLocaleTimeString("ko"),msg:"시스템 로드 완료 (Yahoo Finance)",c:"ok"}]);
   const[flash,setFlash]=useState({});
   const[prev,setPrev]=useState(()=>{const m={};D.forEach(d=>{m[d.t]=d.p});return m});
   const[exp,setExp]=useState(null);
@@ -288,14 +288,14 @@ export default function Dashboard(){
   const buyR=filtered.filter(d=>seV(d)==="매수준비").length;
   const vcpR=filtered.filter(d=>vcpMt(d)==="성숙").length;
   // 수정 #1: 종합판정 카운트
-  const bestN=filtered.filter(d=>getVerdict(d).stars>=5).length;
-  const strongN=filtered.filter(d=>getVerdict(d).stars===4).length;
+  const bestN=useMemo(()=>filtered.filter(d=>getVerdict(d).stars>=5).length,[filtered]);
+  const strongN=useMemo(()=>filtered.filter(d=>getVerdict(d).stars===4).length,[filtered]);
 
   // 수정 #3: 종목 클릭 핸들러
-  const handleStockClick=(stock)=>{setDetailStock(stock);setShowDetail(true);};
+  const handleStockClick=useCallback((stock)=>{setDetailStock(stock);setShowDetail(true);},[]);
 
   // 수정 #2: 체크리스트 아이템
-  const checklistItems=[
+  const checklistItems=useMemo(()=>[
     {id:'c1',engine:'MF',label:'MF 종합점수 70점 이상인가?',auto:true,check:(s)=>(s.f||0)>=70},
     {id:'c2',engine:'MF',label:'MF 방향이 "매수"인가?',auto:true,check:(s)=>mfTd(s)==="매수"},
     {id:'c3',engine:'SEPA',label:'SEPA 템플릿 7/8 이상인가?',auto:true,check:(s)=>seTt(s)>=7},
@@ -306,7 +306,7 @@ export default function Dashboard(){
     {id:'c8',engine:'시장',label:'주요 지수가 상승추세인가?',auto:true,check:()=>true},
     {id:'c9',engine:'리스크',label:'손절가를 설정했는가? (매수가 -7~8%)',auto:false},
     {id:'c10',engine:'리스크',label:'총 투자금의 5% 이하인가?',auto:false},
-  ];
+  ],[]);
 
   const calcPos=useMemo(()=>{
     const{acct,risk,entry,stop}=posCal;
