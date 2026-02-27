@@ -186,6 +186,7 @@ export default function Dashboard(){
   // 수정 #2: 체크리스트 상태
   const[selectedChkStock,setSelectedChkStock]=useState(null);
   const[manualChecks,setManualChecks]=useState({c9:false,c10:false});
+  const[chkSearch,setChkSearch]=useState("");
   // 수정 #3: 모달 상태
   const[detailStock,setDetailStock]=useState(null);
   const[showDetail,setShowDetail]=useState(false);
@@ -523,15 +524,26 @@ export default function Dashboard(){
           {/* 종목 선택 드롭다운 */}
           <div style={{marginBottom:16}}>
             <label style={{color:"#888",fontSize:12}}>종목 선택 (자동 체크):</label>
+            <input
+              type="text"
+              value={chkSearch}
+              onChange={e=>setChkSearch(e.target.value)}
+              placeholder="🔍 종목명 또는 티커 검색..."
+              style={{width:"100%",padding:10,marginTop:4,background:"#1a1a2e",border:"1px solid #333",borderRadius:"8px 8px 0 0",color:"#eee",fontSize:14,outline:"none"}}
+            />
             <select
               value={selectedChkStock?.t||''}
-              onChange={e=>{const s=stocks.find(d=>d.t===e.target.value);setSelectedChkStock(s||null);}}
-              style={{width:"100%",padding:10,marginTop:4,background:"#1a1a2e",border:"1px solid #333",borderRadius:8,color:"#eee",fontSize:14}}
+              onChange={e=>{const s=stocks.find(d=>d.t===e.target.value);setSelectedChkStock(s||null);setChkSearch("");}}
+              style={{width:"100%",padding:10,background:"#1a1a2e",border:"1px solid #333",borderTop:"none",borderRadius:"0 0 8px 8px",color:"#eee",fontSize:14}}
+              size={chkSearch?Math.min(stocks.filter(d=>{const ql=chkSearch.toLowerCase();return d.n.toLowerCase().includes(ql)||d.t.toLowerCase().includes(ql);}).length+1,8):1}
             >
               <option value="">-- 종목을 선택하세요 --</option>
-              {stocks.map(s=>(
+              {(chkSearch?stocks.filter(d=>{const ql=chkSearch.toLowerCase();return d.n.toLowerCase().includes(ql)||d.t.toLowerCase().includes(ql);}):stocks).map(s=>(
                 <option key={s.t} value={s.t}>{s.n} ({s.t}) - MF: {s.f||'N/A'}</option>
               ))}
+              {chkSearch&&stocks.filter(d=>{const ql=chkSearch.toLowerCase();return d.n.toLowerCase().includes(ql)||d.t.toLowerCase().includes(ql);}).length===0&&(
+                <option value="" disabled>검색 결과 없음</option>
+              )}
             </select>
           </div>
 
