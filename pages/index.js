@@ -410,6 +410,52 @@ export default function Dashboard(){
           <IR l="아웃퍼폼" v={d.r[0]>4.2&&d.r[1]>8.7?"통과":"미달"} c={d.r[0]>4.2?"#3fb950":"#f85149"}/>
         </div>
       </div>
+      {/* 4엔진 체크리스트 */}
+      {(()=>{
+        const mfOk=(d.f||0)>=70;
+        const qualOk=(d.f||0)>=75;
+        const sepaVd=seV(d);const sepaTt=seTt(d);
+        const sepa22Ok=sepaVd==="매수준비"||sepaTt>=7;
+        const sepa50Ok=sepaVd==="매수준비"||sepaTt>=6;
+        const dualOk=sepaVd==="매수준비"||sepaTt>=7;
+        const vcpOk=vcpMt(d)==="성숙";
+        const fcfOk=d.b||(cfM(d)>=2&&cfL(d)>=2);
+        const items=[
+          {ok:mfOk,label:"MF 70점 이상",val:(d.f||0)+"점",auto:true},
+          {ok:qualOk,label:"품질팩터 15점 이상",val:(d.f||0)>=75?"양호":"미달",auto:true},
+          {ok:sepa22Ok,label:"22일 고가 -5% 이내",val:sepaVd==="매수준비"?"돌파":sepaTt+"/8",auto:true},
+          {ok:sepa50Ok,label:"50일 고가 -10% 이내",val:sepaVd==="매수준비"?"돌파":sepaTt+"/8",auto:true},
+          {ok:dualOk,label:"듀얼모멘텀 매수 이상",val:sepaVd,auto:true},
+          {ok:vcpOk,label:"VCP 5점 이상",val:vcpMt(d),auto:true},
+          {ok:fcfOk,label:"FCF 양수",val:fcfOk?"양수":"음수/미확인",auto:true},
+          {ok:null,label:"시장 지수 상승 추세",val:"수동 확인 필요",auto:false},
+          {ok:null,label:"손절가 설정 완료",val:"수동 확인 필요",auto:false},
+          {ok:null,label:"포지션 비중 5% 이하",val:"수동 확인 필요",auto:false},
+        ];
+        const autoPass=items.filter(i=>i.auto&&i.ok).length;
+        const total=autoPass;
+        const color=total>=6?"#3fb950":total>=4?"#d29922":"#f85149";
+        const msg=total>=6?"매수 조건 충족":total>=4?"조건부 매수":"매수 비추천";
+        return(
+          <div style={{background:"#161b22",borderRadius:6,padding:10,marginTop:8}}>
+            <div style={{fontSize:17,fontWeight:700,color:"#d29922",marginBottom:8}}>✅ 4엔진 매수 전 체크리스트</div>
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:4}}>
+              {items.map((it,i)=>(
+                <div key={i} style={{display:"flex",alignItems:"center",gap:6,padding:"4px 8px",borderRadius:4,background:it.auto?(it.ok?"rgba(63,185,80,.08)":"rgba(248,81,73,.08)"):"rgba(72,79,88,.08)"}}>
+                  <span style={{fontSize:14,flexShrink:0}}>{it.auto?(it.ok?"✅":"❌"):"⬜"}</span>
+                  <span style={{fontSize:13,color:it.auto?(it.ok?"#3fb950":"#f85149"):"#484f58",flex:1}}>{it.label}</span>
+                  <span style={{fontSize:12,fontFamily:"monospace",color:it.auto?(it.ok?"#3fb950":"#f85149"):"#484f58",flexShrink:0}}>{it.val}</span>
+                </div>
+              ))}
+            </div>
+            <div style={{marginTop:8,display:"flex",alignItems:"center",gap:8}}>
+              <span style={{fontSize:17,fontWeight:800,color,fontFamily:"monospace"}}>{autoPass}/7 자동통과</span>
+              <span style={{fontSize:13,color}}>{autoPass>=6?"✅":"⚠️"} {msg}</span>
+              <span style={{fontSize:11,color:"#484f58",marginLeft:"auto"}}>+3항목 수동확인</span>
+            </div>
+          </div>
+        );
+      })()}
     </div>
   )};
 
