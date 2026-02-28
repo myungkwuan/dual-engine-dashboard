@@ -138,7 +138,7 @@ function calcMomentum(bars, spyBars) {
 
 /* ===== VCP 변동성수축 패턴 ===== */
 function calcVCP(bars) {
-  if (bars.length < 60) return { t1: 0, t2: 0, t3: 0, baseWeeks: 0, pivot: 0, nearPivot: 99, maturity: '미형성' };
+  if (bars.length < 60) return { t1: 0, t2: 0, t3: 0, baseWeeks: 0, pivot: 0, nearPivot: 99, maturity: '미형성', volDryup: false };
 
   const price = bars[bars.length - 1].c;
 
@@ -157,6 +157,15 @@ function calcVCP(bars) {
   const t2 = range(seg2);
   const t3 = range(seg3);
 
+  /* 거래량 수축 (dry-up): 가격수축과 함께 거래량도 줄어드는지 */
+  const avgVol = (seg) => {
+    const vols = seg.map(b => b.v).filter(v => v > 0);
+    return vols.length > 0 ? vols.reduce((s, v) => s + v, 0) / vols.length : 0;
+  };
+  const vol1 = avgVol(seg1);
+  const vol3 = avgVol(seg3);
+  const volDryup = vol1 > 0 && vol3 < vol1 * 0.7; /* 최근 거래량이 30%+ 감소 */
+
   /* 피봇: 최근 30일 고점 */
   const last30 = bars.slice(-30);
   const pivot = Math.max(...last30.map(b => b.h));
@@ -170,17 +179,125 @@ function calcVCP(bars) {
   }
   const baseWeeks = Math.round((bars.length - baseStart) / 5);
 
-  /* 성숙도 판정 */
+  /* 성숙도 판정 (거래량 수축 반영) */
   let maturity;
   if (t1 > t2 && t2 > t3 && t3 < 8 && baseWeeks >= 3) {
-    maturity = '성숙';
+    maturity = volDryup ? '성숙🔥' : '성숙';
   } else if (t1 > t2 && t2 >= t3) {
     maturity = '형성중';
   } else {
     maturity = '미형성';
   }
 
-  return { t1, t2, t3, baseWeeks, pivot, nearPivot, maturity };
+  return { t1, t2, t3, baseWeeks, pivot, nearPivot, maturity, volDryup };
+}
+
+/* ===== 거래량 분석 (가격맥락 반영) ===== */
+function calcVolume(bars, sepa) {
+  if (bars.length < 50) return { avgVol50: 0, avgVol5: 0, volRatio: 0, volTrend: '부족', surgeDay: false, signal: '데이터부족', signalType: 'neutral' };
+
+  const price = bars[bars.length - 1].c;
+
+  /* 50일 평균 거래량 */
+  const last50 = bars.slice(-50);
+  const avgVol50 = Math.round(last50.reduce((s, b) => s + b.v, 0) / 50);
+
+  /* 최근 5일 평균 거래량 */
+  const last5 = bars.slice(-5);
+  const avgVol5 = Math.round(last5.reduce((s, b) => s + b.v, 0) / 5);
+
+  /* 거래량 비율 */
+  const volRatio = avgVol50 > 0 ? Math.round(avgVol5 / avgVol50 * 100) / 100 : 0;
+
+  /* 최근 5일 중 50일평균의 2배 이상인 날 */
+  const surgeDay = last5.some(b => b.v >= avgVol50 * 2);
+
+  /* 당일 거래량 */
+  const todayVol = bars[bars.length - 1].v;
+  const todayRatio = avgVol50 > 0 ? Math.round(todayVol / avgVol50 * 100) / 100 : 0;
+
+  /* ===== 가격 맥락 분석 ===== */
+
+  /* 1) 가격 방향: 최근 5일 등락 */
+  const price5ago = bars[bars.length - 6]?.c || price;
+  const priceChg5d = price5ago > 0 ? (price / price5ago - 1) * 100 : 0;
+  const priceUp = priceChg5d > 1;    /* 5일간 1%+ 상승 */
+  const priceDown = priceChg5d < -1;  /* 5일간 1%+ 하락 */
+
+  /* 2) 가격 위치: 52주 고/저 대비 위치 (0~100%) */
+  let positionPct = 50; /* 기본값 */
+  if (sepa && sepa.high52 > sepa.low52) {
+    positionPct = Math.round((price - sepa.low52) / (sepa.high52 - sepa.low52) * 100);
+  }
+  const nearBottom = positionPct <= 30;  /* 52주 저점 근처 */
+  const nearTop = positionPct >= 80;     /* 52주 고점 근처 */
+  const midRange = !nearBottom && !nearTop;
+
+  /* 3) SMA200 대비 위치 */
+  const aboveSma200 = sepa ? price > sepa.sma200 : false;
+
+  /* ===== 종합 시그널 판정 ===== */
+  let signal, signalType; /* signalType: buy/sell/caution/neutral */
+
+  if (surgeDay || volRatio >= 2.0) {
+    /* 거래량 급증 상황 → 가격 맥락으로 해석 */
+    if (priceUp && nearBottom) {
+      signal = '바닥매집🟢'; signalType = 'buy';
+      /* 바닥 근처 + 상승 + 거래량 폭발 = 기관 매집 시작 */
+    } else if (priceUp && midRange && aboveSma200) {
+      signal = '돌파상승🟢'; signalType = 'buy';
+      /* 중간대 + 상승추세 + 거래량 급증 = 건강한 돌파 */
+    } else if (priceDown && nearTop) {
+      signal = '고점이탈🔴'; signalType = 'sell';
+      /* 고점 근처 + 하락 + 거래량 폭발 = 기관 물량 출회 */
+    } else if (priceDown && midRange) {
+      signal = '매도압력🔴'; signalType = 'sell';
+      /* 중간대 + 하락 + 거래량 급증 = 추가 하락 가능 */
+    } else if (priceDown && nearBottom) {
+      signal = '투매🟡'; signalType = 'caution';
+      /* 바닥 + 하락 + 거래량 = 패닉셀 (반등 가능성도 있음) */
+    } else if (priceUp && nearTop) {
+      signal = '과열주의🟡'; signalType = 'caution';
+      /* 고점 + 상승 + 거래량 = 클라이맥스 탑 가능성 */
+    } else {
+      signal = '급증관찰🟡'; signalType = 'caution';
+    }
+  } else if (volRatio >= 1.5) {
+    /* 거래량 증가 (급증은 아님) */
+    if (priceUp) {
+      signal = '매집증가'; signalType = 'buy';
+    } else if (priceDown) {
+      signal = '분산증가'; signalType = 'sell';
+    } else {
+      signal = '거래증가'; signalType = 'neutral';
+    }
+  } else if (volRatio < 0.5) {
+    /* 거래량 급감 */
+    if (priceUp) {
+      signal = '추세약화🟡'; signalType = 'caution';
+      /* 상승하는데 거래량 급감 = 상승동력 소진 */
+    } else if (priceDown) {
+      signal = '하락둔화'; signalType = 'neutral';
+      /* 하락하는데 거래량 급감 = 매도세 소진, 바닥 가능 */
+    } else {
+      signal = '거래감소'; signalType = 'neutral';
+    }
+  } else if (volRatio < 0.8) {
+    signal = '거래감소'; signalType = 'neutral';
+  } else {
+    signal = '보통'; signalType = 'neutral';
+  }
+
+  /* volTrend는 메인테이블용 간략 표시 */
+  let volTrend;
+  if (signalType === 'buy') volTrend = signal;
+  else if (signalType === 'sell') volTrend = signal;
+  else if (signalType === 'caution') volTrend = signal;
+  else if (volRatio >= 1.5) volTrend = '증가';
+  else if (volRatio >= 0.8) volTrend = '보통';
+  else volTrend = '감소';
+
+  return { avgVol50, avgVol5, volRatio, volTrend, surgeDay, todayVol, todayRatio, signal, signalType, priceChg5d: Math.round(priceChg5d*10)/10, positionPct, nearBottom, nearTop };
 }
 
 /* ===== 메인 핸들러 ===== */
@@ -213,6 +330,7 @@ export default async function handler(req, res) {
           const sepa = calcSEPA(bars);
           const mom = calcMomentum(bars, spyBars);
           const vcp = calcVCP(bars);
+          const vol = calcVolume(bars, sepa);
 
           return {
             ticker: tk.t, ok: true,
@@ -227,6 +345,8 @@ export default async function handler(req, res) {
               sepaDetail: sepa.conditions,
               /* 모멘텀 상세 */
               momDetail: { r3m: mom.r3m, r6m: mom.r6m, r12m: mom.r12m, spyR3m: mom.spyR3m, spyR6m: mom.spyR6m },
+              /* 거래량 분석 */
+              volData: { avgVol50: vol.avgVol50, avgVol5: vol.avgVol5, volRatio: vol.volRatio, volTrend: vol.volTrend, surgeDay: vol.surgeDay, todayVol: vol.todayVol, todayRatio: vol.todayRatio, volDryup: vcp.volDryup, signal: vol.signal, signalType: vol.signalType, priceChg5d: vol.priceChg5d, positionPct: vol.positionPct },
             }
           };
         } catch (e) {
