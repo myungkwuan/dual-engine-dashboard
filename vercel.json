@@ -2,6 +2,9 @@
   "functions": {
     "pages/api/quotes.js": {
       "maxDuration": 30
+    },
+    "pages/api/analysis.js": {
+      "maxDuration": 60
     }
   },
   "regions": ["icn1"]

@@ -88,15 +88,29 @@ function getVerdict(d) {
   const vcpScore = vm === "성숙" ? 8 : vm === "형성중" ? 5 : 2;
   const hasFCF = d.b || (cfM(d) >= 2 && cfL(d) >= 2);
   const dm = getDualMomentum(d);
+
+  /* === 100점 만점 점수제 === */
+  /* SEPA (35점) - 실시간 핵심 */
+  const sepaPt = st >= 8 ? 35 : st >= 7 ? 30 : st >= 6 ? 22 : st >= 5 ? 15 : 5;
+  /* 듀얼모멘텀 (25점) - 실시간 */
+  const dmPt = dm.signalScore >= 10 ? 25 : dm.signalScore >= 8 ? 20 : dm.signalScore >= 6 ? 12 : 3;
+  /* VCP (20점) - 실시간 */
+  const vcpPt = vm === "성숙" ? 20 : vm === "형성중" ? 12 : 3;
+  /* MF 펀더멘탈 (12점) - 고정값 보너스 */
+  const mfPt = mfScore >= 80 ? 12 : mfScore >= 70 ? 8 : mfScore >= 60 ? 5 : 2;
+  /* CF 현금흐름 (8점) - 고정값 보너스 */
+  const cfPt = hasFCF ? 8 : 2;
+
+  const totalPt = sepaPt + dmPt + vcpPt + mfPt + cfPt;
+
   let verdict, color, stars;
-  const sepaOK = (sepaLevel === '강력매수' || sepaLevel === '매수');
-  const sepaWatch = (sepaLevel === '관심');
-  if (mfScore >= 80 && sepaOK && vcpScore >= 7 && hasFCF && dm.signalScore >= 8) { verdict = '\u{1F525}최강'; color = '#ff1744'; stars = 5; }
-  else if (mfScore >= 80 && sepaOK && vcpScore >= 5 && hasFCF) { verdict = '\u{1F7E2}강력'; color = '#00e676'; stars = 4; }
-  else if (mfScore >= 70 && (sepaOK || sepaWatch) && vcpScore >= 5) { verdict = '\u{1F535}양호'; color = '#448aff'; stars = 3; }
-  else if (mfScore >= 60 && sepaOK) { verdict = '\u{1F7E1}모멘텀'; color = '#ffd600'; stars = 2; }
-  else { verdict = '\u26D4금지'; color = '#78909c'; stars = 1; }
-  return { verdict, color, stars, details: { mfGrade, mfScore, sepaLevel, vcpScore, hasFCF, dm } };
+  if (totalPt >= 80) { verdict = '\u{1F525}최강'; color = '#ff1744'; stars = 5; }
+  else if (totalPt >= 65) { verdict = '\u{1F7E2}매수'; color = '#00e676'; stars = 4; }
+  else if (totalPt >= 50) { verdict = '\u{1F535}관심'; color = '#448aff'; stars = 3; }
+  else if (totalPt >= 35) { verdict = '\u{1F7E1}관망'; color = '#ffd600'; stars = 2; }
+  else { verdict = '\u26D4위험'; color = '#78909c'; stars = 1; }
+
+  return { verdict, color, stars, totalPt, details: { mfGrade, mfScore, sepaLevel, vcpScore, hasFCF, dm, sepaPt, dmPt, vcpPt, mfPt, cfPt } };
 }
 
 /* ===== AI 분석 텍스트 생성 ===== */
@@ -106,32 +120,32 @@ function genAnalysis(d) {
   const mf = d.f || 0;
   const lines = [];
 
-  // MF 분석
-  if (mf >= 80) lines.push(`펀더멘탈 ${mf}점으로 최상위 그룹. 품질·성장·수익성 모두 우수.`);
-  else if (mf >= 70) lines.push(`펀더멘탈 ${mf}점으로 양호. 대부분의 팩터가 평균 이상.`);
-  else if (mf >= 60) lines.push(`펀더멘탈 ${mf}점으로 보통. 일부 팩터 개선 필요.`);
-  else lines.push(`펀더멘탈 ${mf}점으로 부진. 기업 체질 개선 전까지 관망 권장.`);
+  /* 종합 점수 */
+  lines.push(`종합 ${v.totalPt}점 — SEPA:${v.details.sepaPt} DM:${v.details.dmPt} VCP:${v.details.vcpPt} MF:${v.details.mfPt} CF:${v.details.cfPt}`);
 
   // 듀얼모멘텀
   if (dm.signalScore >= 8) lines.push(`듀얼모멘텀 ${dm.signal}: 절대+상대 모멘텀 모두 양호. 시장 대비 아웃퍼폼 중.`);
-  else if (dm.signalScore >= 6) lines.push(`듀얼모멘텀 HOLD: 추세는 유지 중이나 시장 대비 초과수익 제한적.`);
+  else if (dm.signalScore >= 6) lines.push(`듀얼모멘텀 HOLD: 추세 유지 중이나 시장 대비 초과수익 제한적.`);
   else lines.push(`듀얼모멘텀 SELL: 하락추세 또는 시장 대비 언더퍼폼. 리스크 관리 필수.`);
 
   // SEPA
   const sv = seV(d);
-  if (sv === "매수준비") lines.push(`SEPA 매수준비 신호 발생! Stage 2 상승 추세에서 브레이크아웃 임박.`);
+  if (sv === "매수준비") lines.push(`SEPA 매수준비! 미너비니 8조건 충족. Stage 2 브레이크아웃 임박.`);
   else if (seTt(d) >= 7) lines.push(`SEPA ${seTt(d)}/8 — 대부분 조건 충족. 돌파 시 진입 고려.`);
-  else lines.push(`SEPA ${seTt(d)}/8 — 조건 미달. 추가 조건 충족 시까지 대기.`);
+  else if (seTt(d) >= 5) lines.push(`SEPA ${seTt(d)}/8 — 일부 조건 미달. 추세 개선 대기.`);
+  else lines.push(`SEPA ${seTt(d)}/8 — 조건 부족. 추세 전환 전까지 관망.`);
 
   // VCP
   const vm = vcpMt(d);
-  if (vm === "성숙") lines.push(`VCP 패턴 성숙 단계. 변동성 수축 완료, 피봇 돌파 시 강한 상승 예상.`);
-  else if (vm === "형성중") lines.push(`VCP 형성 중. 추가 수축이 필요하며, 섣부른 진입은 자제.`);
+  if (vm === "성숙") lines.push(`VCP 성숙 단계. 변동성 수축 완료, 피봇 돌파 시 강한 상승 예상.`);
+  else if (vm === "형성중") lines.push(`VCP 형성 중. 추가 수축 확인 후 진입 검토.`);
 
-  // 포지션 제안
-  if (v.stars >= 4) lines.push(`💡 추천: ${d.q[5]||3}% 비중으로 진입가 ${fP(d.q[0]||d.p, d.k)} 부근에서 매수. 손절: ${fP(d.q[1]||(d.p*0.93), d.k)}`);
-  else if (v.stars >= 3) lines.push(`💡 소량 진입 후 조건 충족 시 추가매수 전략 고려.`);
-  else lines.push(`⚠️ 현재 매수 비추천. 조건 개선 시까지 관망.`);
+  // 결론
+  if (v.stars >= 5) lines.push(`🔥 최강 매수 추천. ${d.q[5]||3}% 비중, 진입가 ${fP(d.q[0]||d.p, d.k)} 부근. 손절 ${fP(d.q[1]||(d.p*0.93), d.k)}`);
+  else if (v.stars >= 4) lines.push(`💡 매수 추천. 소량 진입 후 돌파 확인 시 추가매수.`);
+  else if (v.stars >= 3) lines.push(`👀 관심 종목. 워치리스트 등록 후 조건 개선 시 재검토.`);
+  else if (v.stars >= 2) lines.push(`⏸ 관망. 추세 전환 신호 대기.`);
+  else lines.push(`⚠️ 매수 비추천. 하락 리스크 주의.`);
 
   return lines;
 }
@@ -452,8 +466,35 @@ export default function Dashboard(){
   const[showDetail,setShowDetail]=useState(false);
   /* 듀얼모멘텀 필터 */
   const[dmFilter,setDmFilter]=useState("all");
+  /* 분석 갱신 상태 */
+  const[anaRt,setAnaRt]=useState("idle");
+  const[anaProg,setAnaProg]=useState(0);
+  const[anaTime,setAnaTime]=useState(()=>{
+    try{const s=localStorage.getItem('ana_time');return s||'-';}catch(e){return'-';}
+  });
   const autoRef=useRef(null);
   const busy=useRef(false);
+  const anaBusy=useRef(false);
+
+  /* localStorage에서 마지막 분석 결과 로드 */
+  useEffect(()=>{
+    try{
+      const cached=localStorage.getItem('ana_data');
+      if(cached){
+        const parsed=JSON.parse(cached);
+        setStocks(prev=>prev.map(d=>{
+          const a=parsed[d.t];
+          if(!a)return d;
+          return {...d,
+            e:a.e||d.e,
+            r:[a.r?a.r[0]:d.r[0], a.r?a.r[1]:d.r[1], d.r[2]],
+            v:a.v||d.v
+          };
+        }));
+        log("📂 마지막 분석 결과 로드 ("+anaTime+")","ok");
+      }
+    }catch(e){}
+  },[]);
 
   const log=useCallback((msg,c="if")=>{
     setLogs(p=>[{ts:new Date().toLocaleTimeString("ko"),msg,c},...p].slice(0,80));
@@ -526,6 +567,66 @@ export default function Dashboard(){
   },[intv,doFetch,log]);
   useEffect(()=>()=>{if(autoRef.current)clearInterval(autoRef.current)},[]);
 
+  /* ============ ANALYSIS ENGINE (하루 1번) ============ */
+  const doAnalysis=useCallback(async()=>{
+    if(anaBusy.current)return;
+    anaBusy.current=true;setAnaRt("fetching");setAnaProg(0);
+    const t0=Date.now();
+    log("🔬 분석 갱신 시작 (SEPA+모멘텀+VCP, "+stocks.length+"종목)","if");
+    log("⏱ 1~2분 소요 예상. 잠시 기다려주세요...","if");
+
+    const allTickers=stocks.map(d=>({t:d.t,k:d.k}));
+    const batches=[];
+    for(let i=0;i<allTickers.length;i+=10) batches.push(allTickers.slice(i,i+10));
+
+    const allResults={};
+    let totalOk=0, totalFail=0;
+
+    for(let bi=0;bi<batches.length;bi++){
+      const batch=batches[bi];
+      log(`🔬 분석 ${bi+1}/${batches.length}: ${batch.slice(0,3).map(t=>t.t).join(",")}...`);
+      try{
+        const resp=await fetch("/api/analysis",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({tickers:batch})});
+        if(!resp.ok)throw new Error("API "+resp.status);
+        const result=await resp.json();
+        if(result.data){
+          Object.entries(result.data).forEach(([tk,info])=>{allResults[tk]=info;});
+          totalOk+=result.ok||0;
+          log(`✅ 분석 ${result.ok}/${batch.length} 완료`,"ok");
+        }
+      }catch(e){totalFail+=batch.length;log(`❌ 분석 실패: ${e.message}`,"er");}
+      setAnaProg(Math.round((bi+1)/batches.length*100));
+    }
+
+    /* stocks에 반영 */
+    setStocks(prev=>prev.map(d=>{
+      const a=allResults[d.t];
+      if(!a)return d;
+      return {...d,
+        e: a.e || d.e,
+        r: [a.r?a.r[0]:d.r[0], a.r?a.r[1]:d.r[1], d.r[2]],
+        v: a.v || d.v,
+        _sepaDetail: a.sepaDetail,
+        _momDetail: a.momDetail,
+      };
+    }));
+
+    /* localStorage에 캐시 */
+    try{
+      localStorage.setItem('ana_data',JSON.stringify(allResults));
+      const timeStr=new Date().toLocaleString("ko");
+      localStorage.setItem('ana_time',timeStr);
+      setAnaTime(timeStr);
+    }catch(e){}
+
+    const elapsed=((Date.now()-t0)/1000).toFixed(1);
+    setAnaRt(totalFail===0?"done":"error");setAnaProg(100);
+    log(`🏁 분석 완료: ${totalOk}성공 ${totalFail}실패 (${elapsed}s)`,"ok");
+    anaBusy.current=false;
+    /* 5초 후 상태 리셋 */
+    setTimeout(()=>setAnaRt("idle"),5000);
+  },[stocks,log]);
+
   /* ============ Filter & Sort ============ */
   const sectors=useMemo(()=>[...new Set(stocks.map(d=>d.s))].sort(),[stocks]);
   const filtered=useMemo(()=>stocks.filter(d=>{
@@ -544,7 +645,7 @@ export default function Dashboard(){
   }),[stocks,mk,sec,q,dmFilter]);
 
   const sorted=useMemo(()=>[...filtered].sort((a,b)=>{
-    const gv=d=>{switch(sc){case"n":return d.n;case"s":return d.s;case"p":return d.p;case"c":return d.c;case"f":return d.f||0;case"mf":return mfTs(d);case"sepa":return seTt(d);case"cf":return cfM(d)+cfL(d);case"vd":return getVerdict(d).stars*100+(d.f||0);case"dm":return getDualMomentum(d).signalScore*100+getDualMomentum(d).rsScore;case"rs":return getDualMomentum(d).rsScore;default:return d.f||0;}};
+    const gv=d=>{switch(sc){case"n":return d.n;case"s":return d.s;case"p":return d.p;case"c":return d.c;case"f":return d.f||0;case"mf":return mfTs(d);case"sepa":return seTt(d);case"cf":return cfM(d)+cfL(d);case"vd":return getVerdict(d).totalPt;case"dm":return getDualMomentum(d).signalScore*100+getDualMomentum(d).rsScore;case"rs":return getDualMomentum(d).rsScore;default:return d.f||0;}};
     const va=gv(a),vb=gv(b);
     if(typeof va==="string")return sa?va.localeCompare(vb):vb.localeCompare(va);
     return sa?(va-vb):(vb-va);
@@ -663,14 +764,25 @@ export default function Dashboard(){
           <div style={{display:"flex",alignItems:"center",gap:5}}><Dot s={rt}/><span style={{fontSize:14,fontWeight:700}}>{rt==="idle"?"대기":rt==="fetching"?"조회중...":rt==="live"?"✅ 완료":"⚠️ 실패"}</span></div>
           <div style={{flex:1,minWidth:60,maxWidth:200}}><div style={{height:5,background:"#161b22",borderRadius:3,overflow:"hidden"}}><div style={{height:"100%",background:"linear-gradient(90deg,#58a6ff,#bc8cff)",borderRadius:3,width:prog+"%",transition:"width .3s"}}/></div></div>
           <div style={{display:"flex",gap:12,fontSize:12,color:"#484f58",fontFamily:"'JetBrains Mono'"}}><span>{stats.time}</span><span><b style={{color:"#3fb950"}}>{stats.ok}</b>{"/"}{D.length}</span><span>{stats.ms}</span></div>
-          <div style={{display:"flex",gap:5,marginLeft:"auto",alignItems:"center"}}>
-            <button onClick={doFetch} disabled={rt==="fetching"} style={{padding:"6px 14px",borderRadius:6,border:"1px solid #bc8cff",cursor:rt==="fetching"?"wait":"pointer",background:"linear-gradient(135deg,#1a3a5c,#2d1b69)",color:"#bc8cff",fontSize:14,fontWeight:700}}>{"⚡ 갱신"}</button>
+          <div style={{display:"flex",gap:5,marginLeft:"auto",alignItems:"center",flexWrap:"wrap"}}>
+            <button onClick={doFetch} disabled={rt==="fetching"} style={{padding:"6px 14px",borderRadius:6,border:"1px solid #bc8cff",cursor:rt==="fetching"?"wait":"pointer",background:"linear-gradient(135deg,#1a3a5c,#2d1b69)",color:"#bc8cff",fontSize:14,fontWeight:700}}>{"⚡ 가격"}</button>
+            <button onClick={doAnalysis} disabled={anaRt==="fetching"} style={{padding:"6px 14px",borderRadius:6,border:"1px solid #ff922b",cursor:anaRt==="fetching"?"wait":"pointer",background:anaRt==="fetching"?"#ff922b20":"linear-gradient(135deg,#2d1b00,#3d2b10)",color:"#ff922b",fontSize:14,fontWeight:700}}>{anaRt==="fetching"?("🔬 "+anaProg+"%"):"🔬 분석"}</button>
             <button onClick={toggleAuto} style={{padding:"6px 12px",borderRadius:6,fontSize:14,fontWeight:600,cursor:"pointer",border:"1px solid "+(autoOn?"#3fb950":"#21262d"),background:autoOn?"rgba(63,185,80,.12)":"#161b22",color:autoOn?"#3fb950":"#8b949e"}}>{autoOn?"⏹":"🔄"}</button>
             <input type="number" value={intv} min={1} max={60} onChange={e=>setIntv(+e.target.value||3)} style={{width:40,padding:"4px 5px",borderRadius:4,border:"1px solid #21262d",background:"#0d1117",color:"#e6edf3",fontSize:13,fontFamily:"'JetBrains Mono'",textAlign:"center",outline:"none"}}/>
             <span style={{fontSize:12,color:"#484f58"}}>분</span>
             <button onClick={()=>setShowLog(!showLog)} style={{padding:"5px 10px",borderRadius:5,border:"1px solid #21262d",background:"#161b22",color:"#8b949e",cursor:"pointer",fontSize:13}}>📋</button>
           </div>
         </div>
+        {/* 분석 진행바 */}
+        {anaRt==="fetching" && <div style={{marginTop:4,background:"#0d1117",border:"1px solid #21262d",borderRadius:6,padding:"6px 12px",display:"flex",alignItems:"center",gap:10}}>
+          <span style={{fontSize:12,color:"#ff922b",fontWeight:600}}>🔬 분석 갱신 중... ({anaProg}%)</span>
+          <div style={{flex:1,height:4,background:"#161b22",borderRadius:2,overflow:"hidden"}}><div style={{height:"100%",background:"linear-gradient(90deg,#ff922b,#ffd43b)",borderRadius:2,width:anaProg+"%",transition:"width .3s"}}/></div>
+          <span style={{fontSize:11,color:"#484f58"}}>SEPA+모멘텀+VCP</span>
+        </div>}
+        {/* 마지막 분석 시간 */}
+        {anaTime!=='-' && anaRt!=="fetching" && <div style={{marginTop:2,fontSize:11,color:"#484f58",textAlign:"right",padding:"0 4px"}}>
+          마지막 분석: {anaTime} {anaRt==="done" && <span style={{color:"#3fb950"}}>✅</span>}
+        </div>}
       </div>
 
       {showLog && <div style={{maxWidth:1800,margin:"0 auto",padding:"0 20px 4px"}}><div style={{background:"#0d1117",border:"1px solid #21262d",borderRadius:6,padding:"6px 10px",maxHeight:100,overflowY:"auto",fontFamily:"'JetBrains Mono'",fontSize:12}}>{logs.map((l,i)=><div key={i} style={{padding:"1px 0"}}><span style={{color:"#484f58",marginRight:4}}>{l.ts}</span><span style={{color:l.c==="ok"?"#3fb950":l.c==="er"?"#f85149":"#58a6ff"}}>{l.msg}</span></div>)}</div></div>}
@@ -806,7 +918,7 @@ export default function Dashboard(){
             <Chip n={buyR} label="매수준비" color="#bc8cff"/>
             <Chip n={dmBuyN} label="DM매수" color="#00e676"/>
             {bestN>0 && <Chip n={bestN} label="🔥최강" color="#ff1744"/>}
-            {strongN>0 && <Chip n={strongN} label="강력" color="#00e676"/>}
+            {strongN>0 && <Chip n={strongN} label="매수" color="#00e676"/>}
           </div>
         </div>
         {/* 듀얼모멘텀 필터 & 섹터 */}
@@ -888,7 +1000,7 @@ export default function Dashboard(){
                     <td style={{padding:"6px 5px",color:"#484f58",fontFamily:"'JetBrains Mono'",fontSize:11}}>{i+1}</td>
                     <td style={{padding:"6px 5px",maxWidth:130,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
                       <span style={{fontSize:10,marginRight:3}}>{d.k?'🇰🇷':'🇺🇸'}</span>
-                      <span onClick={e=>{e.stopPropagation();handleStockClick(d);}} style={{fontWeight:500,cursor:"pointer",borderBottom:"1px dashed #484f58",fontSize:13}}>{d.n}</span>
+                      <span onClick={e=>{e.stopPropagation();handleStockClick(d);}} style={{fontWeight:vd.stars>=5?700:500,cursor:"pointer",borderBottom:"1px dashed "+(vd.stars>=5?"#ff1744":"#484f58"),fontSize:13,color:vd.stars>=5?"#ff1744":undefined}}>{d.n}</span>
                       <span style={{fontSize:10,color:"#484f58",marginLeft:3,fontFamily:"'JetBrains Mono'"}}>{d.t}</span>
                     </td>
                     <td style={{padding:"6px 5px"}}><span style={{padding:"1px 6px",borderRadius:3,fontSize:10,background:"rgba(72,79,88,.15)",color:"#484f58"}}>{d.s}</span></td>
@@ -897,6 +1009,7 @@ export default function Dashboard(){
                     <td style={{padding:"6px 5px",textAlign:"center"}}><Badge v={d.f||null} g={80} r={60}/></td>
                     <td style={{textAlign:"center",padding:"4px 6px",background:vd.color+"12",borderLeft:`2px solid ${vd.color}`,minWidth:70}}>
                       <div style={{fontSize:12,fontWeight:800,color:vd.color}}>{vd.verdict}</div>
+                      <div style={{fontSize:9,color:'#484f58',fontFamily:"'JetBrains Mono'"}}>{vd.totalPt}점</div>
                     </td>
                     {(view==="dual"||view==="mf") && <>
                       <td style={{padding:"6px 5px",textAlign:"center"}}><Badge v={mfTs(d)} g={2.5} r={1.5}/></td>
