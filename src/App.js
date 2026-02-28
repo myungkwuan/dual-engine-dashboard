@@ -208,7 +208,7 @@ function TVChart({ symbol, isKR, ticker }) {
 }
 
 /* ===== 상세분석 모달 ===== */
-function StockDetailModal({ stock, onClose }) {
+function StockDetailModal({ stock, onClose, isWatched, onToggleWatch }) {
   if (!stock) return null;
   const verdict = getVerdict(stock);
   const dm = getDualMomentum(stock);
@@ -257,6 +257,9 @@ function StockDetailModal({ stock, onClose }) {
             <div style={{marginTop:'6px',padding:'4px 12px',borderRadius:'6px',background:dm.signalColor+'20',border:`1px solid ${dm.signalColor}44`}}>
               <div style={{fontSize:'12px',fontWeight:700,color:dm.signalColor}}>{dm.signal}</div>
             </div>
+            <button onClick={()=>onToggleWatch(stock.t)} style={{marginTop:'6px',padding:'6px 16px',borderRadius:'6px',border:'1px solid '+(isWatched?'#ffd43b':'#21262d'),background:isWatched?'#ffd43b18':'#161b22',color:isWatched?'#ffd43b':'#8b949e',cursor:'pointer',fontSize:'12px',fontWeight:700,width:'100%'}}>
+              {isWatched?'⭐ 워치리스트':'☆ 워치 추가'}
+            </button>
           </div>
         </div>
 
@@ -464,6 +467,16 @@ export default function Dashboard(){
   const[chkSearch,setChkSearch]=useState("");
   const[detailStock,setDetailStock]=useState(null);
   const[showDetail,setShowDetail]=useState(false);
+  /* 워치리스트 (localStorage) */
+  const[watchlist,setWatchlist]=useState(()=>{
+    try{const s=localStorage.getItem('watchlist');return s?JSON.parse(s):[];}catch(e){return[];}
+  });
+  /* 보유종목 (localStorage) */
+  const[portfolio,setPortfolio]=useState(()=>{
+    try{const s=localStorage.getItem('portfolio');return s?JSON.parse(s):[];}catch(e){return[];}
+  });
+  /* 보유종목 입력폼 */
+  const[pfForm,setPfForm]=useState({ticker:'',buyPrice:0,qty:0});
   /* 듀얼모멘텀 필터 */
   const[dmFilter,setDmFilter]=useState("all");
   /* 분석 갱신 상태 */
@@ -498,6 +511,25 @@ export default function Dashboard(){
 
   const log=useCallback((msg,c="if")=>{
     setLogs(p=>[{ts:new Date().toLocaleTimeString("ko"),msg,c},...p].slice(0,80));
+  },[]);
+
+  /* watchlist localStorage 동기화 */
+  useEffect(()=>{try{localStorage.setItem('watchlist',JSON.stringify(watchlist));}catch(e){}},[watchlist]);
+  useEffect(()=>{try{localStorage.setItem('portfolio',JSON.stringify(portfolio));}catch(e){}},[portfolio]);
+
+  const toggleWatch=useCallback((ticker)=>{
+    setWatchlist(p=>p.includes(ticker)?p.filter(t=>t!==ticker):[...p,ticker]);
+  },[]);
+  const addPortfolio=useCallback((ticker,buyPrice,qty)=>{
+    if(!ticker||!buyPrice||!qty)return;
+    setPortfolio(p=>{
+      const exists=p.findIndex(x=>x.ticker===ticker&&x.buyPrice===buyPrice);
+      if(exists>=0)return p;
+      return[...p,{ticker,buyPrice:Number(buyPrice),qty:Number(qty),addedAt:new Date().toISOString()}];
+    });
+  },[]);
+  const removePortfolio=useCallback((idx)=>{
+    setPortfolio(p=>p.filter((_,i)=>i!==idx));
   },[]);
 
   /* ESC로 모달 닫기 + 타이틀/폰트 설정 */
@@ -790,7 +822,7 @@ export default function Dashboard(){
       {/* Tab Nav */}
       <div className="tab-nav" style={{maxWidth:1800,margin:"6px auto",padding:"0 20px"}}>
         <div style={{display:"flex",gap:4,flexWrap:"wrap"}}>
-          {[["main","📊 메인"],["filter","🌐 시장필터"],["calc","🧮 포지션"],["check","✅ 체크리스트"]].map(([k,l])=>
+          {[["main","📊 메인"],["watch","👁 워치("+watchlist.length+")"],["port","💼 보유종목"],["filter","🌐 시장필터"],["calc","🧮 포지션"],["check","✅ 체크리스트"]].map(([k,l])=>
             <Tb key={k} label={l} active={tab===k} onClick={()=>setTab(k)}/>
           )}
         </div>
@@ -903,6 +935,159 @@ export default function Dashboard(){
         </div>
       </div>}
 
+      {/* ============ 워치리스트 탭 ============ */}
+      {tab==="watch" && <div style={{maxWidth:1800,margin:"0 auto",padding:"6px 20px"}}>
+        <div style={{background:"#0d1117",border:"1px solid #21262d",borderRadius:10,padding:14}}>
+          <h3 style={{color:"#ffd43b",fontSize:16,marginBottom:12,marginTop:0}}>👁 워치리스트 ({watchlist.length}종목)</h3>
+          {watchlist.length===0 ? <div style={{color:"#484f58",fontSize:13,padding:20,textAlign:"center"}}>워치리스트가 비어있습니다.<br/>종목 상세보기에서 ☆ 버튼으로 추가하세요.</div> : <>
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:12}}>
+              {/* 미국 워치리스트 */}
+              <div>
+                <div style={{fontSize:13,fontWeight:700,color:"#4dabf7",marginBottom:6}}>🇺🇸 미국</div>
+                {stocks.filter(d=>!d.k&&watchlist.includes(d.t)).length===0?<div style={{fontSize:11,color:"#484f58"}}>없음</div>:
+                stocks.filter(d=>!d.k&&watchlist.includes(d.t)).map(d=>{
+                  const vd=getVerdict(d); const dm=getDualMomentum(d);
+                  return <div key={d.t} style={{display:"flex",alignItems:"center",gap:8,padding:"8px 10px",background:"#161b22",borderRadius:8,marginBottom:4,border:"1px solid #21262d"}}>
+                    <div style={{flex:1,minWidth:0}}>
+                      <span onClick={()=>{setDetailStock(d);setShowDetail(true);}} style={{fontSize:13,fontWeight:600,color:"#e6edf3",cursor:"pointer",borderBottom:"1px dashed #484f58"}}>{d.n}</span>
+                      <span style={{fontSize:10,color:"#484f58",marginLeft:4}}>{d.t}</span>
+                      <div style={{fontSize:11,marginTop:2}}>
+                        <span style={{fontFamily:"'JetBrains Mono'",color:"#e6edf3"}}>{fP(d.p,d.k)}</span>
+                        <Chg v={d.c}/>
+                        <span style={{marginLeft:6,fontSize:10,color:vd.color,fontWeight:700}}>{vd.verdict}</span>
+                        <span style={{marginLeft:4,fontSize:10,color:dm.signalColor}}>{dm.signal}</span>
+                      </div>
+                    </div>
+                    <button onClick={()=>toggleWatch(d.t)} style={{padding:"4px 8px",borderRadius:4,border:"1px solid #f8514933",background:"#f8514912",color:"#f85149",cursor:"pointer",fontSize:10,flexShrink:0}}>✕</button>
+                  </div>;
+                })}
+              </div>
+              {/* 한국 워치리스트 */}
+              <div>
+                <div style={{fontSize:13,fontWeight:700,color:"#ff922b",marginBottom:6}}>🇰🇷 한국</div>
+                {stocks.filter(d=>d.k&&watchlist.includes(d.t)).length===0?<div style={{fontSize:11,color:"#484f58"}}>없음</div>:
+                stocks.filter(d=>d.k&&watchlist.includes(d.t)).map(d=>{
+                  const vd=getVerdict(d); const dm=getDualMomentum(d);
+                  return <div key={d.t} style={{display:"flex",alignItems:"center",gap:8,padding:"8px 10px",background:"#161b22",borderRadius:8,marginBottom:4,border:"1px solid #21262d"}}>
+                    <div style={{flex:1,minWidth:0}}>
+                      <span onClick={()=>{setDetailStock(d);setShowDetail(true);}} style={{fontSize:13,fontWeight:600,color:"#e6edf3",cursor:"pointer",borderBottom:"1px dashed #484f58"}}>{d.n}</span>
+                      <span style={{fontSize:10,color:"#484f58",marginLeft:4}}>{d.t}</span>
+                      <div style={{fontSize:11,marginTop:2}}>
+                        <span style={{fontFamily:"'JetBrains Mono'",color:"#e6edf3"}}>{fP(d.p,d.k)}</span>
+                        <Chg v={d.c}/>
+                        <span style={{marginLeft:6,fontSize:10,color:vd.color,fontWeight:700}}>{vd.verdict}</span>
+                        <span style={{marginLeft:4,fontSize:10,color:dm.signalColor}}>{dm.signal}</span>
+                      </div>
+                    </div>
+                    <button onClick={()=>toggleWatch(d.t)} style={{padding:"4px 8px",borderRadius:4,border:"1px solid #f8514933",background:"#f8514912",color:"#f85149",cursor:"pointer",fontSize:10,flexShrink:0}}>✕</button>
+                  </div>;
+                })}
+              </div>
+            </div>
+          </>}
+        </div>
+      </div>}
+
+      {/* ============ 보유종목 탭 ============ */}
+      {tab==="port" && <div style={{maxWidth:1800,margin:"0 auto",padding:"6px 20px"}}>
+        <div style={{background:"#0d1117",border:"1px solid #21262d",borderRadius:10,padding:14}}>
+          <h3 style={{color:"#bc8cff",fontSize:16,marginBottom:12,marginTop:0}}>💼 보유종목</h3>
+
+          {/* 종목 추가 폼 */}
+          <div style={{display:"flex",gap:6,marginBottom:14,flexWrap:"wrap",alignItems:"center",padding:10,background:"#161b22",borderRadius:8,border:"1px solid #21262d"}}>
+            <span style={{fontSize:12,color:"#8b949e",fontWeight:600}}>➕ 추가:</span>
+            <select value={pfForm.ticker} onChange={e=>setPfForm(p=>({...p,ticker:e.target.value}))}
+              style={{padding:"5px 8px",borderRadius:5,border:"1px solid #21262d",background:"#0d1117",color:"#e6edf3",fontSize:12,minWidth:140}}>
+              <option value="">종목 선택</option>
+              <optgroup label="🇺🇸 미국">
+                {stocks.filter(d=>!d.k).map(d=><option key={d.t} value={d.t}>{d.n} ({d.t})</option>)}
+              </optgroup>
+              <optgroup label="🇰🇷 한국">
+                {stocks.filter(d=>d.k).map(d=><option key={d.t} value={d.t}>{d.n} ({d.t})</option>)}
+              </optgroup>
+            </select>
+            <input type="number" placeholder="매수가" value={pfForm.buyPrice||''} onChange={e=>setPfForm(p=>({...p,buyPrice:e.target.value}))}
+              style={{padding:"5px 8px",borderRadius:5,border:"1px solid #21262d",background:"#0d1117",color:"#e6edf3",fontSize:12,width:100,fontFamily:"'JetBrains Mono'"}}/>
+            <input type="number" placeholder="수량" value={pfForm.qty||''} onChange={e=>setPfForm(p=>({...p,qty:e.target.value}))}
+              style={{padding:"5px 8px",borderRadius:5,border:"1px solid #21262d",background:"#0d1117",color:"#e6edf3",fontSize:12,width:70,fontFamily:"'JetBrains Mono'"}}/>
+            <button onClick={()=>{addPortfolio(pfForm.ticker,pfForm.buyPrice,pfForm.qty);setPfForm({ticker:'',buyPrice:0,qty:0});}}
+              style={{padding:"5px 14px",borderRadius:5,border:"1px solid #bc8cff",background:"#bc8cff18",color:"#bc8cff",cursor:"pointer",fontSize:12,fontWeight:700}}>추가</button>
+          </div>
+
+          {portfolio.length===0 ? <div style={{color:"#484f58",fontSize:13,padding:20,textAlign:"center"}}>보유종목이 없습니다. 위에서 종목을 추가하세요.</div> : <>
+            {/* 총 요약 */}
+            {(()=>{
+              let totalBuy=0,totalCur=0;
+              portfolio.forEach(p=>{const s=stocks.find(d=>d.t===p.ticker);if(s&&s.p){totalBuy+=p.buyPrice*p.qty;totalCur+=s.p*p.qty;}});
+              const totalPnl=totalCur-totalBuy;
+              const totalPct=totalBuy>0?((totalCur/totalBuy-1)*100):0;
+              return <div style={{display:"flex",gap:16,padding:"10px 14px",background:"linear-gradient(135deg,#0d1117,#161b22)",borderRadius:8,marginBottom:14,border:"1px solid #21262d",flexWrap:"wrap"}}>
+                <div><div style={{fontSize:10,color:"#484f58"}}>총 매수금액</div><div style={{fontSize:15,fontWeight:700,color:"#e6edf3",fontFamily:"'JetBrains Mono'"}}>{totalBuy.toLocaleString()}</div></div>
+                <div><div style={{fontSize:10,color:"#484f58"}}>총 평가금액</div><div style={{fontSize:15,fontWeight:700,color:"#e6edf3",fontFamily:"'JetBrains Mono'"}}>{Math.round(totalCur).toLocaleString()}</div></div>
+                <div><div style={{fontSize:10,color:"#484f58"}}>총 손익</div><div style={{fontSize:15,fontWeight:700,color:totalPnl>=0?"#3fb950":"#f85149",fontFamily:"'JetBrains Mono'"}}>{totalPnl>=0?"+":""}{Math.round(totalPnl).toLocaleString()}</div></div>
+                <div><div style={{fontSize:10,color:"#484f58"}}>총 수익률</div><div style={{fontSize:15,fontWeight:700,color:totalPct>=0?"#3fb950":"#f85149",fontFamily:"'JetBrains Mono'"}}>{totalPct>=0?"+":""}{totalPct.toFixed(2)}%</div></div>
+              </div>;
+            })()}
+
+            {/* 미국 / 한국 분리 */}
+            {["us","kr"].map(market=>{
+              const items=portfolio.filter(p=>{const s=stocks.find(d=>d.t===p.ticker);return s?(market==="us"?!s.k:s.k):false;});
+              if(items.length===0)return null;
+              let mktBuy=0,mktCur=0;
+              items.forEach(p=>{const s=stocks.find(d=>d.t===p.ticker);if(s&&s.p){mktBuy+=p.buyPrice*p.qty;mktCur+=s.p*p.qty;}});
+              const mktPnl=mktCur-mktBuy;const mktPct=mktBuy>0?((mktCur/mktBuy-1)*100):0;
+              return <div key={market} style={{marginBottom:14}}>
+                <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:8}}>
+                  <span style={{fontSize:14,fontWeight:700,color:market==="us"?"#4dabf7":"#ff922b"}}>{market==="us"?"🇺🇸 미국":"🇰🇷 한국"}</span>
+                  <span style={{fontSize:11,color:"#484f58"}}>{items.length}종목</span>
+                  <span style={{fontSize:11,color:mktPnl>=0?"#3fb950":"#f85149",fontFamily:"'JetBrains Mono'",fontWeight:600}}>{mktPnl>=0?"+":""}{Math.round(mktPnl).toLocaleString()} ({mktPct>=0?"+":""}{mktPct.toFixed(2)}%)</span>
+                </div>
+                <div style={{overflowX:"auto"}}>
+                <table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}>
+                  <thead><tr style={{borderBottom:"1px solid #21262d"}}>
+                    <th style={{padding:"6px 8px",textAlign:"left",color:"#484f58",fontSize:11}}>종목</th>
+                    <th style={{padding:"6px 8px",textAlign:"right",color:"#484f58",fontSize:11}}>현재가</th>
+                    <th style={{padding:"6px 8px",textAlign:"right",color:"#484f58",fontSize:11}}>매수가</th>
+                    <th style={{padding:"6px 8px",textAlign:"right",color:"#484f58",fontSize:11}}>수량</th>
+                    <th style={{padding:"6px 8px",textAlign:"right",color:"#484f58",fontSize:11}}>평가금액</th>
+                    <th style={{padding:"6px 8px",textAlign:"right",color:"#484f58",fontSize:11}}>수익률</th>
+                    <th style={{padding:"6px 8px",textAlign:"right",color:"#484f58",fontSize:11}}>손익</th>
+                    <th style={{padding:"6px 8px",textAlign:"center",color:"#484f58",fontSize:11}}>판정</th>
+                    <th style={{padding:"6px 8px",textAlign:"center",color:"#484f58",fontSize:11}}></th>
+                  </tr></thead>
+                  <tbody>{items.map((p,idx)=>{
+                    const s=stocks.find(d=>d.t===p.ticker);
+                    if(!s)return null;
+                    const curVal=s.p*p.qty;
+                    const buyVal=p.buyPrice*p.qty;
+                    const pnl=curVal-buyVal;
+                    const pct=p.buyPrice>0?((s.p/p.buyPrice-1)*100):0;
+                    const vd=getVerdict(s);
+                    const globalIdx=portfolio.indexOf(p);
+                    return <tr key={idx} style={{borderBottom:"1px solid rgba(33,38,45,.4)"}}>
+                      <td style={{padding:"6px 8px"}}>
+                        <span onClick={()=>{setDetailStock(s);setShowDetail(true);}} style={{fontWeight:500,cursor:"pointer",borderBottom:"1px dashed #484f58",color:"#e6edf3"}}>{s.n}</span>
+                        <span style={{fontSize:10,color:"#484f58",marginLeft:4}}>{s.t}</span>
+                        <div style={{fontSize:10,color:s.c>=0?"#3fb950":"#f85149"}}>당일 {s.c>=0?"+":""}{s.c?.toFixed(2)||0}%</div>
+                      </td>
+                      <td style={{padding:"6px 8px",textAlign:"right",fontFamily:"'JetBrains Mono'",color:"#e6edf3"}}>{fP(s.p,s.k)}</td>
+                      <td style={{padding:"6px 8px",textAlign:"right",fontFamily:"'JetBrains Mono'",color:"#8b949e"}}>{fP(p.buyPrice,s.k)}</td>
+                      <td style={{padding:"6px 8px",textAlign:"right",fontFamily:"'JetBrains Mono'",color:"#8b949e"}}>{p.qty}</td>
+                      <td style={{padding:"6px 8px",textAlign:"right",fontFamily:"'JetBrains Mono'",color:"#e6edf3",fontWeight:600}}>{s.k?"₩":"$"}{Math.round(curVal).toLocaleString()}</td>
+                      <td style={{padding:"6px 8px",textAlign:"right",fontFamily:"'JetBrains Mono'",fontWeight:700,color:pct>=0?"#3fb950":"#f85149"}}>{pct>=0?"+":""}{pct.toFixed(2)}%</td>
+                      <td style={{padding:"6px 8px",textAlign:"right",fontFamily:"'JetBrains Mono'",fontWeight:600,color:pnl>=0?"#3fb950":"#f85149"}}>{pnl>=0?"+":""}{s.k?"₩":"$"}{Math.round(pnl).toLocaleString()}</td>
+                      <td style={{padding:"6px 8px",textAlign:"center"}}><span style={{fontSize:10,fontWeight:700,color:vd.color}}>{vd.verdict}</span></td>
+                      <td style={{padding:"6px 8px",textAlign:"center"}}><button onClick={()=>removePortfolio(globalIdx)} style={{padding:"2px 6px",borderRadius:3,border:"1px solid #f8514933",background:"transparent",color:"#f85149",cursor:"pointer",fontSize:10}}>✕</button></td>
+                    </tr>;
+                  })}</tbody>
+                </table>
+                </div>
+              </div>;
+            })}
+          </>}
+        </div>
+      </div>}
+
       {/* ============ Filters & Table ============ */}
       {(tab==="main"||tab==="filter") && <div className="filter-bar" style={{maxWidth:1800,margin:"0 auto",padding:"0 20px 4px"}}>
         {/* 시장필터 & 뷰 */}
@@ -1000,6 +1185,7 @@ export default function Dashboard(){
                     <td style={{padding:"6px 5px",color:"#484f58",fontFamily:"'JetBrains Mono'",fontSize:11}}>{i+1}</td>
                     <td style={{padding:"6px 5px",maxWidth:130,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
                       <span style={{fontSize:10,marginRight:3}}>{d.k?'🇰🇷':'🇺🇸'}</span>
+                      {watchlist.includes(d.t)&&<span style={{fontSize:9,marginRight:2,color:'#ffd43b'}}>⭐</span>}
                       <span onClick={e=>{e.stopPropagation();handleStockClick(d);}} style={{fontWeight:vd.stars>=5?700:500,cursor:"pointer",borderBottom:"1px dashed "+(vd.stars>=5?"#ff1744":"#484f58"),fontSize:13,color:vd.stars>=5?"#ff1744":undefined}}>{d.n}</span>
                       <span style={{fontSize:10,color:"#484f58",marginLeft:3,fontFamily:"'JetBrains Mono'"}}>{d.t}</span>
                     </td>
@@ -1046,7 +1232,7 @@ export default function Dashboard(){
       </div>}
 
       {/* 상세분석 모달 */}
-      {showDetail && <StockDetailModal key={detailStock?.t} stock={detailStock} onClose={()=>setShowDetail(false)}/>}
+      {showDetail && <StockDetailModal key={detailStock?.t} stock={detailStock} onClose={()=>setShowDetail(false)} isWatched={watchlist.includes(detailStock?.t)} onToggleWatch={toggleWatch}/>}
 
       <style>{`
         *{box-sizing:border-box}
