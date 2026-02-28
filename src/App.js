@@ -531,6 +531,30 @@ export default function Dashboard(){
   const removePortfolio=useCallback((idx)=>{
     setPortfolio(p=>p.filter((_,i)=>i!==idx));
   },[]);
+  const[syncMsg,setSyncMsg]=useState('');
+  const[syncInput,setSyncInput]=useState('');
+  const[showSync,setShowSync]=useState(false);
+
+  const doExport=useCallback(()=>{
+    const data=JSON.stringify({w:watchlist,p:portfolio,ts:Date.now()});
+    const code=btoa(unescape(encodeURIComponent(data)));
+    navigator.clipboard.writeText(code).then(()=>setSyncMsg('✅ 코드 복사 완료! 다른 기기에서 가져오기 하세요.')).catch(()=>{
+      /* 클립보드 실패 시 직접 표시 */
+      setSyncInput(code);setSyncMsg('📋 아래 코드를 복사하세요:');
+    });
+    setTimeout(()=>setSyncMsg(''),4000);
+  },[watchlist,portfolio]);
+
+  const doImport=useCallback(()=>{
+    try{
+      const json=JSON.parse(decodeURIComponent(escape(atob(syncInput.trim()))));
+      if(json.w)setWatchlist(json.w);
+      if(json.p)setPortfolio(json.p);
+      setSyncMsg(`✅ 가져오기 완료! 워치${(json.w||[]).length}개 + 보유${(json.p||[]).length}개`);
+      setSyncInput('');
+    }catch(e){setSyncMsg('❌ 잘못된 코드입니다.');}
+    setTimeout(()=>setSyncMsg(''),4000);
+  },[syncInput]);
 
   /* ESC로 모달 닫기 + 타이틀/폰트 설정 */
   useEffect(()=>{
@@ -939,6 +963,16 @@ export default function Dashboard(){
       {tab==="watch" && <div style={{maxWidth:1800,margin:"0 auto",padding:"6px 20px"}}>
         <div style={{background:"#0d1117",border:"1px solid #21262d",borderRadius:10,padding:14}}>
           <h3 style={{color:"#ffd43b",fontSize:16,marginBottom:12,marginTop:0}}>👁 워치리스트 ({watchlist.length}종목)</h3>
+          {/* 동기화 버튼 */}
+          <div style={{display:"flex",gap:6,marginBottom:10,flexWrap:"wrap",alignItems:"center"}}>
+            <button onClick={doExport} style={{padding:"5px 12px",borderRadius:5,border:"1px solid #58a6ff",background:"#58a6ff15",color:"#58a6ff",cursor:"pointer",fontSize:11,fontWeight:600}}>📤 내보내기</button>
+            <button onClick={()=>setShowSync(!showSync)} style={{padding:"5px 12px",borderRadius:5,border:"1px solid #bc8cff",background:"#bc8cff15",color:"#bc8cff",cursor:"pointer",fontSize:11,fontWeight:600}}>📥 가져오기</button>
+            {syncMsg && <span style={{fontSize:11,color:syncMsg.startsWith('✅')?'#3fb950':syncMsg.startsWith('❌')?'#f85149':'#58a6ff',fontWeight:600}}>{syncMsg}</span>}
+          </div>
+          {showSync && <div style={{display:"flex",gap:6,marginBottom:10,alignItems:"center"}}>
+            <input value={syncInput} onChange={e=>setSyncInput(e.target.value)} placeholder="코드를 여기에 붙여넣기" style={{flex:1,padding:"6px 10px",borderRadius:5,border:"1px solid #21262d",background:"#0d1117",color:"#e6edf3",fontSize:11,fontFamily:"'JetBrains Mono'",outline:"none"}}/>
+            <button onClick={doImport} style={{padding:"5px 14px",borderRadius:5,border:"1px solid #3fb950",background:"#3fb95015",color:"#3fb950",cursor:"pointer",fontSize:11,fontWeight:700}}>적용</button>
+          </div>}
           {watchlist.length===0 ? <div style={{color:"#484f58",fontSize:13,padding:20,textAlign:"center"}}>워치리스트가 비어있습니다.<br/>종목 상세보기에서 ☆ 버튼으로 추가하세요.</div> : <>
             <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:12}}>
               {/* 미국 워치리스트 */}
