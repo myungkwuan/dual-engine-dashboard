@@ -1105,19 +1105,19 @@ export default function Dashboard(){
               if(items.length===0)return null;
               return <div key={market} style={{marginBottom:14}}>
                 <div style={{fontSize:14,fontWeight:700,color:market==="us"?"#4dabf7":"#ff922b",marginBottom:8}}>{market==="us"?"🇺🇸 미국":"🇰🇷 한국"} ({items.length})</div>
-                <div style={{overflowX:"auto"}}>
-                <table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}>
+                <div style={{overflowX:"auto",WebkitOverflowScrolling:"touch"}}>
+                <table style={{borderCollapse:"collapse",fontSize:12,width:isMobile?"max-content":"100%"}}>
                   <thead><tr style={{borderBottom:"2px solid #21262d"}}>
-                    <th style={{padding:"6px 8px",textAlign:"left",color:"#484f58",fontSize:11}}>종목</th>
-                    <th style={{padding:"6px 8px",textAlign:"center",color:"#484f58",fontSize:11}}>판정</th>
-                    <th style={{padding:"6px 8px",textAlign:"right",color:"#484f58",fontSize:11}}>현재가</th>
-                    <th style={{padding:"6px 8px",textAlign:"right",color:"#484f58",fontSize:11}}>등락</th>
-                    <th style={{padding:"6px 8px",textAlign:"center",color:"#484f58",fontSize:11}}>SEPA</th>
-                    <th style={{padding:"6px 8px",textAlign:"center",color:"#484f58",fontSize:11}}>DM</th>
-                    <th style={{padding:"6px 8px",textAlign:"center",color:"#484f58",fontSize:11}}>VCP</th>
-                    <th style={{padding:"6px 8px",textAlign:"center",color:"#484f58",fontSize:11}}>거래량</th>
-                    <th style={{padding:"6px 8px",textAlign:"center",color:"#484f58",fontSize:11}}>MF</th>
-                    <th style={{padding:"6px 8px",textAlign:"center",color:"#484f58",fontSize:11}}></th>
+                    <th style={{padding:"6px 8px",textAlign:"left",color:"#484f58",fontSize:11,position:isMobile?"sticky":undefined,left:isMobile?0:undefined,background:"#0d1117",zIndex:isMobile?2:undefined,whiteSpace:"nowrap"}}>종목</th>
+                    <th style={{padding:"6px 8px",textAlign:"center",color:"#484f58",fontSize:11,whiteSpace:"nowrap"}}>판정</th>
+                    <th style={{padding:"6px 8px",textAlign:"right",color:"#484f58",fontSize:11,whiteSpace:"nowrap"}}>현재가</th>
+                    <th style={{padding:"6px 8px",textAlign:"right",color:"#484f58",fontSize:11,whiteSpace:"nowrap"}}>등락</th>
+                    <th style={{padding:"6px 8px",textAlign:"center",color:"#484f58",fontSize:11,whiteSpace:"nowrap"}}>SEPA</th>
+                    <th style={{padding:"6px 8px",textAlign:"center",color:"#484f58",fontSize:11,whiteSpace:"nowrap"}}>DM</th>
+                    <th style={{padding:"6px 8px",textAlign:"center",color:"#484f58",fontSize:11,whiteSpace:"nowrap"}}>VCP</th>
+                    <th style={{padding:"6px 8px",textAlign:"center",color:"#484f58",fontSize:11,whiteSpace:"nowrap"}}>거래량</th>
+                    <th style={{padding:"6px 8px",textAlign:"center",color:"#484f58",fontSize:11,whiteSpace:"nowrap"}}>MF</th>
+                    <th style={{padding:"6px 8px",textAlign:"center",color:"#484f58",fontSize:11,whiteSpace:"nowrap"}}></th>
                   </tr></thead>
                   <tbody>{items.map(d=>{
                     const vd=getVerdict(d);
@@ -1126,10 +1126,10 @@ export default function Dashboard(){
                     const volSt=vol?.signalType;
                     const volClr=volSt==='buy'?'#3fb950':volSt==='sell'?'#ff1744':volSt==='caution'?'#ffd43b':'#484f58';
                     return <tr key={d.t} style={{borderBottom:"1px solid rgba(33,38,45,.4)",background:vd.totalPt>=80?"#ff174408":vd.totalPt>=70?"#ffd43b06":"transparent"}}>
-                      <td style={{padding:"6px 8px"}}>
+                      <td style={{padding:"6px 8px",whiteSpace:"nowrap",position:isMobile?"sticky":undefined,left:isMobile?0:undefined,background:vd.totalPt>=80?"#0d0d12":vd.totalPt>=70?"#0d0d11":"#0d1117",zIndex:isMobile?1:undefined,borderRight:isMobile?"1px solid #21262d":undefined}}>
                         <span onClick={()=>{setDetailStock(d);setShowDetail(true);}} style={{fontSize:13,fontWeight:vd.stars>=5?700:600,cursor:"pointer",borderBottom:"1px dashed #484f58",color:vd.stars>=5?"#ff1744":"#e6edf3"}}>{d.n}</span>
                         <span style={{fontSize:10,color:"#484f58",marginLeft:4}}>{d.t}</span>
-                        <div style={{fontSize:10,color:"#484f58"}}>{d.s}</div>
+                        {!isMobile&&<div style={{fontSize:10,color:"#484f58"}}>{d.s}</div>}
                       </td>
                       <td style={{padding:"4px 6px",textAlign:"center",background:vd.color+"12",borderLeft:`2px solid ${vd.color}`,minWidth:60}}>
                         <div style={{fontSize:12,fontWeight:800,color:vd.color}}>{vd.verdict}</div>
@@ -1253,19 +1253,19 @@ export default function Dashboard(){
                   <span style={{fontSize:11,color:"#484f58"}}>{items.length}종목</span>
                   <span style={{fontSize:11,color:mktPnl>=0?"#3fb950":"#f85149",fontFamily:"'JetBrains Mono'",fontWeight:600}}>{mktPnl>=0?"+":""}{Math.round(mktPnl).toLocaleString()} ({mktPct>=0?"+":""}{mktPct.toFixed(2)}%)</span>
                 </div>
-                <div style={{overflowX:"auto"}}>
-                <table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}>
+                <div style={{overflowX:"auto",WebkitOverflowScrolling:"touch"}}>
+                <table style={{borderCollapse:"collapse",fontSize:12,width:isMobile?"max-content":"100%"}}>
                   <thead><tr style={{borderBottom:"2px solid #21262d"}}>
-                    <th style={{padding:"6px 8px",textAlign:"left",color:"#484f58",fontSize:11}}>종목</th>
-                    <th style={{padding:"6px 8px",textAlign:"center",color:"#484f58",fontSize:11}}>판정</th>
-                    <th style={{padding:"6px 8px",textAlign:"right",color:"#484f58",fontSize:11}}>현재가</th>
-                    <th style={{padding:"6px 8px",textAlign:"right",color:"#484f58",fontSize:11}}>매수가</th>
-                    <th style={{padding:"6px 8px",textAlign:"right",color:"#484f58",fontSize:11}}>수익률</th>
-                    <th style={{padding:"6px 8px",textAlign:"right",color:"#484f58",fontSize:11}}>손익</th>
-                    <th style={{padding:"6px 8px",textAlign:"center",color:"#ff922b",fontSize:11}}>진입-7%</th>
-                    <th style={{padding:"6px 8px",textAlign:"center",color:"#bc8cff",fontSize:11}}>트레일-9%</th>
-                    <th style={{padding:"6px 8px",textAlign:"center",color:"#f85149",fontSize:11}}>활성손절</th>
-                    <th style={{padding:"6px 8px",textAlign:"center",color:"#484f58",fontSize:11}}></th>
+                    <th style={{padding:"6px 8px",textAlign:"left",color:"#484f58",fontSize:11,position:isMobile?"sticky":undefined,left:isMobile?0:undefined,background:"#0d1117",zIndex:isMobile?2:undefined,whiteSpace:"nowrap"}}>종목</th>
+                    <th style={{padding:"6px 8px",textAlign:"center",color:"#484f58",fontSize:11,whiteSpace:"nowrap"}}>판정</th>
+                    <th style={{padding:"6px 8px",textAlign:"right",color:"#484f58",fontSize:11,whiteSpace:"nowrap"}}>현재가</th>
+                    <th style={{padding:"6px 8px",textAlign:"right",color:"#484f58",fontSize:11,whiteSpace:"nowrap"}}>매수가</th>
+                    <th style={{padding:"6px 8px",textAlign:"right",color:"#484f58",fontSize:11,whiteSpace:"nowrap"}}>수익률</th>
+                    <th style={{padding:"6px 8px",textAlign:"right",color:"#484f58",fontSize:11,whiteSpace:"nowrap"}}>손익</th>
+                    <th style={{padding:"6px 8px",textAlign:"center",color:"#ff922b",fontSize:11,whiteSpace:"nowrap"}}>진입-7%</th>
+                    <th style={{padding:"6px 8px",textAlign:"center",color:"#bc8cff",fontSize:11,whiteSpace:"nowrap"}}>트레일-9%</th>
+                    <th style={{padding:"6px 8px",textAlign:"center",color:"#f85149",fontSize:11,whiteSpace:"nowrap"}}>활성손절</th>
+                    <th style={{padding:"6px 8px",textAlign:"center",color:"#484f58",fontSize:11,whiteSpace:"nowrap"}}></th>
                   </tr></thead>
                   <tbody>{items.map((p,idx)=>{
                     const s=stocks.find(d=>d.t===p.ticker);
@@ -1277,7 +1277,7 @@ export default function Dashboard(){
                     const globalIdx=portfolio.indexOf(p);
                     const sl=calcStops(p,s.p||0);
                     return <tr key={idx} style={{borderBottom:"1px solid rgba(33,38,45,.4)",background:sl.statusBg}}>
-                      <td style={{padding:"6px 8px"}}>
+                      <td style={{padding:"6px 8px",whiteSpace:"nowrap",position:isMobile?"sticky":undefined,left:isMobile?0:undefined,background:sl.statusBg||"#0d1117",zIndex:isMobile?1:undefined,borderRight:isMobile?"1px solid #21262d":undefined}}>
                         <span onClick={()=>{setDetailStock(s);setShowDetail(true);}} style={{fontWeight:600,cursor:"pointer",borderBottom:"1px dashed #484f58",color:vd.stars>=5?"#ff1744":"#e6edf3"}}>{s.n}</span>
                         <span style={{fontSize:10,color:"#484f58",marginLeft:4}}>{s.t}</span>
                         <div style={{fontSize:10,color:s.c>=0?"#3fb950":"#f85149"}}>당일 {s.c>=0?"+":""}{s.c?.toFixed(2)||0}%</div>
