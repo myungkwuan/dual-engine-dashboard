@@ -268,29 +268,29 @@ function StockDetailModal({ stock, onClose, isWatched, onToggleWatch }) {
       <div className="modal-inner" style={{background:'#0d0d1a',borderRadius:'16px',maxWidth:'900px',width:'100%',border:'1px solid #333',padding:'0'}} onClick={e=>e.stopPropagation()}>
 
         {/* 헤더 */}
-        <div className="modal-header" style={{padding:'20px 24px',borderBottom:'1px solid #1a1a2e',display:'flex',justifyContent:'space-between',alignItems:'flex-start'}}>
-          <div>
-            <div style={{display:'flex',gap:'8px',alignItems:'center',marginBottom:'4px'}}>
+        <div className="modal-header" style={{padding:'16px 20px',borderBottom:'1px solid #1a1a2e',display:'flex',justifyContent:'space-between',alignItems:'flex-start',gap:'12px'}}>
+          <div style={{flex:1,minWidth:0}}>
+            <div style={{display:'flex',gap:'6px',alignItems:'center',marginBottom:'4px',flexWrap:'wrap'}}>
               <span style={{padding:'2px 8px',borderRadius:4,fontSize:11,background:stock.k?'#ff922b20':'#4dabf720',color:stock.k?'#ff922b':'#4dabf7',fontWeight:700}}>{stock.k?'🇰🇷 KR':'🇺🇸 US'}</span>
               <span style={{padding:'2px 8px',borderRadius:4,fontSize:11,background:'#1a1a2e',color:'#666'}}>{stock.s}</span>
             </div>
-            <h2 style={{fontSize:'24px',fontWeight:900,color:'#eee',margin:0}}>{stock.n}<span style={{fontSize:'14px',color:'#555',marginLeft:'8px',fontFamily:"'JetBrains Mono'"}}>{stock.t}</span></h2>
-            <div style={{fontSize:'22px',fontWeight:700,color:'#fff',marginTop:'6px',fontFamily:"'JetBrains Mono'"}}>
+            <h2 style={{fontSize:'20px',fontWeight:900,color:'#eee',margin:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{stock.n}<span style={{fontSize:'13px',color:'#555',marginLeft:'6px',fontFamily:"'JetBrains Mono'"}}>{stock.t}</span></h2>
+            <div style={{fontSize:'18px',fontWeight:700,color:'#fff',marginTop:'4px',fontFamily:"'JetBrains Mono'"}}>
               {fP(stock.p,stock.k)}
-              <span style={{fontSize:'15px',color:stock.c>=0?'#3fb950':'#f85149',marginLeft:'10px'}}>{stock.c>=0?'▲':'▼'}{Math.abs(stock.c).toFixed(2)}%</span>
+              <span style={{fontSize:'13px',color:stock.c>=0?'#3fb950':'#f85149',marginLeft:'8px'}}>{stock.c>=0?'▲':'▼'}{Math.abs(stock.c).toFixed(2)}%</span>
             </div>
           </div>
-          <div style={{textAlign:'center'}}>
-            <div style={{padding:'12px 18px',borderRadius:'12px',background:verdict.color+'20',border:`2px solid ${verdict.color}`}}>
-              <div style={{fontSize:'22px',fontWeight:900,color:verdict.color}}>{verdict.verdict}</div>
-              <div style={{fontSize:'10px',color:'#666',marginTop:'2px'}}>{'⭐'.repeat(verdict.stars)}</div>
+          <div style={{display:'flex',flexDirection:'column',alignItems:'center',gap:'4px',flexShrink:0}}>
+            <div style={{padding:'8px 14px',borderRadius:'10px',background:verdict.color+'20',border:`2px solid ${verdict.color}`,textAlign:'center'}}>
+              <div style={{fontSize:'16px',fontWeight:900,color:verdict.color,whiteSpace:'nowrap'}}>{verdict.verdict}</div>
+              <div style={{fontSize:'9px',color:'#666'}}>{'⭐'.repeat(verdict.stars)}</div>
             </div>
-            <div style={{marginTop:'6px',padding:'4px 12px',borderRadius:'6px',background:dm.signalColor+'20',border:`1px solid ${dm.signalColor}44`}}>
-              <div style={{fontSize:'12px',fontWeight:700,color:dm.signalColor}}>{dm.signal}</div>
+            <div style={{display:'flex',gap:'4px',alignItems:'center'}}>
+              <span style={{padding:'3px 8px',borderRadius:'5px',background:dm.signalColor+'20',border:`1px solid ${dm.signalColor}44`,fontSize:'10px',fontWeight:700,color:dm.signalColor,whiteSpace:'nowrap'}}>{dm.signal}</span>
+              <button onClick={()=>onToggleWatch(stock.t)} style={{padding:'3px 8px',borderRadius:'5px',border:'1px solid '+(isWatched?'#ffd43b':'#21262d'),background:isWatched?'#ffd43b18':'#161b22',color:isWatched?'#ffd43b':'#8b949e',cursor:'pointer',fontSize:'10px',fontWeight:700,whiteSpace:'nowrap'}}>
+                {isWatched?'⭐':'☆ 추가'}
+              </button>
             </div>
-            <button onClick={()=>onToggleWatch(stock.t)} style={{marginTop:'6px',padding:'6px 16px',borderRadius:'6px',border:'1px solid '+(isWatched?'#ffd43b':'#21262d'),background:isWatched?'#ffd43b18':'#161b22',color:isWatched?'#ffd43b':'#8b949e',cursor:'pointer',fontSize:'12px',fontWeight:700,width:'100%'}}>
-              {isWatched?'⭐ 워치리스트':'☆ 워치 추가'}
-            </button>
           </div>
         </div>
 
@@ -1501,8 +1501,8 @@ export default function Dashboard(){
         @media(max-width:768px){
           .modal-inner{max-width:100%!important;margin:0!important;border-radius:10px!important}
           .modal-overlay{padding:4px!important}
-          .modal-header{padding:10px 12px!important;flex-direction:column!important;gap:8px!important}
-          .modal-header>div:last-child{display:flex;gap:8px;align-items:center}
+          .modal-header{padding:12px 14px!important}
+          .modal-header>div:last-child{display:flex;gap:4px;align-items:center}
           .engine-grid{grid-template-columns:1fr!important;gap:8px!important}
           .rs-grid{grid-template-columns:1fr 1fr!important}
           .strategy-grid{grid-template-columns:1fr 1fr!important}
