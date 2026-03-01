@@ -1378,7 +1378,7 @@ export default function Dashboard(){
 
       {/* ============ Table ============ */}
       {(tab==="main"||tab==="filter") && <div className="tbl-wrap" style={{maxWidth:1800,margin:"0 auto",padding:"0 20px 30px",overflowX:"auto"}}>
-        <table style={{width:"100%",borderCollapse:"collapse",fontSize:isMobile?11:14,minWidth:isMobile?700:undefined}}>
+        <table style={{borderCollapse:"collapse",fontSize:isMobile?11:14,width:isMobile?"max-content":"100%"}}>
           <thead><tr>
             {!isMobile&&<TH w={30}>{"#"}</TH>}
             <TH onClick={()=>hs("n")} a={sc==="n"} sx={isMobile?{position:"sticky",left:0,zIndex:3,background:"#06080d",minWidth:90}:undefined}>종목</TH>
