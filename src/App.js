@@ -452,7 +452,7 @@ function StockDetailModal({ stock, onClose, isWatched, onToggleWatch }) {
                 {' | '}52주 위치: <span style={{color:'#e6edf3'}}>{vl.positionPct}%</span>
               </div>
             </div>
-            <div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:'8px'}}>
+            <div className="vol-grid" style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:'8px'}}>
               <div style={{textAlign:'center',padding:'8px',background:'#0d0d1a',borderRadius:'6px'}}>
                 <div style={{fontSize:'10px',color:'#666'}}>50일 평균</div>
                 <div style={{fontSize:'14px',fontWeight:700,color:'#e6edf3',fontFamily:"'JetBrains Mono'"}}>{(vl.avgVol50/1000).toFixed(0)}K</div>
@@ -862,7 +862,7 @@ export default function Dashboard(){
   const Chg=({v})=>{const c=v>0?"#3fb950":v<0?"#f85149":"#484f58";return <span style={{color:c,fontFamily:"'JetBrains Mono'",fontSize:14}}>{v>0?"+":""}{v.toFixed(2)}%</span>};
   const Tb=({label,active,onClick,color})=><button onClick={onClick} style={{padding:"5px 14px",borderRadius:5,fontSize:13,fontWeight:600,cursor:"pointer",border:"1px solid "+(active?(color||"#58a6ff"):"#21262d"),background:active?`${color||"#58a6ff"}15`:"#0d1117",color:active?(color||"#58a6ff"):"#8b949e",whiteSpace:"nowrap"}}>{label}</button>;
   const Chip=({n,label,color})=><div style={{display:"flex",alignItems:"center",gap:3,padding:"2px 10px",borderRadius:5,fontSize:12,fontWeight:600,border:"1px solid "+color,background:color+"20",color:color}}><span style={{fontFamily:"'JetBrains Mono'",fontSize:15,fontWeight:700}}>{n}</span>{label}</div>;
-  const TH=({children,onClick,a,r,c,w})=><th onClick={onClick} style={{padding:"7px 5px",textAlign:r?"right":c?"center":"left",fontWeight:600,color:a?"#58a6ff":"#484f58",fontSize:12,borderBottom:"2px solid #21262d",whiteSpace:"nowrap",cursor:onClick?"pointer":"default",userSelect:"none",background:"#06080d",width:w,position:"sticky",top:0,zIndex:1}}>{children}</th>;
+  const TH=({children,onClick,a,r,c,w,sx})=><th onClick={onClick} style={{padding:"7px 5px",textAlign:r?"right":c?"center":"left",fontWeight:600,color:a?"#58a6ff":"#484f58",fontSize:12,borderBottom:"2px solid #21262d",whiteSpace:"nowrap",cursor:onClick?"pointer":"default",userSelect:"none",background:"#06080d",width:w,position:"sticky",top:0,zIndex:1,...(sx||{})}}>{children}</th>;
 
   const grC=g=>g==="A"?"#3fb950":g==="B"?"#d29922":g==="C"||g==="D"?"#f85149":"#484f58";
   const grT=g=>g==="A"?"⭐⭐⭐":g==="B"?"⭐⭐":g==="C"?"⭐":g==="D"?"❌":"—";
@@ -1378,37 +1378,37 @@ export default function Dashboard(){
 
       {/* ============ Table ============ */}
       {(tab==="main"||tab==="filter") && <div className="tbl-wrap" style={{maxWidth:1800,margin:"0 auto",padding:"0 20px 30px",overflowX:"auto"}}>
-        <table style={{width:"100%",borderCollapse:"collapse",fontSize:isMobile?12:14}}>
+        <table style={{width:"100%",borderCollapse:"collapse",fontSize:isMobile?11:14,minWidth:isMobile?700:undefined}}>
           <thead><tr>
             {!isMobile&&<TH w={30}>{"#"}</TH>}
-            <TH onClick={()=>hs("n")} a={sc==="n"}>종목</TH>
+            <TH onClick={()=>hs("n")} a={sc==="n"} sx={isMobile?{position:"sticky",left:0,zIndex:3,background:"#06080d",minWidth:90}:undefined}>종목</TH>
             {!isMobile&&<TH onClick={()=>hs("s")} a={sc==="s"}>섹터</TH>}
             <TH onClick={()=>hs("p")} a={sc==="p"} r>현재가</TH>
             <TH onClick={()=>hs("c")} a={sc==="c"} r>등락</TH>
-            {!isMobile&&<TH onClick={()=>hs("f")} a={sc==="f"} c>펀더</TH>}
-            <TH onClick={()=>hs("vd")} a={sc==="vd"} c>{isMobile?"판정":"종합"}</TH>
-            {!isMobile && (view==="dual"||view==="mf") && <>
+            <TH onClick={()=>hs("f")} a={sc==="f"} c>펀더</TH>
+            <TH onClick={()=>hs("vd")} a={sc==="vd"} c>종합</TH>
+            {(view==="dual"||view==="mf") && <>
               <TH onClick={()=>hs("mf")} a={sc==="mf"} c>MF</TH>
               <TH c>방향</TH>
             </>}
-            {!isMobile && (view==="dual"||view==="sepa") && <>
+            {(view==="dual"||view==="sepa") && <>
               <TH onClick={()=>hs("sepa")} a={sc==="sepa"} c>SEPA</TH>
               <TH c>판정</TH>
             </>}
             {(view==="dual"||view==="dm") && <>
-              <TH onClick={()=>hs("dm")} a={sc==="dm"} c>{isMobile?"DM":"DM신호"}</TH>
-              {!isMobile&&<TH onClick={()=>hs("rs")} a={sc==="rs"} c>RS</TH>}
-              {!isMobile&&<TH c>추세</TH>}
+              <TH onClick={()=>hs("dm")} a={sc==="dm"} c>DM신호</TH>
+              <TH onClick={()=>hs("rs")} a={sc==="rs"} c>RS</TH>
+              <TH c>추세</TH>
             </>}
-            {!isMobile && view==="vcp" && <>
+            {view==="vcp" && <>
               <TH c>VCP</TH><TH c>피봇</TH><TH c>근접</TH>
             </>}
-            {!isMobile && view==="cf" && <>
+            {view==="cf" && <>
               <TH onClick={()=>hs("cf")} a={sc==="cf"} c>단기</TH>
               <TH c>중기</TH><TH c>장기</TH>
             </>}
-            {!isMobile&&<TH c>등급</TH>}
-            {!isMobile&&<TH c>거래량</TH>}
+            <TH c>등급</TH>
+            <TH c>거래량</TH>
           </tr></thead>
           <tbody>
             {sorted.map((d,i)=>{
@@ -1419,46 +1419,46 @@ export default function Dashboard(){
                 <Fragment key={d.t}>
                   <tr onClick={()=>setExp(isE?null:d.t)} style={{borderBottom:"1px solid rgba(33,38,45,.4)",cursor:"pointer",background:fl==="up"?"rgba(63,185,80,.15)":fl==="dn"?"rgba(248,81,73,.15)":"transparent",transition:"background 1.5s"}}>
                     {!isMobile&&<td style={{padding:"6px 5px",color:"#484f58",fontFamily:"'JetBrains Mono'",fontSize:11}}>{i+1}</td>}
-                    <td style={{padding:isMobile?"4px 3px":"6px 5px",maxWidth:isMobile?100:130,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
+                    <td style={isMobile?{padding:"4px 3px",maxWidth:100,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",position:"sticky",left:0,zIndex:1,background:fl==="up"?"#0f1d15":fl==="dn"?"#1d0f0f":"#06080d",borderRight:"1px solid #21262d"}:{padding:"6px 5px",maxWidth:130,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
                       <span style={{fontSize:10,marginRight:2}}>{d.k?'🇰🇷':'🇺🇸'}</span>
                       {watchlist.includes(d.t)&&<span style={{fontSize:9,marginRight:1,color:'#ffd43b'}}>⭐</span>}
                       <span onClick={e=>{e.stopPropagation();handleStockClick(d);}} style={{fontWeight:vd.stars>=5?700:500,cursor:"pointer",borderBottom:"1px dashed "+(vd.stars>=5?"#ff1744":"#484f58"),fontSize:isMobile?11:13,color:vd.stars>=5?"#ff1744":undefined}}>{d.n}</span>
-                      {isMobile&&<div style={{fontSize:9,color:"#484f58",fontFamily:"'JetBrains Mono'"}}>{d.t} <span style={{color:"#484f58"}}>{d.s}</span></div>}
+                      {isMobile&&<div style={{fontSize:8,color:"#484f58",fontFamily:"'JetBrains Mono'"}}>{d.t}</div>}
                       {!isMobile&&<span style={{fontSize:10,color:"#484f58",marginLeft:3,fontFamily:"'JetBrains Mono'"}}>{d.t}</span>}
                     </td>
                     {!isMobile&&<td style={{padding:"6px 5px"}}><span style={{padding:"1px 6px",borderRadius:3,fontSize:10,background:"rgba(72,79,88,.15)",color:"#484f58"}}>{d.s}</span></td>}
-                    <td style={{padding:isMobile?"4px 2px":"6px 5px",textAlign:"right",fontFamily:"'JetBrains Mono'",fontWeight:fl?700:400,color:fl?"#39d353":"#e6edf3",fontSize:isMobile?12:14}}>{d.p?fP(d.p,d.k):'-'}</td>
+                    <td style={{padding:isMobile?"4px 2px":"6px 5px",textAlign:"right",fontFamily:"'JetBrains Mono'",fontWeight:fl?700:400,color:fl?"#39d353":"#e6edf3",fontSize:isMobile?11:14}}>{d.p?fP(d.p,d.k):'-'}</td>
                     <td style={{padding:isMobile?"4px 2px":"6px 5px",textAlign:"right"}}><Chg v={d.c}/></td>
-                    {!isMobile&&<td style={{padding:"6px 5px",textAlign:"center"}}><Badge v={d.f||null} g={80} r={60}/></td>}
+                    <td style={{padding:"6px 5px",textAlign:"center"}}><Badge v={d.f||null} g={80} r={60}/></td>
                     <td style={{textAlign:"center",padding:isMobile?"3px 4px":"4px 6px",background:vd.color+"12",borderLeft:`2px solid ${vd.color}`,minWidth:isMobile?50:70}}>
                       <div style={{fontSize:isMobile?10:12,fontWeight:800,color:vd.color}}>{vd.verdict}</div>
                       <div style={{fontSize:isMobile?8:9,color:'#484f58',fontFamily:"'JetBrains Mono'"}}>{vd.totalPt}점</div>
                     </td>
-                    {!isMobile && (view==="dual"||view==="mf") && <>
+                    {(view==="dual"||view==="mf") && <>
                       <td style={{padding:"6px 5px",textAlign:"center"}}><Badge v={mfTs(d)} g={2.5} r={1.5}/></td>
-                      <td style={{padding:"6px 5px",textAlign:"center"}}><span style={{fontSize:12,padding:"1px 6px",borderRadius:3,background:mfTd(d)==="매수"?"rgba(63,185,80,.12)":"rgba(248,81,73,.12)",color:mfTd(d)==="매수"?"#3fb950":"#f85149"}}>{mfTd(d)}{mfAl(d)?" ⚡":""}</span></td>
+                      <td style={{padding:"6px 5px",textAlign:"center"}}><span style={{fontSize:isMobile?10:12,padding:"1px 6px",borderRadius:3,background:mfTd(d)==="매수"?"rgba(63,185,80,.12)":"rgba(248,81,73,.12)",color:mfTd(d)==="매수"?"#3fb950":"#f85149"}}>{mfTd(d)}{mfAl(d)?" ⚡":""}</span></td>
                     </>}
-                    {!isMobile && (view==="dual"||view==="sepa") && <>
+                    {(view==="dual"||view==="sepa") && <>
                       <td style={{padding:"6px 5px",textAlign:"center"}}><Badge v={seTt(d)} g={8} r={7}/></td>
-                      <td style={{padding:"6px 5px",textAlign:"center"}}><span style={{fontSize:12,padding:"1px 6px",borderRadius:3,background:seV(d)==="매수준비"?"rgba(63,185,80,.12)":seV(d)==="워치리스트"?"rgba(210,153,34,.12)":"rgba(248,81,73,.12)",color:seV(d)==="매수준비"?"#3fb950":seV(d)==="워치리스트"?"#d29922":"#f85149"}}>{seV(d)}</span></td>
+                      <td style={{padding:"6px 5px",textAlign:"center"}}><span style={{fontSize:isMobile?10:12,padding:"1px 6px",borderRadius:3,background:seV(d)==="매수준비"?"rgba(63,185,80,.12)":seV(d)==="워치리스트"?"rgba(210,153,34,.12)":"rgba(248,81,73,.12)",color:seV(d)==="매수준비"?"#3fb950":seV(d)==="워치리스트"?"#d29922":"#f85149"}}>{seV(d)}</span></td>
                     </>}
                     {(view==="dual"||view==="dm") && <>
                       <td style={{padding:isMobile?"3px 2px":"6px 5px",textAlign:"center"}}><span style={{fontSize:isMobile?9:11,padding:isMobile?"1px 4px":"2px 6px",borderRadius:4,background:dm.signalColor+"15",color:dm.signalColor,fontWeight:700,whiteSpace:"nowrap"}}>{dm.signal}</span></td>
-                      {!isMobile&&<td style={{padding:"6px 5px",textAlign:"center"}}><Badge v={dm.rsScore} g={70} r={40}/></td>}
-                      {!isMobile&&<td style={{padding:"6px 5px",textAlign:"center"}}><span style={{fontSize:13,fontWeight:700,color:dm.trendStr>0?"#3fb950":dm.trendStr===0?"#d29922":"#f85149"}}>{dm.trendStr>0?"+":""}{dm.trendStr}</span></td>}
+                      <td style={{padding:"6px 5px",textAlign:"center"}}><Badge v={dm.rsScore} g={70} r={40}/></td>
+                      <td style={{padding:"6px 5px",textAlign:"center"}}><span style={{fontSize:isMobile?11:13,fontWeight:700,color:dm.trendStr>0?"#3fb950":dm.trendStr===0?"#d29922":"#f85149"}}>{dm.trendStr>0?"+":""}{dm.trendStr}</span></td>
                     </>}
-                    {!isMobile && view==="vcp" && <>
-                      <td style={{padding:"6px 5px",textAlign:"center",fontSize:12,color:vcpC(vcpMt(d))}}>{vcpI(vcpMt(d))+" "+vcpMt(d)}</td>
-                      <td style={{padding:"6px 5px",textAlign:"center",fontSize:12,fontFamily:"'JetBrains Mono'"}}>{vcpPv(d)?fP(vcpPv(d),d.k):"-"}</td>
+                    {view==="vcp" && <>
+                      <td style={{padding:"6px 5px",textAlign:"center",fontSize:isMobile?10:12,color:vcpC(vcpMt(d))}}>{vcpI(vcpMt(d))+" "+vcpMt(d)}</td>
+                      <td style={{padding:"6px 5px",textAlign:"center",fontSize:isMobile?10:12,fontFamily:"'JetBrains Mono'"}}>{vcpPv(d)?fP(vcpPv(d),d.k):"-"}</td>
                       <td style={{padding:"6px 5px",textAlign:"center"}}><Badge v={vcpPx(d)} g={99} r={5}/></td>
                     </>}
-                    {!isMobile && view==="cf" && <>
+                    {view==="cf" && <>
                       <td style={{padding:"6px 5px",textAlign:"center"}}><Badge v={cfS(d)} g={3} r={2}/></td>
                       <td style={{padding:"6px 5px",textAlign:"center"}}><Badge v={cfM(d)} g={3} r={2}/></td>
                       <td style={{padding:"6px 5px",textAlign:"center"}}><Badge v={cfL(d)} g={3} r={2}/></td>
                     </>}
-                    {!isMobile&&<td style={{padding:"6px 5px",textAlign:"center",fontSize:11}}><span style={{color:grC(fundGr(d))}}>{grT(fundGr(d))}</span></td>}
-                    {!isMobile&&<td style={{padding:"6px 5px",textAlign:"center",fontSize:11,fontFamily:"'JetBrains Mono'"}}>
+                    <td style={{padding:"6px 5px",textAlign:"center",fontSize:isMobile?9:11}}><span style={{color:grC(fundGr(d))}}>{grT(fundGr(d))}</span></td>
+                    <td style={{padding:"6px 5px",textAlign:"center",fontSize:isMobile?9:11,fontFamily:"'JetBrains Mono'"}}>
                       {d._volData ? (()=>{
                         const vl=d._volData;
                         const st=vl.signalType;
@@ -1466,11 +1466,11 @@ export default function Dashboard(){
                         const icon=vl.volDryup&&!vl.surgeDay?'💧':'';
                         const short=vl.signal||vl.volTrend;
                         return <div>
-                          <div style={{color:clr,fontWeight:st!=='neutral'?700:400,fontSize:10,lineHeight:1.2}}>{short}</div>
-                          <div style={{color:'#484f58',fontSize:9}}>{icon}{vl.volRatio}x</div>
+                          <div style={{color:clr,fontWeight:st!=='neutral'?700:400,fontSize:isMobile?8:10,lineHeight:1.2}}>{short}</div>
+                          <div style={{color:'#484f58',fontSize:isMobile?7:9}}>{icon}{vl.volRatio}x</div>
                         </div>;
                       })() : <span style={{color:'#333'}}>-</span>}
-                    </td>}
+                    </td>
                   </tr>
                   {isE && <tr><td colSpan={20} style={{padding:0}}><Detail d={d}/></td></tr>}
                 </Fragment>
@@ -1495,7 +1495,9 @@ export default function Dashboard(){
         .tab-nav>div::-webkit-scrollbar,
         .filter-bar div[style*="overflowX"]::-webkit-scrollbar,
         .dm-filter-row::-webkit-scrollbar,
-        .sector-row::-webkit-scrollbar{display:none}
+        .sector-row::-webkit-scrollbar,
+        .tbl-wrap::-webkit-scrollbar{display:none}
+        .tbl-wrap{scrollbar-width:thin}
         @media(max-width:768px){
           .modal-inner{max-width:100%!important;margin:0!important;border-radius:10px!important}
           .modal-overlay{padding:4px!important}
@@ -1504,6 +1506,7 @@ export default function Dashboard(){
           .engine-grid{grid-template-columns:1fr!important;gap:8px!important}
           .rs-grid{grid-template-columns:1fr 1fr!important}
           .strategy-grid{grid-template-columns:1fr 1fr!important}
+          .vol-grid{grid-template-columns:1fr 1fr!important}
           .chart-wrap{height:220px!important}
           .modal-body{padding:0 10px 14px!important}
           .tradingview-widget-container{height:220px!important}
@@ -1511,7 +1514,7 @@ export default function Dashboard(){
           .dash-header{padding:6px 12px!important}
           .tab-nav{padding:0 10px!important}
           .filter-bar{padding:0 10px 4px!important}
-          .tbl-wrap{padding:0 6px 16px!important}
+          .tbl-wrap{padding:0 6px 16px!important;-webkit-overflow-scrolling:touch}
           .tbl-wrap table{font-size:11px!important}
           .market-split{grid-template-columns:1fr!important;gap:4px!important}
         }
