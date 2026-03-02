@@ -141,7 +141,7 @@ function calcMomentum(bars, spyBars) {
   };
 }
 
-/* ===== 🔥 VCP 자동 감지 (NEW) ===== */
+/* ===== 🔥 VCP 자동 감지 (v2 — 앵커/피봇/돌파 수정) ===== */
 function calcVCP(bars) {
   if (bars.length < 60) return { t1: 0, t2: 0, t3: 0, baseWeeks: 0, pivot: 0, proximity: 99, maturity: "미형성" };
   
@@ -153,7 +153,7 @@ function calcVCP(bars) {
   const curPrice = closes[n - 1];
   
   // ─── Step 1: 스윙 포인트 감지 (5일 기준) ───
-  const swingHighs = []; // {idx, price}
+  const swingHighs = [];
   const swingLows = [];
   const lookback = 5;
   
@@ -171,21 +171,36 @@ function calcVCP(bars) {
     return { t1: 0, t2: 0, t3: 0, baseWeeks: 0, pivot: 0, proximity: 99, maturity: "미형성" };
   }
   
-  // ─── Step 2: 최근 고점(앵커) 찾기 ───
-  // 최근 120일 내 가장 높은 스윙하이를 앵커로
-  const recentHighs = swingHighs.filter(sh => sh.idx >= n - 120);
-  if (recentHighs.length === 0) {
-    // 전체에서 최고점
-    recentHighs.push(swingHighs.reduce((a, b) => a.price > b.price ? a : b));
+  // ─── Step 2: 앵커 찾기 (v3 — 최근 고점 우선) ───
+  // 가장 최근 고점부터 역순으로 탐색하여
+  // 이후에 -5% 이상 조정이 있었던 고점을 앵커로 선택
+  // (최근 고점을 우선하므로 상승 추세에서도 올바른 베이스를 잡음)
+  let anchor = null;
+  const sortedByRecent = [...swingHighs].sort((a, b) => b.idx - a.idx);
+  for (const sh of sortedByRecent) {
+    const lowsAfter = swingLows.filter(sl => sl.idx > sh.idx);
+    const hasCorrection = lowsAfter.some(sl => sl.price < sh.price * 0.95);
+    if (hasCorrection) { anchor = sh; break; }
   }
-  const anchor = recentHighs.reduce((a, b) => a.price > b.price ? a : b);
+  // 폴백: 최근 90일 내 최고가
+  if (!anchor) {
+    const recent90 = swingHighs.filter(sh => sh.idx >= n - 90);
+    if (recent90.length > 0) {
+      anchor = recent90.reduce((a, b) => a.price > b.price ? a : b);
+    } else {
+      // 최근 60일 내 최고가, 그래도 없으면 마지막 스윙하이
+      const recent60 = swingHighs.filter(sh => sh.idx >= n - 60);
+      anchor = recent60.length > 0
+        ? recent60.reduce((a, b) => a.price > b.price ? a : b)
+        : swingHighs[swingHighs.length - 1];
+    }
+  }
   
   // ─── Step 3: 앵커 이후 수축 구간 감지 ───
-  // 앵커 이후의 스윙로우들 = 각 수축의 바닥
   const lowsAfterAnchor = swingLows.filter(sl => sl.idx > anchor.idx).sort((a, b) => a.idx - b.idx);
-  const highsAfterAnchor = swingHighs.filter(sh => sh.idx > anchor.idx).sort((a, b) => a.idx - b.idx);
+  // 앵커보다 높은 고점은 제외 (베이스 안의 반등만 추적)
+  const highsAfterAnchor = swingHighs.filter(sh => sh.idx > anchor.idx && sh.price <= anchor.price * 1.02).sort((a, b) => a.idx - b.idx);
   
-  // 수축(contraction) = 이전 고점 → 저점까지의 하락폭
   const contractions = [];
   
   // T1: 앵커 고점 → 첫 저점
@@ -223,12 +238,10 @@ function calcVCP(bars) {
   const t2 = contractions[1]?.pct || 0;
   const t3 = contractions[2]?.pct || 0;
   
-  // ─── Step 4: 피봇 포인트 ───
-  // 가장 최근 스윙하이 = 피봇 (이를 돌파하면 매수 시그널)
-  const recentSwingHigh = highsAfterAnchor.length > 0
-    ? highsAfterAnchor[highsAfterAnchor.length - 1]
-    : anchor;
-  const pivot = recentSwingHigh.price;
+  // ─── Step 4: 피봇 = 앵커 가격 (v2 수정) ───
+  // 피봇 = 베이스의 좌측 고점 = 돌파해야 할 저항선
+  const pivot = anchor.price;
+  // 양수 = 피봇 아래 (미돌파), 음수 = 피봇 위 (돌파완료)
   const proximity = +((1 - curPrice / pivot) * 100).toFixed(1);
   
   // ─── Step 5: 베이스 기간 ───
@@ -237,26 +250,27 @@ function calcVCP(bars) {
   const baseWeeks = Math.round(baseDays / 5);
   
   // ─── Step 6: 거래량 수축 확인 ───
-  // 최근 10일 평균 거래량 vs 50일 평균 → 거래량도 줄고 있으면 보너스
   const vol10 = volumes.slice(-10).reduce((a, b) => a + b, 0) / 10;
   const vol50 = volumes.slice(-50).reduce((a, b) => a + b, 0) / Math.min(50, volumes.length);
-  const volDrying = vol10 < vol50 * 0.7; // 최근 거래량이 평균의 70% 미만
+  const volDrying = vol10 < vol50 * 0.7;
   
-  // ─── Step 7: 성숙도 판정 ───
+  // ─── Step 7: 성숙도 판정 (v2 — 돌파 상태 추가) ───
   let maturity = "미형성";
+  const alreadyBroken = curPrice > pivot * 1.02;
   
-  if (contractions.length >= 3 && t1 > t2 && t2 > t3 && t3 > 0 && t3 <= 15 && baseWeeks >= 3) {
-    // 3단계 수축 완료 + 수축률 감소 + T3이 15% 이내 + 최소 3주 베이스
+  if (alreadyBroken) {
+    // 이미 피봇을 돌파한 종목
+    if (contractions.length >= 2 && t1 > t2) maturity = "돌파✅";
+    else if (contractions.length >= 1) maturity = "돌파";
+  } else if (contractions.length >= 3 && t1 > t2 && t2 > t3 && t3 > 0 && t3 <= 15 && baseWeeks >= 3) {
     maturity = volDrying ? "성숙🔥" : "성숙";
   } else if (contractions.length >= 2 && t1 > t2 && t2 > 0 && baseWeeks >= 2) {
-    // 2단계 수축 + 수축률 감소
-    if (t2 <= 15 && proximity <= 10) {
-      maturity = "성숙"; // 2단계지만 T2가 타이트하고 피봇 근접
+    if (t2 <= 15 && Math.abs(proximity) <= 10) {
+      maturity = "성숙";
     } else {
       maturity = "형성중";
     }
   } else if (contractions.length >= 1 && t1 > 0 && t1 <= 35 && baseWeeks >= 2) {
-    // 첫 수축 발생 + 적정 범위 내
     maturity = "형성중";
   }
   
@@ -267,7 +281,7 @@ function calcVCP(bars) {
     t1, t2, t3,
     baseWeeks,
     pivot: +pivot.toFixed(2),
-    proximity: Math.max(0, proximity),
+    proximity,
     maturity,
     volDrying,
     contractions: contractions.length,
@@ -360,7 +374,7 @@ async function analyzeStock(stock) {
   // 모멘텀
   const mom = calcMomentum(bars, spyBars);
   
-  // VCP (NEW! 자동감지)
+  // VCP (v2 자동감지)
   const vcp = calcVCP(bars);
   
   // 거래량

@@ -20,7 +20,7 @@ const cfClr=(v)=>v>=3?"#3fb950":v>=2?"#d29922":"#f85149";
 /* ===== 듀얼모멘텀 강화 분석 ===== */
 function getDualMomentum(d) {
   const r3m = d.r[0], r6m = d.r[1], secRank = d.r[2];
-  const spyBench3 = 4.2, spyBench6 = 8.7;
+  const spyBench3 = 4.2, spyBench6 = 8.7; /* analysis.js에서 실제 SPY 데이터를 사용하므로 이 값은 r[0],r[1]이 0일 때만 사용됨 */
 
   /* 절대 모멘텀: 양의 수익률 */
   const absM3 = r3m > 0;
@@ -600,9 +600,9 @@ function StockDetailModal({ stock, onClose, isWatched, onToggleWatch, gradeHisto
                     <div style={{fontSize:'9px',color:'#666'}}>피봇</div>
                     <div style={{fontSize:'12px',fontWeight:700,color:'#58a6ff',fontFamily:"'JetBrains Mono'"}}>{fP(vcpPv(stock),stock.k)}</div>
                   </div>
-                  <div style={{padding:'4px',background:vcpPx(stock)<=5?'#3fb95015':'#0d0d1a',borderRadius:'4px',border:vcpPx(stock)<=5?'1px solid #3fb95033':'none'}}>
-                    <div style={{fontSize:'9px',color:'#666'}}>근접도</div>
-                    <div style={{fontSize:'12px',fontWeight:700,color:vcpPx(stock)<=5?'#3fb950':vcpPx(stock)<=10?'#d29922':'#8b949e',fontFamily:"'JetBrains Mono'"}}>{vcpPx(stock)}%</div>
+                  <div style={{padding:'4px',background:vcpPx(stock)<0?'#3fb95015':vcpPx(stock)<=5?'#3fb95015':'#0d0d1a',borderRadius:'4px',border:vcpPx(stock)<0?'1px solid #3fb95033':vcpPx(stock)<=5?'1px solid #3fb95033':'none'}}>
+                    <div style={{fontSize:'9px',color:'#666'}}>{vcpPx(stock)<0?'돌파':'근접도'}</div>
+                    <div style={{fontSize:'12px',fontWeight:700,color:vcpPx(stock)<0?'#00e676':vcpPx(stock)<=5?'#3fb950':vcpPx(stock)<=10?'#d29922':'#8b949e',fontFamily:"'JetBrains Mono'"}}>{vcpPx(stock)}%</div>
                   </div>
                 </div>
                 {stock._vcpDetail?.volDrying && <div style={{marginTop:'6px',fontSize:'10px',color:'#4dabf7',fontWeight:600}}>💧 거래량 수축 동반 — 에너지 응축 확인</div>}
@@ -1054,13 +1054,75 @@ export default function Dashboard(){
       setAnaProg(Math.round((bi+1)/batches.length*100));
     }
 
-    /* stocks에 반영 */
-    setStocks(prev=>prev.map(d=>{
+    /* stocks에 분석 결과 반영 (동기 계산 + state 업데이트 분리) */
+    const computeUpdated = (prev) => prev.map(d=>{
       const a=allResults[d.t];
       if(!a)return d;
       return {...d,
         e: a.e || d.e,
         r: [a.r?a.r[0]:d.r[0], a.r?a.r[1]:d.r[1], d.r[2]],
+        v: a.v || d.v,
+        _sepaDetail: a.sepaDetail,
+        _momDetail: a.momDetail,
+        _vcpDetail: a.vcpDetail,
+        _volData: a.volData,
+      };
+    });
+
+    /* ── 등급 전환 감지 (동기) ── */
+    /* stocks closure 기반으로 업데이트된 종목 배열을 동기 계산 */
+    const updatedForGrade = computeUpdated(stocks);
+    try{
+      const prevGrades=JSON.parse(localStorage.getItem('prev_grades')||'{}');
+      const history=JSON.parse(localStorage.getItem('grade_history')||'{}');
+      let transCount=0;
+      updatedForGrade.forEach(d=>{
+        const vd=getVerdict(d);
+        const newGrade=vd.verdict;
+        const newPt=vd.totalPt;
+        if(prevGrades[d.t]&&prevGrades[d.t].grade!==newGrade){
+          if(!history[d.t])history[d.t]=[];
+          if(history[d.t].length>=20)history[d.t]=history[d.t].slice(-19);
+          history[d.t].push({
+            date:new Date().toISOString().slice(0,10),
+            from:{grade:prevGrades[d.t].grade,pt:prevGrades[d.t].pt},
+            to:{grade:newGrade,pt:newPt},
+            price:d.p||0
+          });
+          transCount++;
+        }
+        prevGrades[d.t]={grade:newGrade,pt:newPt};
+      });
+      localStorage.setItem('prev_grades',JSON.stringify(prevGrades));
+      localStorage.setItem('grade_history',JSON.stringify(history));
+      setGradeHistory(history);
+      if(transCount>0)log(`🔄 등급 전환 ${transCount}종목 감지됨`,"ok");
+    }catch(e){}
+
+    /* ── 섹터별 RS 순위 실시간 계산 ── */
+    const sectorMap = {};
+    updatedForGrade.forEach(d => {
+      if (!sectorMap[d.s]) sectorMap[d.s] = [];
+      const totalMom = (d.r[0] || 0) + (d.r[1] || 0);
+      sectorMap[d.s].push({ t: d.t, mom: totalMom });
+    });
+    const sectorRanks = {};
+    Object.keys(sectorMap).forEach(sector => {
+      sectorMap[sector].sort((a, b) => b.mom - a.mom);
+      sectorMap[sector].forEach((item, idx) => {
+        sectorRanks[item.t] = idx + 1;
+      });
+    });
+
+    /* state 업데이트 (React 배칭 OK) */
+    setStocks(prev => prev.map(d => {
+      const a = allResults[d.t];
+      const rank = sectorRanks[d.t] || d.r[2];
+      if (!a) return { ...d, r: [d.r[0], d.r[1], rank] };
+      return {
+        ...d,
+        e: a.e || d.e,
+        r: [a.r ? a.r[0] : d.r[0], a.r ? a.r[1] : d.r[1], rank],
         v: a.v || d.v,
         _sepaDetail: a.sepaDetail,
         _momDetail: a.momDetail,
@@ -1075,38 +1137,6 @@ export default function Dashboard(){
       const timeStr=new Date().toLocaleString("ko");
       localStorage.setItem('ana_time',timeStr);
       setAnaTime(timeStr);
-    }catch(e){}
-
-    /* ── 등급 전환 감지 ── */
-    try{
-      const prevGrades=JSON.parse(localStorage.getItem('prev_grades')||'{}');
-      const history=JSON.parse(localStorage.getItem('grade_history')||'{}');
-      let transCount=0;
-      setStocks(cur=>{
-        cur.forEach(d=>{
-          const vd=getVerdict(d);
-          const newGrade=vd.verdict;
-          const newPt=vd.totalPt;
-          if(prevGrades[d.t]&&prevGrades[d.t].grade!==newGrade){
-            if(!history[d.t])history[d.t]=[];
-            // 최대 20개 이력 유지
-            if(history[d.t].length>=20)history[d.t]=history[d.t].slice(-19);
-            history[d.t].push({
-              date:new Date().toISOString().slice(0,10),
-              from:{grade:prevGrades[d.t].grade,pt:prevGrades[d.t].pt},
-              to:{grade:newGrade,pt:newPt},
-              price:d.p||0
-            });
-            transCount++;
-          }
-          prevGrades[d.t]={grade:newGrade,pt:newPt};
-        });
-        return cur;
-      });
-      localStorage.setItem('prev_grades',JSON.stringify(prevGrades));
-      localStorage.setItem('grade_history',JSON.stringify(history));
-      setGradeHistory(history);
-      if(transCount>0)log(`🔄 등급 전환 ${transCount}종목 감지됨`,"ok");
     }catch(e){}
 
     const elapsed=((Date.now()-t0)/1000).toFixed(1);
@@ -1608,8 +1638,8 @@ export default function Dashboard(){
                   <div style={{fontWeight:700,fontFamily:"'JetBrains Mono'",color:"#58a6ff"}}>{pivot?fP(pivot,s.k):"-"}</div>
                 </div>
                 <div style={{background:"#0d1117",borderRadius:6,padding:"6px 8px",textAlign:"center"}}>
-                  <div style={{color:"#484f58",fontSize:9}}>피봇근접</div>
-                  <div style={{fontWeight:700,color:proxPct<3?"#3fb950":proxPct<5?"#ffd600":"#8b949e"}}>{proxPct!=null?proxPct+"%":"-"}</div>
+                  <div style={{color:"#484f58",fontSize:9}}>{proxPct<0?'돌파':'피봇근접'}</div>
+                  <div style={{fontWeight:700,color:proxPct<0?"#00e676":proxPct<3?"#3fb950":proxPct<5?"#ffd600":"#8b949e"}}>{proxPct!=null?proxPct+"%":"-"}</div>
                 </div>
                 <div style={{background:"#0d1117",borderRadius:6,padding:"6px 8px",textAlign:"center"}}>
                   <div style={{color:"#484f58",fontSize:9}}>SEPA</div>
@@ -2028,7 +2058,7 @@ export default function Dashboard(){
                       </td>
                       <td style={{padding:"4px 6px",textAlign:"center"}}>
                         <div style={{fontSize:10,fontWeight:700,color:vcpMt(d)==='성숙🔥'?'#ff1744':vcpMt(d)==='성숙'?'#3fb950':vcpMt(d)==='형성중'?'#d29922':'#484f58'}}>{vcpMt(d)}</div>
-                        <div style={{fontSize:9,color:"#484f58"}}>{vcpPx(d)<5?'피봇'+vcpPx(d)+'%':''}</div>
+                        <div style={{fontSize:9,color:vcpPx(d)<0?"#00e676":"#484f58"}}>{vcpPx(d)<0?'돌파'+vcpPx(d)+'%':vcpPx(d)<5?'피봇'+vcpPx(d)+'%':''}</div>
                       </td>
                       <td style={{padding:"4px 6px",textAlign:"center"}}>
                         {vol ? <div>
@@ -2328,7 +2358,7 @@ export default function Dashboard(){
                     {view==="vcp" && <>
                       <td style={{padding:"6px 5px",textAlign:"center",fontSize:isMobile?10:12,color:vcpC(vcpMt(d))}}>{vcpI(vcpMt(d))+" "+vcpMt(d)}</td>
                       <td style={{padding:"6px 5px",textAlign:"center",fontSize:isMobile?10:12,fontFamily:"'JetBrains Mono'"}}>{vcpPv(d)?fP(vcpPv(d),d.k):"-"}</td>
-                      <td style={{padding:"6px 5px",textAlign:"center"}}><Badge v={vcpPx(d)} g={99} r={5}/></td>
+                      <td style={{padding:"6px 5px",textAlign:"center"}}>{vcpPx(d)<0?<span style={{display:"inline-flex",alignItems:"center",justifyContent:"center",minWidth:36,height:24,padding:"0 5px",borderRadius:3,fontSize:14,fontWeight:600,background:"#00e67620",color:"#00e676"}}>{vcpPx(d)}%</span>:<Badge v={vcpPx(d)} g={99} r={5}/>}</td>
                     </>}
                     {view==="cf" && <>
                       <td style={{padding:"6px 5px",textAlign:"center"}}><Badge v={cfS(d)} g={3} r={2}/></td>
