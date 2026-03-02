@@ -1652,8 +1652,8 @@ export default function Dashboard(){
                   <tr onClick={()=>setExp(isE?null:d.t)} style={{borderBottom:"1px solid rgba(33,38,45,.4)",cursor:"pointer",background:fl==="up"?"rgba(63,185,80,.15)":fl==="dn"?"rgba(248,81,73,.15)":"transparent",transition:"background 1.5s"}}>
                     {!isMobile&&<td style={{padding:"6px 5px",color:"#484f58",fontFamily:"'JetBrains Mono'",fontSize:11}}>{i+1}</td>}
                     <td style={isMobile?{padding:"4px 3px",maxWidth:100,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",position:"sticky",left:0,zIndex:1,background:fl==="up"?"#0f1d15":fl==="dn"?"#1d0f0f":"#06080d",borderRight:"1px solid #21262d"}:{padding:"6px 5px",maxWidth:130,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
+                      <span onClick={e=>{e.stopPropagation();toggleWatch(d.t);}} style={{fontSize:isMobile?9:10,marginRight:isMobile?1:2,cursor:"pointer",opacity:watchlist.includes(d.t)?1:0.25,transition:"opacity .2s",userSelect:"none"}} title={watchlist.includes(d.t)?"워치리스트 해제":"워치리스트 등록"}>{watchlist.includes(d.t)?'⭐':'☆'}</span>
                       <span style={{fontSize:10,marginRight:2}}>{d.k?'🇰🇷':'🇺🇸'}</span>
-                      {watchlist.includes(d.t)&&<span style={{fontSize:9,marginRight:1,color:'#ffd43b'}}>⭐</span>}
                       <span onClick={e=>{e.stopPropagation();handleStockClick(d);}} style={{fontWeight:vd.stars>=5?700:500,cursor:"pointer",borderBottom:"1px dashed "+(vd.stars>=5?"#ff1744":"#484f58"),fontSize:isMobile?11:13,color:vd.stars>=5?"#ff1744":undefined}}>{d.n}</span>
                       {isMobile&&<div style={{fontSize:8,color:"#484f58",fontFamily:"'JetBrains Mono'"}}>{d.t}</div>}
                       {!isMobile&&<span style={{fontSize:10,color:"#484f58",marginLeft:3,fontFamily:"'JetBrains Mono'"}}>{d.t}</span>}
