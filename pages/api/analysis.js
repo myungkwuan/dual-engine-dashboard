@@ -141,7 +141,7 @@ function calcMomentum(bars, spyBars) {
   };
 }
 
-/* ===== 🔥 VCP 자동 감지 (v2 — 앵커/피봇/돌파 수정) ===== */
+/* ===== 🔥 VCP 자동 감지 (v5 — lookback3 + rolling peak + 앵커개선) ===== */
 function calcVCP(bars) {
   if (bars.length < 60) return { t1: 0, t2: 0, t3: 0, baseWeeks: 0, pivot: 0, proximity: 99, maturity: "미형성" };
   
@@ -152,14 +152,14 @@ function calcVCP(bars) {
   const n = closes.length;
   const curPrice = closes[n - 1];
   
-  // ─── Step 1: 스윙 포인트 감지 (5일 기준) ───
+  // ─── Step 1: 스윙 포인트 감지 (v4 — 2단계) ───
   const swingHighs = [];
   const swingLows = [];
-  const lookback = 5;
   
-  for (let i = lookback; i < n - lookback; i++) {
+  // lookback=3으로 완화 (강한 상승종목에서도 최근 고점 감지)
+  for (let i = 3; i < n - 3; i++) {
     let isHigh = true, isLow = true;
-    for (let j = 1; j <= lookback; j++) {
+    for (let j = 1; j <= 3; j++) {
       if (highs[i] <= highs[i - j] || highs[i] <= highs[i + j]) isHigh = false;
       if (lows[i] >= lows[i - j] || lows[i] >= lows[i + j]) isLow = false;
     }
@@ -167,33 +167,59 @@ function calcVCP(bars) {
     if (isLow) swingLows.push({ idx: i, price: lows[i] });
   }
   
+  // 폴백: 최근 90일에 스윙하이가 2개 미만이면 10일 window peak 추가
+  if (swingHighs.filter(sh => sh.idx >= n - 90).length < 2) {
+    for (let center = Math.max(5, n - 85); center < n - 5; center += 8) {
+      let peakIdx = center, peakP = highs[center];
+      for (let j = Math.max(0, center - 5); j <= Math.min(n - 1, center + 5); j++) {
+        if (highs[j] > peakP) { peakP = highs[j]; peakIdx = j; }
+      }
+      if (!swingHighs.some(sh => Math.abs(sh.idx - peakIdx) < 5)) {
+        swingHighs.push({ idx: peakIdx, price: peakP });
+      }
+    }
+    swingHighs.sort((a, b) => a.idx - b.idx);
+  }
+  if (swingLows.filter(sl => sl.idx >= n - 90).length < 2) {
+    for (let center = Math.max(5, n - 85); center < n - 5; center += 8) {
+      let valIdx = center, valP = lows[center];
+      for (let j = Math.max(0, center - 5); j <= Math.min(n - 1, center + 5); j++) {
+        if (lows[j] < valP) { valP = lows[j]; valIdx = j; }
+      }
+      if (!swingLows.some(sl => Math.abs(sl.idx - valIdx) < 5)) {
+        swingLows.push({ idx: valIdx, price: valP });
+      }
+    }
+    swingLows.sort((a, b) => a.idx - b.idx);
+  }
+  
   if (swingHighs.length < 1 || swingLows.length < 1) {
     return { t1: 0, t2: 0, t3: 0, baseWeeks: 0, pivot: 0, proximity: 99, maturity: "미형성" };
   }
   
-  // ─── Step 2: 앵커 찾기 (v3 — 최근 고점 우선) ───
-  // 가장 최근 고점부터 역순으로 탐색하여
-  // 이후에 -5% 이상 조정이 있었던 고점을 앵커로 선택
-  // (최근 고점을 우선하므로 상승 추세에서도 올바른 베이스를 잡음)
+  // ─── Step 2: 앵커 찾기 (v5 — 20%초과 스킵) ───
   let anchor = null;
   const sortedByRecent = [...swingHighs].sort((a, b) => b.idx - a.idx);
+  
+  // 방법A: 최근 스윙하이부터 역순, -3% 이상 조정
   for (const sh of sortedByRecent) {
+    if (sh.price < curPrice * 0.50) continue; // 현재가의 50% 미만 스킵
+    if (sh.idx < n - 180) continue; // 180일 이전 스킵
+    if (curPrice > sh.price * 1.20) continue; // ★v5: 현재가가 20%↑ = 이미 지나간 베이스, 스킵
     const lowsAfter = swingLows.filter(sl => sl.idx > sh.idx);
-    const hasCorrection = lowsAfter.some(sl => sl.price < sh.price * 0.95);
-    if (hasCorrection) { anchor = sh; break; }
+    if (lowsAfter.length === 0) continue;
+    const minLow = Math.min(...lowsAfter.map(sl => sl.price));
+    const drawdown = (sh.price - minLow) / sh.price;
+    if (drawdown >= 0.03) { anchor = sh; break; }
   }
-  // 폴백: 최근 90일 내 최고가
+  
+  // 방법B 폴백: 최근 90일 일간 최고가 → 앵커
   if (!anchor) {
-    const recent90 = swingHighs.filter(sh => sh.idx >= n - 90);
-    if (recent90.length > 0) {
-      anchor = recent90.reduce((a, b) => a.price > b.price ? a : b);
-    } else {
-      // 최근 60일 내 최고가, 그래도 없으면 마지막 스윙하이
-      const recent60 = swingHighs.filter(sh => sh.idx >= n - 60);
-      anchor = recent60.length > 0
-        ? recent60.reduce((a, b) => a.price > b.price ? a : b)
-        : swingHighs[swingHighs.length - 1];
+    let maxP = 0, maxI = n - 1;
+    for (let i = Math.max(0, n - 90); i < n; i++) {
+      if (highs[i] > maxP) { maxP = highs[i]; maxI = i; }
     }
+    anchor = { idx: maxI, price: maxP };
   }
   
   // ─── Step 3: 앵커 이후 수축 구간 감지 ───
