@@ -2479,6 +2479,83 @@ export default function Dashboard(){
         </div>}
       </div>}
 
+      {/* ============ AI 추천 ============ */}
+      {tab==="main" && (()=>{
+        const all=filtered.map(d=>({d,vd:getVerdict(d),dm:getDualMomentum(d)}));
+        // 🔥 지금 사세요: 80+ & (거래량 매집 OR VCP 성숙/돌파)
+        const buyNow=all.filter(({vd,d})=>vd.totalPt>=80 && (vd.details.volPt>=9 || ['성숙🔥','성숙','돌파✅'].includes(vcpMt(d))))
+          .sort((a,b)=>b.vd.totalPt-a.vd.totalPt).slice(0,5);
+        // 👀 곧 터질: 65~85 & VCP 형성중/성숙 & 피봇 10% 이내
+        const soonBreak=all.filter(({vd,d})=>vd.totalPt>=60 && vd.totalPt<85 && ['형성중','성숙','성숙🔥'].includes(vcpMt(d)) && Math.abs(vcpPx(d))<=10)
+          .sort((a,b)=>Math.abs(vcpPx(a.d))-Math.abs(vcpPx(b.d))).slice(0,5);
+        // 📈 조용한 강자: SEPA 7+/8 & DM BUY+ & 아직 최강 아님 & 거래량 중립~
+        const silent=all.filter(({vd,d,dm})=>seTt(d)>=7 && dm.signalScore>=7 && vd.totalPt>=55 && vd.totalPt<80 && vd.details.volPt>=4 && vd.details.volPt<=8)
+          .sort((a,b)=>b.vd.totalPt-a.vd.totalPt).slice(0,5);
+        if(buyNow.length===0&&soonBreak.length===0&&silent.length===0)return null;
+        const Card=({icon,title,color,items,getTag,getReason})=>(
+          items.length===0?null:<div style={{flex:1,minWidth:isMobile?'100%':280,background:'linear-gradient(135deg,#0a0a1e,#0d1830)',borderRadius:10,padding:'12px 14px',border:`1px solid ${color}33`}}>
+            <div style={{fontSize:13,fontWeight:800,color,marginBottom:8}}>{icon} {title}</div>
+            {items.map(({d,vd})=>(
+              <div key={d.t} onClick={()=>{setDetailStock(d);setShowDetail(true);}} style={{padding:'6px 8px',marginBottom:4,background:'#161b2288',borderRadius:6,cursor:'pointer',border:'1px solid transparent',transition:'border .2s'}}
+                onMouseEnter={e=>e.currentTarget.style.borderColor=color+'66'} onMouseLeave={e=>e.currentTarget.style.borderColor='transparent'}>
+                <div style={{display:'flex',alignItems:'center',gap:8}}>
+                  <div style={{flex:1,minWidth:0}}>
+                    <div style={{fontSize:12,fontWeight:700,color:vd.stars>=5?'#ff1744':'#e6edf3',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{d.n}</div>
+                    <div style={{fontSize:9,color:'#484f58'}}>{d.s}</div>
+                  </div>
+                  <div style={{fontSize:14,fontWeight:900,color,fontFamily:"'JetBrains Mono'"}}>{vd.totalPt}</div>
+                  <div style={{fontSize:8,padding:'2px 6px',borderRadius:4,background:color+'15',color,fontWeight:700,whiteSpace:'nowrap'}}>{getTag(d,vd)}</div>
+                </div>
+                <div style={{fontSize:9,color:'#8b949e',marginTop:3,lineHeight:1.3}}>{getReason(d,vd)}</div>
+              </div>
+            ))}
+          </div>
+        );
+        return <div style={{maxWidth:1800,margin:'0 auto',padding:'0 20px 12px'}}>
+          <div style={{display:'flex',gap:10,flexWrap:'wrap'}}>
+            <Card icon="🔥" title="지금 사세요" color="#ff1744" items={buyNow}
+              getTag={(d,vd)=>{
+                const vm=vcpMt(d);return vm.includes('성숙')?'VCP성숙':vm.includes('돌파')?'돌파완료':vd.details.volPt>=9?'매집중':'최강';
+              }}
+              getReason={(d,vd)=>{
+                const parts=[];
+                if(seTt(d)>=7) parts.push('추세 강함');
+                const dm=getDualMomentum(d);
+                if(dm.signalScore>=7) parts.push('시장보다 강함');
+                if(vd.details.volPt>=9) parts.push('큰손 매집');
+                const vm=vcpMt(d);
+                if(vm.includes('성숙')) parts.push('터질 준비 완료');
+                else if(vm.includes('돌파')) parts.push('돌파 확인');
+                if(vd.details.mfPt>=8) parts.push('실적 우량');
+                return parts.join(' · ')||'모든 엔진 강세';
+              }}
+            />
+            <Card icon="👀" title="곧 터질 종목" color="#ffd600" items={soonBreak}
+              getTag={(d)=>`피봇 ${vcpPx(d)>0?'':'+'}${Math.abs(vcpPx(d))}%`}
+              getReason={(d,vd)=>{
+                const px=vcpPx(d);const vm=vcpMt(d);
+                const base=vm==='성숙🔥'?'거래량까지 줄어들며 에너지 압축 중':vm==='성숙'?'변동성 수축 완료, 돌파 대기':
+                  `변동성 수축 진행 중 (T1:${d.v[0]}%→T2:${d.v[1]}%)`;
+                return `${base} · 피봇까지 ${Math.abs(px)}%`;
+              }}
+            />
+            <Card icon="📈" title="조용한 강자" color="#00e676" items={silent}
+              getTag={(d,vd)=>{
+                const dm=getDualMomentum(d);return dm.signal==='STRONG BUY'?'STRONG BUY':seTt(d)===8?'SEPA 8/8':'추세+모멘텀';
+              }}
+              getReason={(d,vd)=>{
+                const dm=getDualMomentum(d);
+                const parts=[];
+                parts.push(`SEPA ${seTt(d)}/8 상승추세`);
+                if(dm.r3m>0) parts.push(`3M +${dm.r3m}% 수익`);
+                parts.push('아직 주목 안 받는 중');
+                return parts.join(' · ');
+              }}
+            />
+          </div>
+        </div>;
+      })()}
+
       {/* ============ Table ============ */}
       {(tab==="main"||tab==="filter") && <div className="tbl-wrap" style={{maxWidth:1800,margin:"0 auto",padding:"0 20px 30px",overflowX:"auto"}}>
         <table style={{borderCollapse:"collapse",fontSize:isMobile?11:14,width:isMobile?"max-content":"100%"}}>
