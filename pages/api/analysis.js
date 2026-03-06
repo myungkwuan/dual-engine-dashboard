@@ -157,9 +157,9 @@ function calcVCP(bars) {
   const swingLows = [];
   
   // lookback=3으로 완화 (강한 상승종목에서도 최근 고점 감지)
-  for (let i = 3; i < n - 3; i++) {
+  for (let i = 2; i < n - 2; i++) {
     let isHigh = true, isLow = true;
-    for (let j = 1; j <= 3; j++) {
+    for (let j = 1; j <= 2; j++) {
       if (highs[i] <= highs[i - j] || highs[i] <= highs[i + j]) isHigh = false;
       if (lows[i] >= lows[i - j] || lows[i] >= lows[i + j]) isLow = false;
     }
@@ -224,8 +224,8 @@ function calcVCP(bars) {
   
   // ─── Step 3: 앵커 이후 수축 구간 감지 ───
   const lowsAfterAnchor = swingLows.filter(sl => sl.idx > anchor.idx).sort((a, b) => a.idx - b.idx);
-  // 앵커보다 높은 고점은 제외 (베이스 안의 반등만 추적)
-  const highsAfterAnchor = swingHighs.filter(sh => sh.idx > anchor.idx && sh.price <= anchor.price * 1.02).sort((a, b) => a.idx - b.idx);
+  // 앵커보다 약간 높은 고점도 허용 (5% 이내 반등 = 베이스 안 반등으로 인정)
+  const highsAfterAnchor = swingHighs.filter(sh => sh.idx > anchor.idx && sh.price <= anchor.price * 1.05).sort((a, b) => a.idx - b.idx);
   
   const contractions = [];
   
@@ -286,7 +286,7 @@ function calcVCP(bars) {
   
   if (alreadyBroken) {
     // 이미 피봇을 돌파한 종목
-    if (contractions.length >= 2 && t1 > t2) maturity = "돌파✅";
+    if (contractions.length >= 2 && t1 > t2 && (t3 === 0 || t2 > t3)) maturity = "돌파✅"; // T3 역전 없어야 ✅
     else if (contractions.length >= 1) maturity = "돌파";
   } else if (contractions.length >= 3 && t1 > t2 && t2 > t3 && t3 > 0 && t3 <= 15 && baseWeeks >= 3) {
     maturity = volDrying ? "성숙🔥" : "성숙";
@@ -296,8 +296,10 @@ function calcVCP(bars) {
     } else {
       maturity = "형성중";
     }
-  } else if (contractions.length >= 1 && t1 > 0 && t1 <= 35 && baseWeeks >= 2) {
-    maturity = "형성중";
+  } else if (contractions.length >= 2 && t1 > t2 && t2 > 0) {
+    maturity = "형성중";   // 2단계 수축 시작, 기간 짧아도 형성중
+  } else if (contractions.length >= 1 && t1 > 0 && t1 <= 40 && baseWeeks >= 1) {
+    maturity = "형성중";   // 1단계 수축, 1주 이상이면 형성중 (이전: t1<=35, 2주)
   }
   
   // 추가 필터: 수축률이 너무 크면 VCP가 아님 (폭락)

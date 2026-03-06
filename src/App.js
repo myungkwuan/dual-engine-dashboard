@@ -87,7 +87,7 @@ function getVerdict(d) {
   const sv = seV(d), st = seTt(d);
   const sepaLevel = sv === "매수준비" ? '강력매수' : st >= 7 ? '매수' : st >= 6 ? '관심' : st >= 5 ? '대기' : '회피';
   const vm = vcpMt(d);
-  const vcpScore = vm === "성숙🔥" ? 10 : vm.includes("성숙") ? 8 : vm === "형성중" ? 5 : 2;
+  const vcpScore = vm === "성숙🔥" ? 10 : vm === "돌파✅" ? 9 : vm.includes("성숙") ? 8 : vm === "돌파" ? 7 : vm === "형성중" ? 5 : 2;
   const hasFCF = d.b || (cfM(d) >= 2 && cfL(d) >= 2);
   const dm = getDualMomentum(d);
 
@@ -123,35 +123,66 @@ function getVerdict(d) {
 
   /* ③ VCP (15점) - 매수 타이밍이 왔나? */
   const vcpPt = vm === "성숙🔥" ? 15      // 변동성+거래량 동시수축 → 만점
+    : vm === "돌파✅" ? 10                  // 수축 후 돌파 완료 (좋은 돌파)
     : vm.includes("성숙") ? 11             // 성숙이지만 거래량 수축 미확인
-    : vm === "형성중" ? 5                  // 수축 진행중 → 아직 매수근거 약함
+    : vm === "돌파" ? 7                     // 돌파했으나 수축 불명확
+    : vm === "형성중" ? 3                   // 수축 진행중 → 아직 매수근거 약함
     : 1;                                    // 미형성 → 거의 0
 
-  /* ④ MF 펀더멘탈 (10점) - 회사 실적이 좋은가? */
-  const mfPt = mfScore >= 85 ? 10
-    : mfScore >= 75 ? 8
-    : mfScore >= 65 ? 6
-    : mfScore >= 55 ? 4
-    : mfScore >= 40 ? 2
-    : 0;
-
-  /* ⑤ CF 현금흐름 (5점) - 돈을 실제로 벌고 있나? */
-  const cfTotal = cfS(d) + cfM(d) + cfL(d);
-  const cfPt = hasFCF && cfTotal >= 8 ? 5
-    : hasFCF && cfTotal >= 5 ? 3
-    : hasFCF ? 2
-    : 0;
-
-  /* ⑥ 거래량 (12점) - 큰손이 사고 있나 팔고 있나? */
+  /* ④ MF 펀더멘탈 (10점) - 회사 실적이 좋은가?
+     ETF는 펀더멘탈 없음 → 자금유입강도로 대체 (거래량비율 기반) */
+  const isETF = d.s === 'ETF';
   const volData = d._volData;
+  let mfPt;
+  if (isETF && volData) {
+    // ETF: 자금유입강도 (5일평균거래량 ÷ 50일평균거래량)
+    const vr = volData.volRatio || 1;
+    mfPt = vr >= 2.0 ? 10   // 자금유입 폭발
+      : vr >= 1.5 ? 8       // 강한 유입
+      : vr >= 1.2 ? 6       // 소폭 유입
+      : vr >= 0.8 ? 4       // 보통
+      : vr >= 0.5 ? 2       // 소폭 유출
+      : 0;                   // 자금이탈
+  } else {
+    mfPt = mfScore >= 85 ? 10
+      : mfScore >= 75 ? 8
+      : mfScore >= 65 ? 6
+      : mfScore >= 55 ? 4
+      : mfScore >= 40 ? 2
+      : 0;
+  }
+
+  /* ⑤ CF 현금흐름 (5점) - 돈을 실제로 벌고 있나?
+     ETF는 현금흐름 없음 → 추세안정성으로 대체 (상승+안정=높은점수) */
+  let cfPt;
+  if (isETF && volData) {
+    // ETF: 추세안정성 (가격방향 + 52주위치 조합)
+    const pChg = volData.priceChg5d || 0;
+    const pos = volData.positionPct || 50;
+    if (pChg > 2 && pos >= 40 && pos <= 85) cfPt = 5;       // 안정 상승 (중간대에서 꾸준히 오름)
+    else if (pChg > 0 && pos >= 30) cfPt = 4;                 // 소폭 상승
+    else if (pChg >= -1 && pos >= 30 && pos <= 80) cfPt = 3;  // 보합 안정
+    else if (pChg >= -3) cfPt = 2;                             // 소폭 하락
+    else cfPt = 0;                                              // 급락 불안정
+  } else {
+    const cfTotal = cfS(d) + cfM(d) + cfL(d);
+    cfPt = hasFCF && cfTotal >= 8 ? 5
+      : hasFCF && cfTotal >= 5 ? 3
+      : hasFCF ? 2
+      : 0;
+  }
+
+  /* ⑥ 거래량 (12점) - 큰손이 사고 있나 팔고 있나?
+     범위: -5 ~ +12 (매도신호는 반드시 감점!)
+     고점에서 거래량 터지며 하락 = 세력이탈 → 무조건 마이너스 */
   let volPt = 6; // 기본 중립 6점
   if (volData) {
-    if (volData.signalType === 'buy' && volData.surgeDay) volPt = 12;       // 바닥매집/돌파시도 + 급등일
-    else if (volData.signalType === 'buy') volPt = 9;                        // 매집증가/반등시작
-    else if (volData.volDryup && vm.includes("성숙")) volPt = 10;           // VCP 성숙 + 거래량 수축
-    else if (volData.signalType === 'neutral') volPt = 6;                    // 중립
-    else if (volData.signalType === 'caution') volPt = 3;                    // 변곡점/추세약화
-    else if (volData.signalType === 'sell') volPt = volData.surgeDay ? 0 : 2; // 고점이탈/급락주의
+    if (volData.signalType === 'sell' && volData.surgeDay) volPt = -5;     // 고점이탈+급등일 = 세력탈출! 최악
+    else if (volData.signalType === 'sell') volPt = -3;                     // 분배경고/급락주의
+    else if (volData.signalType === 'caution') volPt = 2;                   // 변곡점/추세약화
+    else if (volData.signalType === 'neutral') volPt = 6;                   // 중립
+    else if (volData.volDryup && vm.includes("성숙")) volPt = 10;          // VCP 성숙 + 거래량 수축
+    else if (volData.signalType === 'buy') volPt = volData.surgeDay ? 12 : 9; // 매집/돌파
   }
 
   /* ⑦ 교차검증 (±5점) - 엔진들이 같은 말을 하는가? */
@@ -159,7 +190,7 @@ function getVerdict(d) {
   const strongCount = [
     sepaPt >= 22,           // SEPA 강함 (7/8+)
     dmPt >= 14,             // DM 양호 (BUY+)
-    vcpPt >= 11,            // VCP 성숙
+    vcpPt >= 10,            // VCP 성숙 또는 돌파
     mfPt >= 6,              // MF 65+
   ].filter(Boolean).length;
 
@@ -168,6 +199,7 @@ function getVerdict(d) {
     dmPt <= 3,              // DM 약함 (SELL~)
     vcpPt <= 1,             // VCP 미형성
     mfPt <= 2,              // MF 55 미만
+    volPt <= 0,             // 거래량 매도신호 ← 추가!
   ].filter(Boolean).length;
 
   if (strongCount >= 4) crossPt = 5;        // 올그린 → +5
@@ -177,6 +209,10 @@ function getVerdict(d) {
   if (weakCount >= 3) crossPt -= 5;         // 3개+ 약함 → -5
   else if (weakCount >= 2) crossPt -= 3;    // 2개 약함 → -3
   else if (weakCount >= 1 && strongCount <= 1) crossPt -= 1; // 약점 있고 강점도 부족
+
+  // 당일 급락 + 거래량 매도 = 세력이탈 추가 감점
+  const todayDrop = d.c <= -5;             // 당일 -5% 이하 급락
+  if (todayDrop && volPt <= 0) crossPt -= 3; // 급락+매도거래량 동시 → -3 추가
 
   const totalPt = Math.max(0, Math.min(sepaPt + dmPt + vcpPt + mfPt + cfPt + volPt + crossPt, 100));
 
@@ -202,8 +238,8 @@ function genAnalysis(d) {
   const good = [], bad = [];
   if (sepaPt >= 22) good.push('추세↑'); else if (sepaPt <= 9) bad.push('추세↓');
   if (dmPt >= 14) good.push('모멘텀↑'); else if (dmPt <= 3) bad.push('모멘텀↓');
-  if (vcpPt >= 11) good.push('타이밍↑'); else if (vcpPt <= 1) bad.push('패턴없음');
-  if (volPt >= 9) good.push('매집↑'); else if (volPt <= 3) bad.push('매도압력');
+  if (vcpPt >= 10) good.push('타이밍↑'); else if (vcpPt <= 1) bad.push('패턴없음');
+  if (volPt >= 9) good.push('매집↑'); else if (volPt <= 0) bad.push('세력이탈!'); else if (volPt <= 3) bad.push('매도압력');
   if (mfPt >= 6) good.push('실적↑'); else if (mfPt <= 2) bad.push('실적↓');
 
   let summary = '';
@@ -232,6 +268,8 @@ function genAnalysis(d) {
 
   /* ── VCP 타이밍 ── */
   if (vm === "성숙🔥") lines.push(`⏰ 타이밍: 변동성+거래량 동시 수축 완료! 곧 터질 준비. 피봇 돌파 시 즉시 매수.`);
+  else if (vm === "돌파✅") lines.push(`🚀 타이밍: 수축 완료 후 피봇 돌파! 건강한 돌파. 눌림목에서 매수 기회.`);
+  else if (vm === "돌파") lines.push(`🚀 타이밍: 피봇을 넘었으나 사전 수축이 불명확. 돌파 강도 확인 필요.`);
   else if (vm.includes("성숙")) lines.push(`⏰ 타이밍: 패턴 거의 완성. 피봇가 근처에서 돌파를 기다리는 중.`);
   else if (vm === "형성중") lines.push(`⏳ 타이밍: 패턴 만들어가는 중. 아직 좀 더 기다려야 함.`);
   else lines.push(`❌ 타이밍: 뚜렷한 매수 패턴 없음. 패턴이 생길 때까지 대기.`);
@@ -254,12 +292,20 @@ function genAnalysis(d) {
     }
   }
 
-  /* ── 실적 (간략) ── */
-  if (mfPt >= 8) lines.push(`✅ 실적: 우량! 매출·이익 성장 + 재무건전성 양호.`);
-  else if (mfPt >= 6) lines.push(`✅ 실적: 양호. 대체로 괜찮지만 일부 개선 여지.`);
-  else if (mfPt >= 4) lines.push(`⚠️ 실적: 보통. 펀더멘탈만으로는 확신 어려움.`);
-  else if (mfPt >= 1) lines.push(`⚠️ 실적: 약함. 실적 뒷받침 부족.`);
-
+  /* ── 실적/자금유입 (간략) ── */
+  const isETF = d.s === 'ETF';
+  if (isETF) {
+    if (mfPt >= 8) lines.push(`💰 자금유입: 거래량 폭발! 기관자금 대량 유입 중.`);
+    else if (mfPt >= 6) lines.push(`💰 자금유입: 거래량 증가. 자금 유입 확인.`);
+    else if (mfPt >= 4) lines.push(`💰 자금유입: 보통 수준. 특이 사항 없음.`);
+    else if (mfPt >= 1) lines.push(`📉 자금유출: 거래량 감소. 자금 빠져나가는 중.`);
+    else lines.push(`🚨 자금이탈: 거래량 급감. 관심도 급락.`);
+  } else {
+    if (mfPt >= 8) lines.push(`✅ 실적: 우량! 매출·이익 성장 + 재무건전성 양호.`);
+    else if (mfPt >= 6) lines.push(`✅ 실적: 양호. 대체로 괜찮지만 일부 개선 여지.`);
+    else if (mfPt >= 4) lines.push(`⚠️ 실적: 보통. 펀더멘탈만으로는 확신 어려움.`);
+    else if (mfPt >= 1) lines.push(`⚠️ 실적: 약함. 실적 뒷받침 부족.`);
+  }
   /* ── 최종 결론 ── */
   if (v.stars >= 5) lines.push(`\n🔥 결론: 지금 사세요! ${d.q[5]||3}% 비중, 진입가 ${fP(d.q[0]||d.p, d.k)} 부근. 손절 ${fP(d.q[1]||(d.p*0.93), d.k)} (-7%)`);
   else if (v.stars >= 4) lines.push(`\n💡 결론: 소량 먼저 사고, 돌파 확인되면 추가매수.`);
@@ -336,7 +382,7 @@ function StockDetailModal({ stock, onClose, isWatched, onToggleWatch, gradeHisto
   const radarData = [
     { label: 'MF', value: Math.min(stock.f || 0, 100), max: 100 },
     { label: 'SEPA', value: seTt(stock) * 12.5, max: 100 },
-    { label: 'VCP', value: vcpMt(stock).includes("성숙") ? 80 : vcpMt(stock) === "형성중" ? 50 : 20, max: 100 },
+    { label: 'VCP', value: vcpMt(stock).includes("성숙") ? 80 : vcpMt(stock).includes("돌파") ? 70 : vcpMt(stock) === "형성중" ? 50 : 20, max: 100 },
     { label: 'RS', value: dm.rsScore, max: 100 },
     { label: 'CF', value: (cfM(stock)+cfL(stock))*16.6, max: 100 },
     { label: 'DM', value: dm.signalScore * 10, max: 100 },
@@ -350,7 +396,27 @@ function StockDetailModal({ stock, onClose, isWatched, onToggleWatch, gradeHisto
   // ── 엔진별 해석 생성 ──
   const mfScore = stock.f || 0;
   const mfGrade = verdict.details.mfGrade;
-  const mfInterp = mfScore >= 80
+  const isETF = stock.s === 'ETF';
+  const volD = stock._volData;
+  const etfVR = volD ? volD.volRatio : 1;
+
+  const mfInterp = isETF
+    ? (etfVR >= 2.0
+      ? { signal: '자금유입 폭발', color: '#00ff88', icon: '🟢',
+          desc: `거래량비율 ${etfVR}x로 평소의 2배 이상! 기관·펀드 자금이 대량 유입되는 중. ETF로의 강한 자금쏠림 확인.`,
+          action: '✅ 자금 유입 최강! 추세 추종 매수 적극 권장' }
+      : etfVR >= 1.5
+      ? { signal: '강한 자금유입', color: '#3fb950', icon: '🔵',
+          desc: `거래량비율 ${etfVR}x로 평소 대비 50%+ 증가. 시장 관심 집중되고 있으며 기관 매수세 유입 신호.`,
+          action: '🔵 자금 유입 확인. 추세와 함께 매수 가능' }
+      : etfVR >= 0.8
+      ? { signal: '자금흐름 보통', color: '#d29922', icon: '🟡',
+          desc: `거래량비율 ${etfVR}x로 평소 수준. 특별한 자금 유입/유출 없이 시장과 동행.`,
+          action: '🟡 자금 중립. 다른 엔진 신호에 의존' }
+      : { signal: '자금유출 경고', color: '#f85149', icon: '🔴',
+          desc: `거래량비율 ${etfVR}x로 평소의 절반 수준. 투자자 관심 급감, 자금 이탈 중.`,
+          action: '⛔ 자금 유출 중. 매수 금지 구간' })
+    : mfScore >= 80
     ? { signal: '강력 매수 신호', color: '#3fb950', icon: '🟢',
         desc: `MF ${mfScore}점(${mfGrade}등급)으로 펀더멘탈 최상위권. EPS 성장률, 매출 증가, ROE 모두 우수한 종목. 기관 매수세가 유입될 가능성이 높고, 실적 서프라이즈 기대감이 있음.`,
         action: '✅ 펀더멘탈 기반 중장기 매수 적합' }
@@ -407,6 +473,14 @@ function StockDetailModal({ stock, onClose, isWatched, onToggleWatch, gradeHisto
     ? { signal: 'VCP 패턴 성숙 — 브레이크아웃 임박', color: '#00ff88', icon: '🟢',
         desc: `변동성 수축 완료! T1→T2→T3 수축률(${vcpT1}%→${vcpT2}%→${vcpT3||'N/A'}%)이 감소하며 에너지 응축. 베이스 ${stock.v[3]}주 형성 후 피봇 ${fP(vcpPv(stock),stock.k)} 근접(${vcpPx(stock)}%). 거래량 감소와 함께 가격 수렴 → 강한 돌파 가능성.`,
         action: '✅ 피봇가 돌파+거래량 급증 시 즉시 매수! 최적 타이밍' }
+    : vcpMaturity === '돌파✅'
+    ? { signal: 'VCP 수축 후 돌파 완료!', color: '#3fb950', icon: '🟢',
+        desc: `변동성 수축(${vcpT1}%→${vcpT2}%) 완료 후 피봇 ${fP(vcpPv(stock),stock.k)}을 돌파! 건강한 돌파 패턴. 추세 지속 가능성 높음.`,
+        action: '✅ 돌파 확인! 눌림목 매수 또는 추가매수 구간' }
+    : vcpMaturity === '돌파'
+    ? { signal: '피봇 돌파 (수축 불명확)', color: '#58a6ff', icon: '🔵',
+        desc: `피봇 ${fP(vcpPv(stock),stock.k)}을 넘어섰으나 사전 수축 패턴이 교과서적이지 않음. 돌파 강도와 거래량을 확인해야 함.`,
+        action: '🔵 돌파 후 눌림목에서 진입 검토. 거래량 동반 확인 필수' }
     : vcpMaturity === '형성중'
     ? { signal: 'VCP 패턴 형성 중', color: '#d29922', icon: '🟡',
         desc: `변동성 수축이 진행 중이나 아직 완성되지 않음. 수축률 T1:${vcpT1}%→T2:${vcpT2}%${vcpT3?`→T3:${vcpT3}%`:''}. 추가 수축이 필요하며, 베이스 ${stock.v[3]}주 진행 중.`,
@@ -418,7 +492,25 @@ function StockDetailModal({ stock, onClose, isWatched, onToggleWatch, gradeHisto
   const hasFCF = verdict.details.hasFCF;
   const cfShort=cfS(stock), cfMid=cfM(stock), cfLong=cfL(stock);
   const cfTotal = cfShort+cfMid+cfLong;
-  const cfInterp = hasFCF && cfTotal >= 7
+  const etfPChg = volD ? volD.priceChg5d : 0;
+  const etfPos = volD ? volD.positionPct : 50;
+  const cfInterp = isETF
+    ? (etfPChg > 2 && etfPos >= 40
+      ? { signal: '안정적 상승추세', color: '#3fb950', icon: '🟢',
+          desc: `5일 가격변화 +${etfPChg}%, 52주 위치 ${etfPos}%. 중간대에서 꾸준히 상승중. 변동성 낮고 방향성 확실.`,
+          action: '✅ 안정적 상승. 추세 추종 매수 적합' }
+      : etfPChg > 0
+      ? { signal: '소폭 상승', color: '#58a6ff', icon: '🔵',
+          desc: `5일 가격변화 +${etfPChg}%, 52주 위치 ${etfPos}%. 소폭 상승세이나 추세 강도는 보통.`,
+          action: '🔵 방향 긍정적. 추가 확인 후 매수' }
+      : etfPChg >= -2
+      ? { signal: '보합/소폭 조정', color: '#d29922', icon: '🟡',
+          desc: `5일 가격변화 ${etfPChg}%, 52주 위치 ${etfPos}%. 큰 방향성 없이 횡보 또는 소폭 조정.`,
+          action: '🟡 방향 불확실. 관망' }
+      : { signal: '하락 불안정', color: '#f85149', icon: '🔴',
+          desc: `5일 가격변화 ${etfPChg}%, 52주 위치 ${etfPos}%. 하락 추세 진입 또는 급락 구간.`,
+          action: '⛔ 불안정. 매수 금지' })
+    : hasFCF && cfTotal >= 7
     ? { signal: '현금흐름 매우 우수', color: '#3fb950', icon: '🟢',
         desc: 'FCF 양수이며 단기·중기·장기 현금흐름이 모두 양호. 기업이 투자와 주주환원을 동시에 할 수 있는 재무 여력 확보. 실적 안정성이 높아 하방 리스크가 제한적.',
         action: '✅ 재무 건전성 확인. 장기 보유에 적합한 체질' }
@@ -520,21 +612,40 @@ function StockDetailModal({ stock, onClose, isWatched, onToggleWatch, gradeHisto
           {/* 4엔진 분석 그리드 */}
           <div className="engine-grid" style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'12px',marginBottom:'16px'}}>
 
-            {/* 엔진1: MF 레이더 */}
+            {/* 엔진1: MF 레이더 / ETF 자금유입 */}
             <div style={{background:'#080818',borderRadius:'10px',padding:'14px'}}>
-              <div style={{fontSize:'12px',fontWeight:700,color:'#4dabf7',marginBottom:'10px'}}>◈ 엔진1: MF 멀티팩터 <span style={{fontSize:'9px',fontWeight:400,color:'#8b949e'}}>— 회사 실적이 좋은가?</span></div>
-              {stock.f ? (<>
-                <svg width="100%" viewBox="0 0 160 160" style={{maxWidth:'140px',margin:'0 auto',display:'block'}}>
-                  {[0.25,0.5,0.75,1].map((fc,i)=>(<polygon key={i} points={radarData.map((_,j)=>{const a=(Math.PI*2*j)/6-Math.PI/2;return`${80+55*fc*Math.cos(a)},${80+55*fc*Math.sin(a)}`;}).join(' ')} fill="none" stroke="#222" strokeWidth="0.5"/>))}
-                  {radarData.map((_,i)=>{const a=(Math.PI*2*i)/6-Math.PI/2;return<line key={i} x1="80" y1="80" x2={80+55*Math.cos(a)} y2={80+55*Math.sin(a)} stroke="#222" strokeWidth="0.5"/>;})}
-                  <polygon points={radarData.map((dd,i)=>{const a=(Math.PI*2*i)/6-Math.PI/2;const val=(dd.value/dd.max)*55;return`${80+val*Math.cos(a)},${80+val*Math.sin(a)}`;}).join(' ')} fill="rgba(77,171,247,0.2)" stroke="#4dabf7" strokeWidth="2"/>
-                  {radarData.map((dd,i)=>{const a=(Math.PI*2*i)/6-Math.PI/2;return(<text key={i} x={80+70*Math.cos(a)} y={80+70*Math.sin(a)} fill="#888" fontSize="8" textAnchor="middle" dominantBaseline="middle">{dd.label}</text>);})}
-                </svg>
-                <div style={{marginTop:'6px',textAlign:'center',padding:'6px',background:'#0a1628',borderRadius:'6px'}}>
-                  <span style={{fontSize:'20px',fontWeight:900,color:'#4dabf7'}}>{stock.f}점</span>
-                  <span style={{fontSize:'12px',color:'#4dabf799',marginLeft:'6px'}}>({verdict.details.mfGrade}등급)</span>
+              {stock.s==='ETF' ? (<>
+                <div style={{fontSize:'12px',fontWeight:700,color:'#4dabf7',marginBottom:'10px'}}>◈ 엔진1: 자금유입강도 <span style={{fontSize:'9px',fontWeight:400,color:'#8b949e'}}>— 기관이 사들이고 있나?</span></div>
+                <div style={{textAlign:'center',padding:'14px 0'}}>
+                  <div style={{fontSize:'32px'}}>{etfVR>=2?'🔥':etfVR>=1.5?'💰':etfVR>=0.8?'➡️':'📉'}</div>
+                  <div style={{fontSize:'22px',fontWeight:900,color:etfVR>=1.5?'#3fb950':etfVR>=0.8?'#ffd600':'#f85149',marginTop:'6px'}}>{etfVR}x</div>
+                  <div style={{fontSize:'10px',color:'#8b949e',marginTop:'2px'}}>5일 / 50일 거래량 비율</div>
                 </div>
-              </>) : (<div style={{textAlign:'center',padding:'30px 0',color:'#444',fontSize:'12px'}}>데이터 없음</div>)}
+                <div style={{display:'flex',gap:'8px',justifyContent:'center',margin:'10px 0'}}>
+                  <div style={{textAlign:'center',padding:'6px 10px',background:'#0a1628',borderRadius:'6px',flex:1}}>
+                    <div style={{fontSize:'9px',color:'#666'}}>50일 평균</div>
+                    <div style={{fontSize:'12px',fontWeight:700,color:'#e6edf3'}}>{volD?(volD.avgVol50/1000).toFixed(0)+'K':'N/A'}</div>
+                  </div>
+                  <div style={{textAlign:'center',padding:'6px 10px',background:'#0a1628',borderRadius:'6px',flex:1}}>
+                    <div style={{fontSize:'9px',color:'#666'}}>최근 5일</div>
+                    <div style={{fontSize:'12px',fontWeight:700,color:etfVR>=1.2?'#3fb950':'#e6edf3'}}>{volD?(volD.avgVol5/1000).toFixed(0)+'K':'N/A'}</div>
+                  </div>
+                </div>
+              </>) : (<>
+                <div style={{fontSize:'12px',fontWeight:700,color:'#4dabf7',marginBottom:'10px'}}>◈ 엔진1: MF 멀티팩터 <span style={{fontSize:'9px',fontWeight:400,color:'#8b949e'}}>— 회사 실적이 좋은가?</span></div>
+                {stock.f ? (<>
+                  <svg width="100%" viewBox="0 0 160 160" style={{maxWidth:'140px',margin:'0 auto',display:'block'}}>
+                    {[0.25,0.5,0.75,1].map((fc,i)=>(<polygon key={i} points={radarData.map((_,j)=>{const a=(Math.PI*2*j)/6-Math.PI/2;return`${80+55*fc*Math.cos(a)},${80+55*fc*Math.sin(a)}`;}).join(' ')} fill="none" stroke="#222" strokeWidth="0.5"/>))}
+                    {radarData.map((_,i)=>{const a=(Math.PI*2*i)/6-Math.PI/2;return<line key={i} x1="80" y1="80" x2={80+55*Math.cos(a)} y2={80+55*Math.sin(a)} stroke="#222" strokeWidth="0.5"/>;})}
+                    <polygon points={radarData.map((dd,i)=>{const a=(Math.PI*2*i)/6-Math.PI/2;const val=(dd.value/dd.max)*55;return`${80+val*Math.cos(a)},${80+val*Math.sin(a)}`;}).join(' ')} fill="rgba(77,171,247,0.2)" stroke="#4dabf7" strokeWidth="2"/>
+                    {radarData.map((dd,i)=>{const a=(Math.PI*2*i)/6-Math.PI/2;return(<text key={i} x={80+70*Math.cos(a)} y={80+70*Math.sin(a)} fill="#888" fontSize="8" textAnchor="middle" dominantBaseline="middle">{dd.label}</text>);})}
+                  </svg>
+                  <div style={{marginTop:'6px',textAlign:'center',padding:'6px',background:'#0a1628',borderRadius:'6px'}}>
+                    <span style={{fontSize:'20px',fontWeight:900,color:'#4dabf7'}}>{stock.f}점</span>
+                    <span style={{fontSize:'12px',color:'#4dabf799',marginLeft:'6px'}}>({verdict.details.mfGrade}등급)</span>
+                  </div>
+                </>) : (<div style={{textAlign:'center',padding:'30px 0',color:'#444',fontSize:'12px'}}>데이터 없음</div>)}
+              </>)}
               <InterpBox interp={mfInterp}/>
             </div>
 
@@ -587,13 +698,13 @@ function StockDetailModal({ stock, onClose, isWatched, onToggleWatch, gradeHisto
               <div style={{fontSize:'12px',fontWeight:700,color:'#ffd43b',marginBottom:'10px'}}>◈ 엔진3: VCP 변동성수축 <span style={{fontSize:'9px',fontWeight:400,color:'#8b949e'}}>— 매수 타이밍이 왔나?</span> {stock._vcpDetail?<span style={{fontSize:'9px',color:'#3fb950',fontWeight:400}}>🔄 실시간 감지</span>:<span style={{fontSize:'9px',color:'#484f58',fontWeight:400}}>📋 고정값</span>}</div>
               <div style={{textAlign:'center',padding:'10px 0'}}>
                 <div style={{fontSize:'32px',fontWeight:900,color:vcpMt(stock).includes("성숙")?'#00ff88':vcpMt(stock)==="형성중"?'#ffd43b':'#ff6b6b'}}>
-                  {vcpMt(stock).includes("성숙")?'✅':vcpMt(stock)==="형성중"?'⏳':'❌'}
+                  {vcpMt(stock).includes("성숙")?'✅':vcpMt(stock).includes("돌파")?'🚀':vcpMt(stock)==="형성중"?'⏳':'❌'}
                 </div>
                 <div style={{fontSize:'14px',fontWeight:700,color:vcpMt(stock).includes("성숙")?'#00ff88':vcpMt(stock)==="형성중"?'#ffd43b':'#ff6b6b',marginTop:'4px'}}>
                   {vcpMt(stock)} ({verdict.details.vcpScore}/10)
                 </div>
                 <div style={{margin:'8px auto',width:'80%',height:'6px',background:'#1a1a2e',borderRadius:'3px',overflow:'hidden'}}>
-                  <div style={{width:`${(verdict.details.vcpScore/10)*100}%`,height:'100%',background:vcpMt(stock).includes("성숙")?'#00ff88':vcpMt(stock)==="형성중"?'#ffd43b':'#ff6b6b',borderRadius:'3px'}}/>
+                  <div style={{width:`${(verdict.details.vcpScore/10)*100}%`,height:'100%',background:vcpMt(stock).includes("성숙")?'#00ff88':vcpMt(stock).includes("돌파")?'#3fb950':vcpMt(stock)==="형성중"?'#ffd43b':'#ff6b6b',borderRadius:'3px'}}/>
                 </div>
                 <div style={{marginTop:'8px',display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:'4px'}}>
                   {[['T1',stock.v[0]],['T2',stock.v[1]],['T3',stock.v[2]]].map(([l,v])=>(
@@ -622,32 +733,51 @@ function StockDetailModal({ stock, onClose, isWatched, onToggleWatch, gradeHisto
               <InterpBox interp={vcpInterp}/>
             </div>
 
-            {/* 엔진4: CF */}
+            {/* 엔진4: CF / ETF 추세안정성 */}
             <div style={{background:'#080818',borderRadius:'10px',padding:'14px'}}>
-              <div style={{fontSize:'12px',fontWeight:700,color:'#ff922b',marginBottom:'10px'}}>◈ 엔진4: CF 현금흐름 <span style={{fontSize:'9px',fontWeight:400,color:'#8b949e'}}>— 돈을 실제로 벌고 있나?</span></div>
-              <div style={{textAlign:'center',padding:'10px 0'}}>
-                {verdict.details.hasFCF ? (<>
-                  <div style={{fontSize:'32px'}}>✅</div>
-                  <div style={{fontSize:'14px',fontWeight:700,color:'#00ff88',marginTop:'4px'}}>FCF 양수</div>
-                </>) : (<>
-                  <div style={{fontSize:'32px'}}>⚠️</div>
-                  <div style={{fontSize:'14px',fontWeight:700,color:'#ff6b6b',marginTop:'4px'}}>FCF 음수 / 미확인</div>
-                </>)}
-                <div style={{marginTop:'10px',display:'flex',justifyContent:'center',gap:'16px',fontSize:'12px'}}>
-                  <div style={{textAlign:'center'}}>
-                    <div style={{fontSize:'10px',color:'#666'}}>단기</div>
-                    <div style={{fontWeight:700,color:cfClr(cfS(stock))}}>{cfLbl(cfS(stock))}</div>
+              {stock.s==='ETF' ? (<>
+                <div style={{fontSize:'12px',fontWeight:700,color:'#ff922b',marginBottom:'10px'}}>◈ 엔진4: 추세안정성 <span style={{fontSize:'9px',fontWeight:400,color:'#8b949e'}}>— 안정적으로 오르고 있나?</span></div>
+                <div style={{textAlign:'center',padding:'10px 0'}}>
+                  <div style={{fontSize:'32px'}}>{etfPChg>2?'📈':etfPChg>0?'➡️':etfPChg>=-2?'📉':'🔻'}</div>
+                  <div style={{fontSize:'14px',fontWeight:700,color:etfPChg>0?'#3fb950':etfPChg>=-2?'#ffd600':'#f85149',marginTop:'4px'}}>{etfPChg>0?'+':''}{etfPChg}%</div>
+                  <div style={{fontSize:'10px',color:'#8b949e',marginTop:'2px'}}>5일 가격변화</div>
+                </div>
+                <div style={{display:'flex',gap:'8px',justifyContent:'center',margin:'10px 0'}}>
+                  <div style={{textAlign:'center',padding:'6px 10px',background:'#0a1628',borderRadius:'6px',flex:1}}>
+                    <div style={{fontSize:'9px',color:'#666'}}>52주 위치</div>
+                    <div style={{fontSize:'14px',fontWeight:700,color:etfPos>=60?'#3fb950':etfPos>=30?'#ffd600':'#f85149'}}>{etfPos}%</div>
                   </div>
-                  <div style={{textAlign:'center'}}>
-                    <div style={{fontSize:'10px',color:'#666'}}>중기</div>
-                    <div style={{fontWeight:700,color:cfClr(cfM(stock))}}>{cfLbl(cfM(stock))}</div>
-                  </div>
-                  <div style={{textAlign:'center'}}>
-                    <div style={{fontSize:'10px',color:'#666'}}>장기</div>
-                    <div style={{fontWeight:700,color:cfClr(cfL(stock))}}>{cfLbl(cfL(stock))}</div>
+                  <div style={{textAlign:'center',padding:'6px 10px',background:'#0a1628',borderRadius:'6px',flex:1}}>
+                    <div style={{fontSize:'9px',color:'#666'}}>안정성</div>
+                    <div style={{fontSize:'12px',fontWeight:700,color:verdict.details.cfPt>=4?'#3fb950':verdict.details.cfPt>=2?'#ffd600':'#f85149'}}>{verdict.details.cfPt>=4?'안정':verdict.details.cfPt>=2?'보통':'불안'}</div>
                   </div>
                 </div>
-              </div>
+              </>) : (<>
+                <div style={{fontSize:'12px',fontWeight:700,color:'#ff922b',marginBottom:'10px'}}>◈ 엔진4: CF 현금흐름 <span style={{fontSize:'9px',fontWeight:400,color:'#8b949e'}}>— 돈을 실제로 벌고 있나?</span></div>
+                <div style={{textAlign:'center',padding:'10px 0'}}>
+                  {verdict.details.hasFCF ? (<>
+                    <div style={{fontSize:'32px'}}>✅</div>
+                    <div style={{fontSize:'14px',fontWeight:700,color:'#00ff88',marginTop:'4px'}}>FCF 양수</div>
+                  </>) : (<>
+                    <div style={{fontSize:'32px'}}>⚠️</div>
+                    <div style={{fontSize:'14px',fontWeight:700,color:'#ff6b6b',marginTop:'4px'}}>FCF 음수 / 미확인</div>
+                  </>)}
+                  <div style={{marginTop:'10px',display:'flex',justifyContent:'center',gap:'16px',fontSize:'12px'}}>
+                    <div style={{textAlign:'center'}}>
+                      <div style={{fontSize:'10px',color:'#666'}}>단기</div>
+                      <div style={{fontWeight:700,color:cfClr(cfS(stock))}}>{cfLbl(cfS(stock))}</div>
+                    </div>
+                    <div style={{textAlign:'center'}}>
+                      <div style={{fontSize:'10px',color:'#666'}}>중기</div>
+                      <div style={{fontWeight:700,color:cfClr(cfM(stock))}}>{cfLbl(cfM(stock))}</div>
+                    </div>
+                    <div style={{textAlign:'center'}}>
+                      <div style={{fontSize:'10px',color:'#666'}}>장기</div>
+                      <div style={{fontWeight:700,color:cfClr(cfL(stock))}}>{cfLbl(cfL(stock))}</div>
+                    </div>
+                  </div>
+                </div>
+              </>)}
               <InterpBox interp={cfInterp}/>
             </div>
           </div>
@@ -773,6 +903,7 @@ function StockDetailModal({ stock, onClose, isWatched, onToggleWatch, gradeHisto
             {/* 막대그래프 시각화 */}
             {(()=>{
               const {sepaPt,dmPt,vcpPt,mfPt,cfPt,volPt,crossPt}=verdict.details;
+              const isETF = stock.s === 'ETF';
               const bars=[
                 {name:'추세',sub:'SEPA',pt:sepaPt,max:30,color:'#58a6ff',
                   tag:sepaPt>=30?'완벽':sepaPt>=22?'강력':sepaPt>=15?'양호':sepaPt>=9?'약함':'하락',
@@ -783,33 +914,34 @@ function StockDetailModal({ stock, onClose, isWatched, onToggleWatch, gradeHisto
                   tagC:dmPt>=14?'#3fb950':dmPt>=8?'#ffd600':'#f85149',
                   desc:dmPt>=23?'SPY 압도적 초과':dmPt>=19?'시장보다 강함':dmPt>=14?'시장 수준':dmPt>=8?'다소 약함':'시장보다 약함'},
                 {name:'타이밍',sub:'VCP',pt:vcpPt,max:15,color:'#ffd43b',
-                  tag:vcpPt>=15?'지금!':vcpPt>=11?'거의':vcpPt>=5?'기다려':'없음',
-                  tagC:vcpPt>=11?'#3fb950':vcpPt>=5?'#ffd600':'#f85149',
-                  desc:vcpPt>=15?'에너지 압축 완료!':vcpPt>=11?'패턴 거의 완성':vcpPt>=5?'만들어가는 중':'매수패턴 없음'},
-                {name:'실적',sub:'MF',pt:mfPt,max:10,color:'#4dabf7',
-                  tag:mfPt>=8?'우량':mfPt>=6?'양호':mfPt>=4?'보통':'약함',
+                  tag:vcpPt>=15?'지금!':vcpPt>=11?'거의':vcpPt>=10?'돌파!':vcpPt>=7?'돌파':vcpPt>=3?'기다려':'없음',
+                  tagC:vcpPt>=10?'#3fb950':vcpPt>=3?'#ffd600':'#f85149',
+                  desc:vcpPt>=15?'에너지 압축 완료!':vcpPt>=11?'패턴 거의 완성':vcpPt>=10?'수축 후 돌파 성공':vcpPt>=7?'피봇 돌파':vcpPt>=3?'만들어가는 중':'매수패턴 없음'},
+                {name:isETF?'자금유입':'실적',sub:isETF?'VOL→MF':'MF',pt:mfPt,max:10,color:'#4dabf7',
+                  tag:isETF?(mfPt>=8?'폭발':mfPt>=6?'유입':mfPt>=4?'보통':'유출'):(mfPt>=8?'우량':mfPt>=6?'양호':mfPt>=4?'보통':'약함'),
                   tagC:mfPt>=6?'#3fb950':mfPt>=4?'#ffd600':'#f85149',
-                  desc:mfPt>=8?'매출·이익 성장':mfPt>=6?'대체로 괜찮음':mfPt>=4?'평균 수준':'실적 부족'},
-                {name:'현금',sub:'CF',pt:cfPt,max:5,color:'#ff922b',
-                  tag:cfPt>=5?'좋음':cfPt>=3?'양호':cfPt>=2?'보통':'없음',
+                  desc:isETF?(mfPt>=8?'기관자금 대량유입':mfPt>=6?'거래량 증가중':mfPt>=4?'특이사항 없음':'자금 빠져나감'):(mfPt>=8?'매출·이익 성장':mfPt>=6?'대체로 괜찮음':mfPt>=4?'평균 수준':'실적 부족')},
+                {name:isETF?'안정성':'현금',sub:isETF?'STAB':'CF',pt:cfPt,max:5,color:'#ff922b',
+                  tag:isETF?(cfPt>=4?'안정':cfPt>=3?'보통':'불안'):(cfPt>=5?'좋음':cfPt>=3?'양호':cfPt>=2?'보통':'없음'),
                   tagC:cfPt>=3?'#3fb950':cfPt>=2?'#ffd600':'#f85149',
-                  desc:cfPt>=5?'돈 잘 벌고 있음':cfPt>=3?'대체로 양수':cfPt>=2?'일부 약함':'현금 부족'},
+                  desc:isETF?(cfPt>=4?'안정적 상승추세':cfPt>=3?'보합 안정':cfPt>=2?'소폭 하락':'급락 불안정'):(cfPt>=5?'돈 잘 벌고 있음':cfPt>=3?'대체로 양수':cfPt>=2?'일부 약함':'현금 부족')},
                 {name:'거래량',sub:'VOL',pt:volPt,max:12,color:'#ffa94d',
-                  tag:volPt>=10?'매집!':volPt>=7?'양호':volPt>=4?'보통':'매도',
-                  tagC:volPt>=9?'#3fb950':volPt>=4?'#ffd600':'#f85149',
-                  desc:volPt>=10?'큰손 매집 감지':volPt>=7?'건강한 거래량':volPt>=4?'특이사항 없음':'매도 압력'},
+                  tag:volPt>=10?'매집!':volPt>=7?'양호':volPt>=4?'보통':volPt>=0?'주의':'세력이탈!',
+                  tagC:volPt>=9?'#3fb950':volPt>=4?'#ffd600':volPt>=0?'#ff922b':'#f85149',
+                  desc:volPt>=10?'큰손 매집 감지':volPt>=7?'건강한 거래량':volPt>=4?'특이사항 없음':volPt>=0?'변곡점 주의':'고점 거래량 폭발! 위험'},
               ];
               return <div style={{marginBottom:'14px'}}>
                 {bars.map((b,i)=>{
-                  const pct=Math.max(0,Math.min((b.pt/b.max)*100,100));
+                  const pct=Math.min(Math.abs(b.pt)/b.max*100,100);
+                  const isNeg=b.pt<0;
                   return <div key={i} style={{display:'flex',alignItems:'center',gap:'6px',marginBottom:'6px'}}>
                     <div style={{width:'52px',fontSize:'10px',color:'#8b949e',textAlign:'right',lineHeight:1.2,flexShrink:0}}>
                       <div style={{color:'#ccc',fontWeight:600}}>{b.name}</div>
                       <div style={{fontSize:'8px'}}>{b.sub}</div>
                     </div>
-                    <div style={{flex:1,height:'18px',background:'#161b22',borderRadius:'4px',position:'relative',overflow:'hidden',border:'1px solid #21262d'}}>
-                      <div style={{width:pct+'%',height:'100%',background:`linear-gradient(90deg,${b.color}88,${b.color})`,borderRadius:'3px',transition:'width 0.5s ease'}}/>
-                      <div style={{position:'absolute',top:0,left:'6px',height:'100%',display:'flex',alignItems:'center',fontSize:'9px',color:'#fff',fontWeight:600,textShadow:'0 0 3px #000'}}>{b.pt}/{b.max}</div>
+                    <div style={{flex:1,height:'18px',background:isNeg?'#f8514915':'#161b22',borderRadius:'4px',position:'relative',overflow:'hidden',border:'1px solid '+(isNeg?'#f8514966':'#21262d')}}>
+                      <div style={{width:pct+'%',height:'100%',background:isNeg?'linear-gradient(90deg,#f85149,#f8514988)':`linear-gradient(90deg,${b.color}88,${b.color})`,borderRadius:'3px',transition:'width 0.5s ease'}}/>
+                      <div style={{position:'absolute',top:0,left:'6px',height:'100%',display:'flex',alignItems:'center',fontSize:'9px',color:isNeg?'#f85149':'#fff',fontWeight:600,textShadow:'0 0 3px #000'}}>{b.pt}/{b.max}</div>
                     </div>
                     <div style={{width:'44px',textAlign:'center',flexShrink:0}}>
                       <div style={{fontSize:'9px',fontWeight:700,color:b.tagC,lineHeight:1}}>{b.tag}</div>
@@ -1350,10 +1482,17 @@ export default function Dashboard(){
       </div>
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8}}>
         <div style={{background:"#161b22",borderRadius:6,padding:10}}>
-          <div style={{fontSize:14,fontWeight:700,color:"#39d353",marginBottom:4}}>멀티팩터</div>
-          <IR l="종합" v={(mfTs(d)).toFixed(2)} c={mfTs(d)>=2?"#3fb950":"#d29922"}/>
-          <IR l="방향" v={mfTd(d)+(mfAl(d)?" ⚡":"")} c={mfTd(d)==="매수"?"#3fb950":"#f85149"}/>
-          <IR l="펀더" v={(d.f||0)+"점"} c={d.f>=80?"#3fb950":"#d29922"}/>
+          {d.s==='ETF' ? (<>
+            <div style={{fontSize:14,fontWeight:700,color:"#39d353",marginBottom:4}}>자금유입</div>
+            <IR l="비율" v={(d._volData?.volRatio||1)+"x"} c={(d._volData?.volRatio||1)>=1.5?"#3fb950":"#d29922"}/>
+            <IR l="5일변화" v={(d._volData?.priceChg5d>0?"+":"")+(d._volData?.priceChg5d||0)+"%"} c={(d._volData?.priceChg5d||0)>0?"#3fb950":"#f85149"}/>
+            <IR l="52주위치" v={(d._volData?.positionPct||0)+"%"} c={(d._volData?.positionPct||0)>=50?"#3fb950":"#d29922"}/>
+          </>) : (<>
+            <div style={{fontSize:14,fontWeight:700,color:"#39d353",marginBottom:4}}>멀티팩터</div>
+            <IR l="종합" v={(mfTs(d)).toFixed(2)} c={mfTs(d)>=2?"#3fb950":"#d29922"}/>
+            <IR l="방향" v={mfTd(d)+(mfAl(d)?" ⚡":"")} c={mfTd(d)==="매수"?"#3fb950":"#f85149"}/>
+            <IR l="펀더" v={(d.f||0)+"점"} c={d.f>=80?"#3fb950":"#d29922"}/>
+          </>)}
         </div>
         <div style={{background:"#161b22",borderRadius:6,padding:10}}>
           <div style={{fontSize:14,fontWeight:700,color:"#bc8cff",marginBottom:4}}>SEPA + 듀얼모멘텀</div>
@@ -2173,21 +2312,21 @@ export default function Dashboard(){
                 return sl.status==='이탈❗'||sl.status==='임박⚠️';
               });
               const SumRow=({label,flag,buy,cur,pnl,pct,unit})=>(
-                <div style={{display:"flex",gap:12,alignItems:"center",flexWrap:"wrap"}}>
-                  <div style={{fontSize:12,fontWeight:700,color:flag==='🇰🇷'?'#ff922b':'#4dabf7',minWidth:50}}>{flag} {label}</div>
-                  <div><div style={{fontSize:9,color:"#484f58"}}>매수금액</div><div style={{fontSize:13,fontWeight:700,color:"#e6edf3",fontFamily:"'JetBrains Mono'"}}>{unit}{buy.toLocaleString()}</div></div>
-                  <div><div style={{fontSize:9,color:"#484f58"}}>평가금액</div><div style={{fontSize:13,fontWeight:700,color:"#e6edf3",fontFamily:"'JetBrains Mono'"}}>{unit}{Math.round(cur).toLocaleString()}</div></div>
-                  <div><div style={{fontSize:9,color:"#484f58"}}>손익</div><div style={{fontSize:13,fontWeight:700,color:pnl>=0?"#3fb950":"#f85149",fontFamily:"'JetBrains Mono'"}}>{pnl>=0?"+":""}{Math.round(pnl).toLocaleString()}</div></div>
-                  <div><div style={{fontSize:9,color:"#484f58"}}>수익률</div><div style={{fontSize:13,fontWeight:700,color:pct>=0?"#3fb950":"#f85149",fontFamily:"'JetBrains Mono'"}}>{pct>=0?"+":""}{pct.toFixed(2)}%</div></div>
+                <div>
+                  <div style={{fontSize:12,fontWeight:700,color:flag==='🇰🇷'?'#ff922b':'#4dabf7',marginBottom:6}}>{flag} {label}</div>
+                  <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"4px 12px"}}>
+                    <div><div style={{fontSize:9,color:"#484f58"}}>매수금액</div><div style={{fontSize:13,fontWeight:700,color:"#e6edf3",fontFamily:"'JetBrains Mono'"}}>{unit}{buy.toLocaleString()}</div></div>
+                    <div><div style={{fontSize:9,color:"#484f58"}}>평가금액</div><div style={{fontSize:13,fontWeight:700,color:"#e6edf3",fontFamily:"'JetBrains Mono'"}}>{unit}{Math.round(cur).toLocaleString()}</div></div>
+                    <div><div style={{fontSize:9,color:"#484f58"}}>손익</div><div style={{fontSize:13,fontWeight:700,color:pnl>=0?"#3fb950":"#f85149",fontFamily:"'JetBrains Mono'"}}>{pnl>=0?"+":""}{Math.round(pnl).toLocaleString()}</div></div>
+                    <div><div style={{fontSize:9,color:"#484f58"}}>수익률</div><div style={{fontSize:13,fontWeight:700,color:pct>=0?"#3fb950":"#f85149",fontFamily:"'JetBrains Mono'"}}>{pct>=0?"+":""}{pct.toFixed(2)}%</div></div>
+                  </div>
                 </div>
               );
               return <div style={{padding:"10px 14px",background:"linear-gradient(135deg,#0d1117,#161b22)",borderRadius:8,marginBottom:14,border:"1px solid #21262d"}}>
                 <div style={{display:"flex",flexDirection:"column",gap:8}}>
                   {hasKR&&<SumRow label="원화" flag="🇰🇷" buy={krBuy} cur={krCur} pnl={krPnl} pct={krPct} unit="₩"/>}
+                  {hasKR&&hasUS&&<div style={{borderTop:"1px solid #21262d"}}/>}
                   {hasUS&&<SumRow label="달러" flag="🇺🇸" buy={usBuy} cur={usCur} pnl={usPnl} pct={usPct} unit="$"/>}
-                  {hasKR&&hasUS&&<div style={{borderTop:"1px solid #21262d",paddingTop:6,display:"flex",gap:12,alignItems:"center",flexWrap:"wrap"}}>
-                    <div style={{fontSize:10,color:"#484f58"}}>※ 통화가 달라 합산 불가 — 각각 확인하세요</div>
-                  </div>}
                 </div>
                 {alertItems.length>0 && <div style={{padding:"4px 12px",background:"#f8514920",border:"1px solid #f8514966",borderRadius:6,marginTop:8}}>
                   <div style={{fontSize:12,fontWeight:800,color:"#f85149"}}>🚨 손절 경고 {alertItems.length}종목</div>
