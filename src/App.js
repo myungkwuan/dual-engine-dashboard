@@ -2185,6 +2185,47 @@ export default function Dashboard(){
               </div>;
             })()}
 
+            {/* 🚀 상승 전환 신호 */}
+            {(()=>{
+              const turnUp=stocks.filter(d=>watchlist.includes(d.t)).filter(d=>{
+                const vd=getVerdict(d);
+                if(vd.totalPt>=80)return false; // 이미 최강은 제외
+                const ind=d._indicators;
+                const vol=d._volData;
+                let bullCount=0;
+                if(vol&&vol.signalType==='buy')bullCount++;
+                if(ind&&['golden','bullish','recovering'].includes(ind.macd.signal))bullCount++;
+                if(ind&&['accumulation','confirm','recovering'].includes(ind.obv.signal))bullCount++;
+                return bullCount>=2; // 3개 중 2개 이상 매수 신호
+              });
+              if(turnUp.length===0)return null;
+              return <div style={{background:"#3fb95012",border:"1px solid #3fb95044",borderRadius:8,padding:"10px 14px",marginBottom:12}}>
+                <div style={{fontSize:12,fontWeight:800,color:"#3fb950",marginBottom:4}}>🚀 상승 전환 신호 ({turnUp.length}종목)</div>
+                <div style={{fontSize:9,color:"#69db7c",marginBottom:8}}>거래량·MACD·OBV 중 2개 이상 매수 신호 — 매수 타이밍 근접!</div>
+                <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+                  {turnUp.map(d=>{
+                    const ind=d._indicators;const vol=d._volData;const vd=getVerdict(d);
+                    const tags=[];
+                    if(vol&&vol.signalType==='buy')tags.push(vol.signal||'거래량🟢');
+                    if(ind&&ind.macd.signal==='golden')tags.push('골든크로스🟢');
+                    else if(ind&&ind.macd.signal==='bullish')tags.push('MACD상승🟢');
+                    else if(ind&&ind.macd.signal==='recovering')tags.push('MACD반등🟡');
+                    if(ind&&ind.obv.signal==='accumulation')tags.push('스마트머니매집🟢');
+                    else if(ind&&ind.obv.signal==='confirm')tags.push('OBV상승🟢');
+                    else if(ind&&ind.obv.signal==='recovering')tags.push('OBV반등🟡');
+                    return <div key={d.t} onClick={()=>{setDetailStock(d);setShowDetail(true);}}
+                      style={{padding:"5px 10px",background:"#3fb95010",borderRadius:6,cursor:"pointer",border:"1px solid #3fb95033"}}>
+                      <div style={{display:"flex",alignItems:"center",gap:6}}>
+                        <span style={{fontSize:11,fontWeight:700,color:"#69db7c"}}>{d.n}</span>
+                        <span style={{fontSize:10,fontWeight:800,color:"#3fb950",fontFamily:"'JetBrains Mono'"}}>{vd.totalPt}</span>
+                      </div>
+                      <div style={{fontSize:8,color:"#3fb950",marginTop:2}}>{tags.join(' · ')}</div>
+                    </div>;
+                  })}
+                </div>
+              </div>;
+            })()}
+
             {/* 최근 상승 전환 알림 */}
             {(()=>{
               const now=Date.now();
@@ -2397,6 +2438,39 @@ export default function Dashboard(){
               <span style={{fontSize:10,padding:"3px 8px",borderRadius:4,background:"#bc8cff15",border:"1px solid #bc8cff33",color:"#bc8cff"}}>트레일링: 최고가 -9%</span>
               <span style={{fontSize:10,padding:"3px 8px",borderRadius:4,background:"#58a6ff15",border:"1px solid #58a6ff33",color:"#58a6ff"}}>활성 = 둘 중 높은 가격</span>
             </div>
+
+            {/* ⚠️ 보유종목 하락 전환 경고 */}
+            {(()=>{
+              const holdTurn=portfolio.filter(p=>{
+                const s=stocks.find(d=>d.t===p.ticker);
+                if(!s)return false;
+                const ind=s._indicators;const vol=s._volData;
+                let wc=0;
+                if(vol&&vol.signalType==='sell')wc++;
+                if(ind&&['dead','bearish'].includes(ind.macd.signal))wc++;
+                if(ind&&['distribution','confirm_down'].includes(ind.obv.signal))wc++;
+                return wc>=2;
+              }).map(p=>({p,s:stocks.find(d=>d.t===p.ticker)})).filter(x=>x.s);
+              if(holdTurn.length===0)return null;
+              return <div style={{background:"linear-gradient(135deg,#f8514912,#ff922b08)",border:"1px solid #f8514944",borderRadius:8,padding:"10px 14px",marginBottom:12}}>
+                <div style={{fontSize:12,fontWeight:800,color:"#ff922b",marginBottom:4}}>⚠️ 하락 전환 경고 ({holdTurn.length}종목)</div>
+                <div style={{fontSize:9,color:"#ffa94d",marginBottom:8}}>보유중인 종목에서 하락 전환 신호 감지! 비중 축소 또는 손절 검토하세요.</div>
+                {holdTurn.map(({p,s})=>{
+                  const ind=s._indicators;const vol=s._volData;const pct=p.buyPrice>0?((s.p/p.buyPrice-1)*100):0;
+                  const tags=[];
+                  if(vol&&vol.signalType==='sell')tags.push(vol.signal||'거래량🔴');
+                  if(ind&&['dead','bearish'].includes(ind.macd.signal))tags.push(ind.macd.signal==='dead'?'MACD 데드크로스🔴':'MACD 하락중🔴');
+                  if(ind&&['distribution','confirm_down'].includes(ind.obv.signal))tags.push(ind.obv.signal==='distribution'?'큰손 이탈🔴':'OBV 하락🔴');
+                  return <div key={s.t} onClick={()=>{setDetailStock(s);setShowDetail(true);}} style={{display:"flex",alignItems:"center",gap:8,padding:"6px 10px",background:"#f8514908",borderRadius:6,marginBottom:4,cursor:"pointer",border:"1px solid #f8514922"}}>
+                    <div style={{flex:1}}>
+                      <span style={{fontSize:12,fontWeight:700,color:"#ff8a80"}}>{s.n}</span>
+                      <span style={{fontSize:10,color:pct>=0?"#3fb950":"#f85149",marginLeft:6,fontFamily:"'JetBrains Mono'"}}>{pct>=0?"+":""}{pct.toFixed(1)}%</span>
+                    </div>
+                    <div style={{fontSize:8,color:"#f85149"}}>{tags.join(' · ')}</div>
+                  </div>;
+                })}
+              </div>;
+            })()}
 
             {/* 미국 / 한국 분리 */}
             {["us","kr"].map(market=>{
@@ -2666,6 +2740,7 @@ export default function Dashboard(){
             </>}
             <TH c>성장/재무</TH>
             <TH c>거래량</TH>
+            <TH c>신호</TH>
           </tr></thead>
           <tbody>
             {sorted.map((d,i)=>{
@@ -2726,6 +2801,19 @@ export default function Dashboard(){
                         return <div>
                           <div style={{color:clr,fontWeight:st!=='neutral'?700:400,fontSize:isMobile?8:10,lineHeight:1.2}}>{short}</div>
                           <div style={{color:'#484f58',fontSize:isMobile?7:9}}>{icon}{vl.volRatio}x</div>
+                        </div>;
+                      })() : <span style={{color:'#333'}}>-</span>}
+                    </td>
+                    <td style={{padding:"6px 3px",textAlign:"center"}}>
+                      {d._indicators ? (()=>{
+                        const ind=d._indicators;
+                        const bc=ind.bb.signal==='squeeze'?'#3fb950':ind.bb.signal==='narrow'?'#ffd600':'#333';
+                        const mc=['golden','bullish'].includes(ind.macd.signal)?'#3fb950':ind.macd.signal==='recovering'?'#ffd600':['dead','bearish'].includes(ind.macd.signal)?'#f85149':'#333';
+                        const oc=['accumulation','confirm'].includes(ind.obv.signal)?'#3fb950':ind.obv.signal==='recovering'?'#ffd600':['distribution','confirm_down'].includes(ind.obv.signal)?'#f85149':'#333';
+                        return <div style={{display:'flex',gap:2,justifyContent:'center'}}>
+                          <div title="볼린저" style={{width:isMobile?6:8,height:isMobile?6:8,borderRadius:'50%',background:bc}}/>
+                          <div title="MACD" style={{width:isMobile?6:8,height:isMobile?6:8,borderRadius:'50%',background:mc}}/>
+                          <div title="OBV" style={{width:isMobile?6:8,height:isMobile?6:8,borderRadius:'50%',background:oc}}/>
                         </div>;
                       })() : <span style={{color:'#333'}}>-</span>}
                     </td>
