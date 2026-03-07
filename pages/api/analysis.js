@@ -376,7 +376,14 @@ function calcIndicators(bars) {
       if (macdLine[i] <= signalLine[i]) { macdCrossDays = n - 1 - i; break; }
     }
   } else {
-    macdSignal = 'bearish';
+    // MACD < Signal이지만 히스토그램이 줄어들고 있으면 반등 초기
+    const hist3ago = n >= 4 ? macdLine[n - 4] - signalLine[n - 4] : -999;
+    const histNow = macdCur - signalCur;
+    if (hist3ago < histNow && histNow < 0) {
+      macdSignal = 'recovering'; // 하락이지만 반등 시작
+    } else {
+      macdSignal = 'bearish';
+    }
     for (let i = n - 2; i >= Math.max(0, n - 20); i--) {
       if (macdLine[i] >= signalLine[i]) { macdCrossDays = n - 1 - i; break; }
     }
@@ -400,6 +407,14 @@ function calcIndicators(bars) {
     sxy += (i - 9.5) * (obv20[i] - obvAvg);
   }
   if (sxx > 0) obvSlope = sxy / sxx;
+  // OBV 5일 단기 추세 (반등 초기 감지용)
+  const obv5 = obv.slice(-5);
+  const obv5Avg = obv5.reduce((a, b) => a + b, 0) / 5;
+  let obv5Slope = 0;
+  let s5xx = 0, s5xy = 0;
+  for (let i = 0; i < 5; i++) { s5xx += (i - 2) ** 2; s5xy += (i - 2) * (obv5[i] - obv5Avg); }
+  if (s5xx > 0) obv5Slope = s5xy / s5xx;
+  const obv5Up = obv5Slope > 0;
   // 가격 20일 추세
   const price20 = closes.slice(-20);
   const priceAvg = price20.reduce((a, b) => a + b, 0) / 20;
@@ -410,15 +425,21 @@ function calcIndicators(bars) {
     psxy += (i - 9.5) * (price20[i] - priceAvg);
   }
   if (psxx > 0) priceSlope = psxy / psxx;
-  // OBV↑ + 가격횡보/하락 = 스마트머니 매집
+  // 가격 5일 단기 추세
+  const price5Up = closes[n - 1] > closes[n - 5];
+  // OBV 시그널 판정 (20일 기본 + 5일 단기 보완)
   const obvUp = obvSlope > 0;
-  const priceFlat = Math.abs(priceSlope / priceAvg) < 0.002; // 0.2% 미만 = 횡보
+  const priceFlat = Math.abs(priceSlope / priceAvg) < 0.002;
   const priceDown = priceSlope < 0;
   let obvSignal = 'neutral';
-  if (obvUp && (priceFlat || priceDown)) obvSignal = 'accumulation'; // 스마트머니 매집
-  else if (!obvUp && (priceFlat || priceSlope > 0)) obvSignal = 'distribution'; // 스마트머니 이탈
-  else if (obvUp && priceSlope > 0) obvSignal = 'confirm'; // 상승 확인
-  else if (!obvUp && priceDown) obvSignal = 'confirm_down'; // 하락 확인
+  if (obvUp && (priceFlat || priceDown)) obvSignal = 'accumulation';
+  else if (!obvUp && (priceFlat || priceSlope > 0)) obvSignal = 'distribution';
+  else if (obvUp && priceSlope > 0) obvSignal = 'confirm';
+  else if (!obvUp && priceDown) obvSignal = 'confirm_down';
+  // 20일은 하락이지만 5일 단기가 반등이면 → recovering
+  if ((obvSignal === 'distribution' || obvSignal === 'confirm_down') && obv5Up && price5Up) {
+    obvSignal = 'recovering';
+  }
 
   return {
     bb: { width: +curBBW.toFixed(1), minWidth: +minBBW.toFixed(1), ratio: +bbRatio.toFixed(2), signal: bbSignal },
