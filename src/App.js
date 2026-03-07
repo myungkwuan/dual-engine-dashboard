@@ -2545,7 +2545,15 @@ export default function Dashboard(){
         // 📈 조용한 강자: SEPA 7+/8 & DM BUY+ & 아직 최강 아님 & 거래량 중립~
         const silent=all.filter(({vd,d,dm})=>seTt(d)>=7 && dm.signalScore>=7 && vd.totalPt>=55 && vd.totalPt<80 && vd.details.volPt>=4 && vd.details.volPt<=8)
           .sort((a,b)=>b.vd.totalPt-a.vd.totalPt).slice(0,5);
-        if(buyNow.length===0&&soonBreak.length===0&&silent.length===0)return null;
+        // 🎯 보조지표 올그린: 볼린저 스퀴즈 + MACD 상승 + OBV 매집/상승확인
+        const tripleGreen=all.filter(({d})=>{
+          const ind=d._indicators;if(!ind)return false;
+          const bbOk=ind.bb.signal==='squeeze';
+          const macdOk=['golden','bullish'].includes(ind.macd.signal);
+          const obvOk=['accumulation','confirm'].includes(ind.obv.signal);
+          return bbOk&&macdOk&&obvOk;
+        }).sort((a,b)=>b.vd.totalPt-a.vd.totalPt).slice(0,5);
+        if(buyNow.length===0&&soonBreak.length===0&&silent.length===0&&tripleGreen.length===0)return null;
         const Card=({icon,title,color,items,getTag,getReason})=>(
           items.length===0?null:<div style={{flex:1,minWidth:isMobile?'100%':280,background:'linear-gradient(135deg,#0a0a1e,#0d1830)',borderRadius:10,padding:'12px 14px',border:`1px solid ${color}33`}}>
             <div style={{fontSize:13,fontWeight:800,color,marginBottom:8}}>{icon} {title}</div>
@@ -2603,6 +2611,19 @@ export default function Dashboard(){
                 parts.push(`SEPA ${seTt(d)}/8 상승추세`);
                 if(dm.r3m>0) parts.push(`3M +${dm.r3m}% 수익`);
                 parts.push('아직 주목 안 받는 중');
+                return parts.join(' · ');
+              }}
+            />
+            <Card icon="🎯" title="보조지표 올그린" color="#e599f7" items={tripleGreen}
+              getTag={(d,vd)=>{
+                return '🟢🟢🟢';
+              }}
+              getReason={(d,vd)=>{
+                const ind=d._indicators;if(!ind)return '';
+                const parts=[];
+                parts.push(`볼린저 스퀴즈(${ind.bb.width}%) — 큰 움직임 임박`);
+                parts.push(ind.macd.signal==='golden'?'MACD 골든크로스 — 상승 전환!':`MACD 상승 ${ind.macd.crossDays}일차`);
+                parts.push(ind.obv.signal==='accumulation'?'OBV 매집 — 큰손이 몰래 사는 중':'OBV 상승확인 — 건강한 상승');
                 return parts.join(' · ');
               }}
             />
