@@ -896,6 +896,58 @@ function StockDetailModal({ stock, onClose, isWatched, onToggleWatch, gradeHisto
             </div>;
           })()}
 
+          {/* 보조지표 — 매수 확신도 */}
+          {stock._indicators && (()=>{
+            const ind=stock._indicators;
+            const bb=ind.bb, macd=ind.macd, obv=ind.obv;
+            const bbIcon=bb.signal==='squeeze'?'🟢':bb.signal==='narrow'?'🟡':'⚪';
+            const bbLabel=bb.signal==='squeeze'?'스퀴즈!':bb.signal==='narrow'?'수축중':bb.signal==='normal'?'보통':'확대';
+            const bbDesc=bb.signal==='squeeze'?`주가 변동폭이 6개월 중 가장 좁아졌어요(${bb.width}%). 이건 스프링을 꽉 누르고 있는 상태와 같아서, 곧 위 또는 아래로 크게 움직일 가능성이 높아요. 추세가 상승이면 폭발적 상승이 기대되는 최적의 매수 타이밍이에요.`
+              :bb.signal==='narrow'?`주가 변동폭이 점점 줄어드는 중이에요(${bb.width}%, 최소 대비 ${bb.ratio}배). 아직 완전한 스퀴즈는 아니지만 에너지가 모이고 있어요. 변동폭이 더 줄어들면 큰 움직임이 올 수 있으니 주시하세요.`
+              :bb.signal==='normal'?`주가 변동폭이 평소 수준이에요(${bb.width}%). 특별한 에너지 축적이 없는 상태라서, 볼린저 밴드만으로는 매수/매도 판단이 어려워요. 다른 지표를 함께 확인하세요.`
+              :`주가 변동폭이 크게 벌어져 있어요(${bb.width}%). 이미 큰 움직임이 진행된 후이거나, 변동성이 높은 불안정한 구간이에요. 이런 때는 새로 매수하기보다 기존 보유 시 리스크 관리에 집중하세요.`;
+            const macdIcon=macd.signal==='golden'?'🟢':macd.signal==='bullish'?'🟢':macd.signal==='dead'?'🔴':macd.signal==='bearish'?'🔴':'⚪';
+            const macdLabel=macd.signal==='golden'?'골든크로스!':macd.signal==='bullish'?`상승 ${macd.crossDays}일차`:macd.signal==='dead'?'데드크로스!':macd.signal==='bearish'?`하락 ${macd.crossDays}일차`:'중립';
+            const macdDesc=macd.signal==='golden'?'단기 흐름이 장기 흐름을 위로 돌파했어요! 이건 하락세가 끝나고 상승으로 전환된다는 가장 대표적인 매수 신호예요. 특히 거래량이 동반되면 신뢰도가 더 높아요.'
+              :macd.signal==='bullish'?`골든크로스가 발생한 후 ${macd.crossDays}일째 상승 흐름이 유지되고 있어요. 상승 초반이면 매수 기회, 10일 이상 지속됐으면 추세의 힘이 줄어들 수 있으니 과열 여부를 체크하세요.`
+              :macd.signal==='dead'?'단기 흐름이 장기 흐름을 아래로 뚫었어요! 이건 상승세가 꺾이고 하락으로 전환된다는 대표적인 매도 신호예요. 보유 중이라면 손절이나 비중 축소를 검토하세요.'
+              :macd.signal==='bearish'?`데드크로스가 발생한 후 ${macd.crossDays}일째 하락 흐름이 지속되고 있어요. 아직 하락 추세가 끝나지 않았으니, 새로 매수하기보다는 바닥 확인 후 진입하는 게 안전해요.`
+              :'MACD와 시그널이 거의 같은 위치에 있어서 방향이 불확실해요. 이런 때는 섣불리 매매하지 말고, 골든크로스나 데드크로스가 나올 때까지 기다리는 게 좋아요.';
+            const obvIcon=obv.signal==='accumulation'?'🟢':obv.signal==='confirm'?'🟢':obv.signal==='distribution'?'🔴':obv.signal==='confirm_down'?'🔴':'⚪';
+            const obvLabel=obv.signal==='accumulation'?'스마트머니 매집!':obv.signal==='confirm'?'상승 확인':obv.signal==='distribution'?'스마트머니 이탈!':obv.signal==='confirm_down'?'하락 확인':'중립';
+            const obvDesc=obv.signal==='accumulation'?'주가는 큰 변화 없이 횡보하는데, 거래량 기반 자금흐름(OBV)은 꾸준히 올라가고 있어요. 이건 기관이나 큰손이 눈에 띄지 않게 조용히 물량을 모으고 있다는 뜻이에요. 이후 주가가 따라 오를 가능성이 높아요!'
+              :obv.signal==='confirm'?'주가도 오르고 거래량 기반 자금흐름(OBV)도 같이 오르고 있어요. 돈이 실제로 들어오면서 주가를 밀어올리는 건강한 상승이에요. 이런 흐름이면 상승 추세가 더 이어질 가능성이 높아요.'
+              :obv.signal==='distribution'?'주가는 아직 버티고 있지만, 거래량 기반 자금흐름(OBV)이 내려가고 있어요. 이건 큰손들이 슬금슬금 물량을 팔고 빠져나가는 신호예요. 주가가 뒤늦게 무너질 수 있으니 주의하세요!'
+              :obv.signal==='confirm_down'?'주가도 내리고 거래량 기반 자금흐름(OBV)도 같이 내리고 있어요. 실제로 돈이 빠져나가면서 주가가 떨어지는 확실한 하락 추세예요. 반등을 기대하기보다 관망하는 게 안전해요.'
+              :'거래량과 주가의 방향이 특별한 패턴을 보이지 않아요. OBV만으로는 큰손의 움직임을 판단하기 어려운 상태이니 다른 지표를 함께 확인하세요.';
+            const greenCount=[bb.signal==='squeeze',['golden','bullish'].includes(macd.signal),['accumulation','confirm'].includes(obv.signal)].filter(Boolean).length;
+            const confidenceLabel=greenCount>=3?'매수 확신 높음!':greenCount>=2?'매수 신호 양호':greenCount>=1?'일부 긍정 신호':'매수 신호 부족';
+            const confidenceColor=greenCount>=3?'#3fb950':greenCount>=2?'#58a6ff':greenCount>=1?'#ffd600':'#f85149';
+            const rows=[
+              {name:'볼린저',icon:bbIcon,label:bbLabel,desc:bbDesc,color:bb.signal==='squeeze'?'#3fb950':bb.signal==='narrow'?'#ffd600':'#484f58'},
+              {name:'MACD',icon:macdIcon,label:macdLabel,desc:macdDesc,color:['golden','bullish'].includes(macd.signal)?'#3fb950':['dead','bearish'].includes(macd.signal)?'#f85149':'#484f58'},
+              {name:'OBV',icon:obvIcon,label:obvLabel,desc:obvDesc,color:['accumulation','confirm'].includes(obv.signal)?'#3fb950':['distribution','confirm_down'].includes(obv.signal)?'#f85149':'#484f58'},
+            ];
+            return <div style={{background:'#080818',borderRadius:'10px',padding:'14px',marginBottom:'12px',border:'1px solid #1a1a2e'}}>
+              <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:'10px'}}>
+                <div style={{fontSize:'12px',fontWeight:700,color:'#e599f7'}}>◈ 보조 지표 <span style={{fontSize:'9px',fontWeight:400,color:'#8b949e'}}>— 매수 확신도 체크</span></div>
+                <div style={{fontSize:'10px',fontWeight:700,color:confidenceColor,padding:'2px 8px',borderRadius:4,background:confidenceColor+'15'}}>{greenCount>=3?'🟢🟢🟢':greenCount>=2?'🟢🟢':greenCount>=1?'🟢':''} {confidenceLabel}</div>
+              </div>
+              {rows.map((r,i)=>(
+                <div key={i} style={{display:'flex',alignItems:'flex-start',gap:8,padding:'6px 0',borderBottom:i<2?'1px solid #1a1a2e':'none'}}>
+                  <div style={{fontSize:'16px',lineHeight:1}}>{r.icon}</div>
+                  <div style={{flex:1}}>
+                    <div style={{display:'flex',alignItems:'center',gap:6}}>
+                      <span style={{fontSize:'11px',fontWeight:700,color:'#ccc'}}>{r.name}</span>
+                      <span style={{fontSize:'10px',fontWeight:700,color:r.color}}>{r.label}</span>
+                    </div>
+                    <div style={{fontSize:'9px',color:'#8b949e',marginTop:1,lineHeight:1.3}}>{r.desc}</div>
+                  </div>
+                </div>
+              ))}
+            </div>;
+          })()}
+
           {/* AI 분석 */}
           <div style={{background:'linear-gradient(135deg,#0a0a2e,#0d1830)',borderRadius:'10px',padding:'16px',border:'1px solid #1a2a4a'}}>
             <div style={{fontSize:'12px',fontWeight:700,color:'#f778ba',marginBottom:'12px'}}>🤖 AI 종합 분석</div>
@@ -1064,7 +1116,8 @@ export default function Dashboard(){
             e:a.e||d.e,
             r:[a.r?a.r[0]:d.r[0], a.r?a.r[1]:d.r[1], d.r[2]],
             v:a.v||d.v,
-            _volData:a.volData||null
+            _volData:a.volData||null,
+            _indicators:a.indicators||null
           };
         }));
         log("📂 마지막 분석 결과 로드 ("+anaTime+")","ok");
@@ -1267,6 +1320,7 @@ export default function Dashboard(){
         _momDetail: a.momDetail,
         _vcpDetail: a.vcpDetail,
         _volData: a.volData,
+        _indicators: a.indicators,
       };
     });
 

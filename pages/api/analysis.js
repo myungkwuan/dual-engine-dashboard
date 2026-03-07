@@ -318,6 +318,115 @@ function calcVCP(bars) {
   };
 }
 
+/* ===== 보조 지표 3종 (볼린저/MACD/OBV) ===== */
+function calcIndicators(bars) {
+  if (bars.length < 50) return null;
+  const n = bars.length;
+  const closes = bars.map(b => b.close);
+  const volumes = bars.map(b => b.volume);
+
+  // ── 볼린저 밴드 스퀴즈 ──
+  const bbPeriod = 20;
+  function calcBBWidth(idx) {
+    if (idx < bbPeriod) return 999;
+    const slice = closes.slice(idx - bbPeriod, idx);
+    const avg = slice.reduce((a, b) => a + b, 0) / bbPeriod;
+    const std = Math.sqrt(slice.reduce((a, b) => a + (b - avg) ** 2, 0) / bbPeriod);
+    return avg > 0 ? ((std * 2 * 2) / avg * 100) : 999; // 밴드폭 %
+  }
+  const curBBW = calcBBWidth(n);
+  // 최근 120일(6개월) 밴드폭 중 최소와 비교
+  let minBBW = curBBW;
+  for (let i = Math.max(bbPeriod, n - 120); i <= n; i++) {
+    const w = calcBBWidth(i);
+    if (w < minBBW) minBBW = w;
+  }
+  const bbRatio = minBBW > 0 ? curBBW / minBBW : 5;
+  // 현재 밴드폭이 6개월 최소의 1.1배 이내면 스퀴즈
+  const bbSignal = bbRatio <= 1.1 ? 'squeeze' : bbRatio <= 1.5 ? 'narrow' : bbRatio <= 2.5 ? 'normal' : 'wide';
+
+  // ── MACD ──
+  function ema(data, period) {
+    const k = 2 / (period + 1);
+    const result = [data[0]];
+    for (let i = 1; i < data.length; i++) {
+      result.push(data[i] * k + result[i - 1] * (1 - k));
+    }
+    return result;
+  }
+  const ema12 = ema(closes, 12);
+  const ema26 = ema(closes, 26);
+  const macdLine = ema12.map((v, i) => v - ema26[i]);
+  const signalLine = ema(macdLine, 9);
+  const macdCur = macdLine[n - 1];
+  const signalCur = signalLine[n - 1];
+  const macdPrev = macdLine[n - 2];
+  const signalPrev = signalLine[n - 2];
+  // 크로스 감지
+  let macdSignal = 'neutral';
+  let macdCrossDays = 0;
+  if (macdCur > signalCur && macdPrev <= signalPrev) {
+    macdSignal = 'golden'; macdCrossDays = 1;
+  } else if (macdCur < signalCur && macdPrev >= signalPrev) {
+    macdSignal = 'dead'; macdCrossDays = 1;
+  } else if (macdCur > signalCur) {
+    // 골든크로스 이후 며칠째인지
+    macdSignal = 'bullish';
+    for (let i = n - 2; i >= Math.max(0, n - 20); i--) {
+      if (macdLine[i] <= signalLine[i]) { macdCrossDays = n - 1 - i; break; }
+    }
+  } else {
+    macdSignal = 'bearish';
+    for (let i = n - 2; i >= Math.max(0, n - 20); i--) {
+      if (macdLine[i] >= signalLine[i]) { macdCrossDays = n - 1 - i; break; }
+    }
+  }
+  const macdHist = +(macdCur - signalCur).toFixed(3);
+
+  // ── OBV (On Balance Volume) ──
+  const obv = [0];
+  for (let i = 1; i < n; i++) {
+    if (closes[i] > closes[i - 1]) obv.push(obv[i - 1] + volumes[i]);
+    else if (closes[i] < closes[i - 1]) obv.push(obv[i - 1] - volumes[i]);
+    else obv.push(obv[i - 1]);
+  }
+  // OBV 20일 추세 (선형회귀 기울기)
+  const obv20 = obv.slice(-20);
+  const obvAvg = obv20.reduce((a, b) => a + b, 0) / 20;
+  let obvSlope = 0;
+  let sxx = 0, sxy = 0;
+  for (let i = 0; i < 20; i++) {
+    sxx += (i - 9.5) ** 2;
+    sxy += (i - 9.5) * (obv20[i] - obvAvg);
+  }
+  if (sxx > 0) obvSlope = sxy / sxx;
+  // 가격 20일 추세
+  const price20 = closes.slice(-20);
+  const priceAvg = price20.reduce((a, b) => a + b, 0) / 20;
+  let priceSlope = 0;
+  let psxx = 0, psxy = 0;
+  for (let i = 0; i < 20; i++) {
+    psxx += (i - 9.5) ** 2;
+    psxy += (i - 9.5) * (price20[i] - priceAvg);
+  }
+  if (psxx > 0) priceSlope = psxy / psxx;
+  // OBV↑ + 가격횡보/하락 = 스마트머니 매집
+  const obvUp = obvSlope > 0;
+  const priceFlat = Math.abs(priceSlope / priceAvg) < 0.002; // 0.2% 미만 = 횡보
+  const priceDown = priceSlope < 0;
+  let obvSignal = 'neutral';
+  if (obvUp && (priceFlat || priceDown)) obvSignal = 'accumulation'; // 스마트머니 매집
+  else if (!obvUp && (priceFlat || priceSlope > 0)) obvSignal = 'distribution'; // 스마트머니 이탈
+  else if (obvUp && priceSlope > 0) obvSignal = 'confirm'; // 상승 확인
+  else if (!obvUp && priceDown) obvSignal = 'confirm_down'; // 하락 확인
+
+  return {
+    bb: { width: +curBBW.toFixed(1), minWidth: +minBBW.toFixed(1), ratio: +bbRatio.toFixed(2), signal: bbSignal },
+    macd: { value: +macdCur.toFixed(3), signal: macdSignal, histogram: macdHist, crossDays: macdCrossDays },
+    obv: { signal: obvSignal, slopeUp: obvUp, priceSlopeUp: priceSlope > 0 }
+  };
+}
+
 /* ===== 거래량 분석 엔진 ===== */
 function calcVolume(bars) {
   if (bars.length < 50) return null;
@@ -408,6 +517,9 @@ async function analyzeStock(stock) {
   // 거래량
   const vol = calcVolume(bars);
   
+  // 보조지표 (볼린저/MACD/OBV)
+  const indicators = calcIndicators(bars);
+  
   // e 배열: [판정, 스테이지, 템플릿수, RS]
   const rs = mom.relM3 && mom.relM6 ? 3 : mom.relM3 || mom.relM6 ? 2 : 1;
   const e = [sepa.verdict, sepa.stage, sepa.count, rs];
@@ -448,6 +560,7 @@ async function analyzeStock(stock) {
       contractions: vcp.contractions,
       anchorPrice: vcp.anchorPrice
     },
-    volData: vol
+    volData: vol,
+    indicators
   };
 }
