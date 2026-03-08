@@ -3792,109 +3792,60 @@ export default function Dashboard(){
            NI/ARow를 컴포넌트로 정의하면 렌더마다 새 함수 참조 →
            React가 언마운트/리마운트 → 포커스 날아감 → 모바일 키보드 닫힘
            해결: 인라인 JSX + useRef로 DOM 직접 관리 */
-        const iSt={padding:"6px 10px",borderRadius:5,border:"1px solid #30363d",background:"#0d1117",color:"#e6edf3",fontSize:13,fontFamily:"'JetBrains Mono'",outline:"none",width:"100%",boxSizing:"border-box"};
-        const onChg=(k)=>(e)=>{const n=Number(e.target.value.replace(/[^0-9.]/g,''))||0;setCalcData(p=>({...p,[k]:n}));};
-        const onBl=(k)=>(e)=>{const n=Number(e.target.value.replace(/[^0-9.]/g,''))||0;setCalcData(p=>{const nx={...p,[k]:n};try{localStorage.setItem('asset_data',JSON.stringify(nx));}catch(er){}return nx;});};
-        return <div style={{maxWidth:960,margin:"0 auto",padding:isMobile?"10px 14px":"16px 24px"}}>
-          <div style={{fontSize:isMobile?16:20,fontWeight:900,color:"#e6edf3",marginBottom:4}}>💰 자산관리</div>
-          <div style={{fontSize:11,color:"#484f58",marginBottom:14}}>보유종목 자동 연계 · 시장필터 Risk 상태 반영</div>
-          <div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"1fr 1fr",gap:12}}>
+        /* 공통 input 스타일 */
+        const iSt={padding:"8px 10px",borderRadius:6,border:"1px solid #30363d",background:"#0d1117",color:"#e6edf3",fontSize:14,fontFamily:"'JetBrains Mono'",outline:"none",width:"100%",boxSizing:"border-box"};
+        /* 입력 그룹: ₩ / $ 2열 그리드 + 아래 환산값 풀폭 */
+        const AGroup=({emoji,label,krwKey,usdKey,krwVal,usdVal})=>{
+          const total=Math.round((D[krwKey]||0)+(D[usdKey]||0)*fx);
+          return(
+            <div style={{background:"#161b22",borderRadius:8,padding:"10px 12px",marginBottom:6}}>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
+                <span style={{fontSize:12,fontWeight:700,color:"#8b949e"}}>{emoji} {label}</span>
+                <span style={{fontSize:12,fontWeight:700,color:"#3fb950",fontFamily:"'JetBrains Mono'"}}>₩{total.toLocaleString()}</span>
+              </div>
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
+                <div>
+                  <div style={{fontSize:10,color:"#484f58",marginBottom:3}}>원화 ₩</div>
+                  <input type="text" inputMode="numeric" placeholder="0"
+                    value={krwVal}
+                    onChange={e=>onDraftChange(krwKey,e.target.value)}
+                    onBlur={e=>onDraftBlur(krwKey,e.target.value)}
+                    style={iSt}/>
+                </div>
+                <div>
+                  <div style={{fontSize:10,color:"#484f58",marginBottom:3}}>달러 $</div>
+                  <input type="text" inputMode="numeric" placeholder="0"
+                    value={usdVal}
+                    onChange={e=>onDraftChange(usdKey,e.target.value)}
+                    onBlur={e=>onDraftBlur(usdKey,e.target.value)}
+                    style={iSt}/>
+                </div>
+              </div>
+            </div>
+          );
+        };
+        return <div style={{width:"100%",padding:isMobile?"10px 12px":"16px 24px",boxSizing:"border-box",maxWidth:960,margin:"0 auto"}}>
+          <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:4}}>
+            <div style={{fontSize:isMobile?16:20,fontWeight:900,color:"#e6edf3"}}>💰 자산관리</div>
+            {/* 환율 인라인 */}
+            <div style={{display:"flex",alignItems:"center",gap:6,background:"#161b22",border:"1px solid #ffd43b44",borderRadius:8,padding:"5px 10px"}}>
+              <span style={{fontSize:11,color:"#ffd43b",fontWeight:700}}>💱</span>
+              <input type="text" inputMode="numeric"
+                value={draftVals.fxRate}
+                onChange={e=>onDraftChange('fxRate',e.target.value)}
+                onBlur={e=>onDraftBlur('fxRate',e.target.value)}
+                placeholder="1380"
+                style={{padding:"2px 6px",borderRadius:4,border:"none",background:"transparent",color:"#ffd43b",fontSize:14,fontWeight:700,fontFamily:"'JetBrains Mono'",width:70,outline:"none",textAlign:"right"}}/>
+              <span style={{fontSize:11,color:"#484f58"}}>원</span>
+            </div>
+          </div>
+          <div style={{fontSize:11,color:"#484f58",marginBottom:12}}>보유종목 자동 연계 · 시장필터 Risk 상태 반영</div>
+          <div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"1fr 1fr",gap:10}}>
             {/* 왼쪽: 입력 */}
             <div>
-              <div style={{background:"#161b22",borderRadius:8,padding:"10px 12px",marginBottom:8,border:"1px solid #30363d"}}>
-                <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",flexWrap:"wrap",gap:6}}>
-                  <span style={{fontSize:12,fontWeight:700,color:"#ffd43b"}}>💱 환율 (원/달러)</span>
-                  <div style={{display:"flex",alignItems:"center",gap:6}}>
-                    <input
-                      type="text" inputMode="numeric"
-                      value={draftVals.fxRate}
-                      onChange={e=>onDraftChange('fxRate',e.target.value)}
-                      onBlur={e=>onDraftBlur('fxRate',e.target.value)}
-                      placeholder="1380"
-                      style={{padding:"5px 10px",borderRadius:5,border:"1px solid #ffd43b55",background:"#0d1117",color:"#ffd43b",fontSize:14,fontWeight:700,fontFamily:"'JetBrains Mono'",width:100,outline:"none",textAlign:"right"}}/>
-                    <span style={{fontSize:11,color:"#484f58"}}>원</span>
-                  </div>
-                </div>
-                <div style={{fontSize:10,color:"#484f58",marginTop:4}}>달러 자산 ↔ 원화 자동 환산에 사용</div>
-              </div>
-              {/* 💵 현금 */}
-              <div style={{background:"#161b22",borderRadius:8,padding:"10px 12px",marginBottom:6}}>
-                <div style={{fontSize:11,fontWeight:700,color:"#8b949e",marginBottom:6}}>💵 현금 (예비군)</div>
-                <div style={{display:"flex",gap:6,flexWrap:"wrap",alignItems:"flex-end"}}>
-                  <div style={{display:"flex",flexDirection:"column",gap:2,flex:1,minWidth:110}}>
-                    <span style={{fontSize:10,color:"#484f58"}}>원화 (₩)</span>
-                    <input type="text" inputMode="numeric" placeholder="0"
-                      value={draftVals.cashKRW}
-                      onChange={e=>onDraftChange('cashKRW',e.target.value)}
-                      onBlur={e=>onDraftBlur('cashKRW',e.target.value)}
-                      style={iSt}/>
-                  </div>
-                  <div style={{display:"flex",flexDirection:"column",gap:2,flex:1,minWidth:110}}>
-                    <span style={{fontSize:10,color:"#484f58"}}>달러 ($)</span>
-                    <input type="text" inputMode="numeric" placeholder="0"
-                      value={draftVals.cashUSD}
-                      onChange={e=>onDraftChange('cashUSD',e.target.value)}
-                      onBlur={e=>onDraftBlur('cashUSD',e.target.value)}
-                      style={iSt}/>
-                  </div>
-                  <div style={{display:"flex",flexDirection:"column",gap:2,minWidth:90}}>
-                    <span style={{fontSize:10,color:"#3fb950"}}>원화 환산</span>
-                    <span style={{padding:"6px 6px",fontSize:12,fontWeight:700,color:"#3fb950",fontFamily:"'JetBrains Mono'"}}>₩{Math.round((D.cashKRW||0)+(D.cashUSD||0)*fx).toLocaleString()}</span>
-                  </div>
-                </div>
-              </div>
-              {/* 📦 펀드/연금 */}
-              <div style={{background:"#161b22",borderRadius:8,padding:"10px 12px",marginBottom:6}}>
-                <div style={{fontSize:11,fontWeight:700,color:"#8b949e",marginBottom:6}}>📦 펀드 / 연금</div>
-                <div style={{display:"flex",gap:6,flexWrap:"wrap",alignItems:"flex-end"}}>
-                  <div style={{display:"flex",flexDirection:"column",gap:2,flex:1,minWidth:110}}>
-                    <span style={{fontSize:10,color:"#484f58"}}>원화 (₩)</span>
-                    <input type="text" inputMode="numeric" placeholder="0"
-                      value={draftVals.fundKRW}
-                      onChange={e=>onDraftChange('fundKRW',e.target.value)}
-                      onBlur={e=>onDraftBlur('fundKRW',e.target.value)}
-                      style={iSt}/>
-                  </div>
-                  <div style={{display:"flex",flexDirection:"column",gap:2,flex:1,minWidth:110}}>
-                    <span style={{fontSize:10,color:"#484f58"}}>달러 ($)</span>
-                    <input type="text" inputMode="numeric" placeholder="0"
-                      value={draftVals.fundUSD}
-                      onChange={e=>onDraftChange('fundUSD',e.target.value)}
-                      onBlur={e=>onDraftBlur('fundUSD',e.target.value)}
-                      style={iSt}/>
-                  </div>
-                  <div style={{display:"flex",flexDirection:"column",gap:2,minWidth:90}}>
-                    <span style={{fontSize:10,color:"#3fb950"}}>원화 환산</span>
-                    <span style={{padding:"6px 6px",fontSize:12,fontWeight:700,color:"#3fb950",fontFamily:"'JetBrains Mono'"}}>₩{Math.round((D.fundKRW||0)+(D.fundUSD||0)*fx).toLocaleString()}</span>
-                  </div>
-                </div>
-              </div>
-              {/* 🏠 기타 자산 */}
-              <div style={{background:"#161b22",borderRadius:8,padding:"10px 12px",marginBottom:6}}>
-                <div style={{fontSize:11,fontWeight:700,color:"#8b949e",marginBottom:6}}>🏠 기타 자산</div>
-                <div style={{display:"flex",gap:6,flexWrap:"wrap",alignItems:"flex-end"}}>
-                  <div style={{display:"flex",flexDirection:"column",gap:2,flex:1,minWidth:110}}>
-                    <span style={{fontSize:10,color:"#484f58"}}>원화 (₩)</span>
-                    <input type="text" inputMode="numeric" placeholder="0"
-                      value={draftVals.otherKRW}
-                      onChange={e=>onDraftChange('otherKRW',e.target.value)}
-                      onBlur={e=>onDraftBlur('otherKRW',e.target.value)}
-                      style={iSt}/>
-                  </div>
-                  <div style={{display:"flex",flexDirection:"column",gap:2,flex:1,minWidth:110}}>
-                    <span style={{fontSize:10,color:"#484f58"}}>달러 ($)</span>
-                    <input type="text" inputMode="numeric" placeholder="0"
-                      value={draftVals.otherUSD}
-                      onChange={e=>onDraftChange('otherUSD',e.target.value)}
-                      onBlur={e=>onDraftBlur('otherUSD',e.target.value)}
-                      style={iSt}/>
-                  </div>
-                  <div style={{display:"flex",flexDirection:"column",gap:2,minWidth:90}}>
-                    <span style={{fontSize:10,color:"#3fb950"}}>원화 환산</span>
-                    <span style={{padding:"6px 6px",fontSize:12,fontWeight:700,color:"#3fb950",fontFamily:"'JetBrains Mono'"}}>₩{Math.round((D.otherKRW||0)+(D.otherUSD||0)*fx).toLocaleString()}</span>
-                  </div>
-                </div>
-              </div>
+              <AGroup emoji="💵" label="현금 (예비군)" krwKey="cashKRW" usdKey="cashUSD" krwVal={draftVals.cashKRW} usdVal={draftVals.cashUSD}/>
+              <AGroup emoji="📦" label="펀드 / 연금" krwKey="fundKRW" usdKey="fundUSD" krwVal={draftVals.fundKRW} usdVal={draftVals.fundUSD}/>
+              <AGroup emoji="🏠" label="기타 자산" krwKey="otherKRW" usdKey="otherUSD" krwVal={draftVals.otherKRW} usdVal={draftVals.otherUSD}/>
               <div style={{background:"#161b22",borderRadius:8,padding:"10px 12px",marginBottom:6}}>
                 <div style={{fontSize:11,fontWeight:700,color:"#8b949e",marginBottom:4}}>📝 메모</div>
                 <textarea
