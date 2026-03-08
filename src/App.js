@@ -17,6 +17,149 @@ const fundGr=d=>d.d[4];const cfS=d=>d.x[0];const cfM=d=>d.x[1];const cfL=d=>d.x[
 const cfLbl=(v)=>v>=3?"강함":v>=2?"보통":"약함";
 const cfClr=(v)=>v>=3?"#3fb950":v>=2?"#d29922":"#f85149";
 
+/* ===== 섹터 추세 차트 (최상단 독립 컴포넌트 — 훅 규칙 준수) ===== */
+const SECTOR_COLORS=[
+  "#ff1744","#ff6d00","#ffd600","#00e676","#00b0ff",
+  "#d500f9","#f06292","#80cbc4","#ffb74d","#aed581",
+  "#4fc3f7","#ce93d8","#ef9a9a","#80deea","#ffe082",
+  "#c5e1a5","#b39ddb","#ff8a65","#90caf9","#a5d6a7","#fff176"
+];
+
+/* 등급 → 색상 */
+const VERDICT_COLOR=v=>{
+  if(!v)return"#484f58";
+  if(v.includes("최강"))return"#ff6b6b";
+  if(v.includes("매수"))return"#3fb950";
+  if(v.includes("관심"))return"#58a6ff";
+  if(v.includes("관망"))return"#ffd600";
+  return"#f85149";
+};
+
+function SectorChart({trendData,isMobile,onSectorNav,market}){
+  const[hoveredSector,setHoveredSector]=useState(null);
+  const[selectedSector,setSelectedSector]=useState(null);
+
+  if(!trendData||!trendData.data||trendData.data.length===0)
+    return <div style={{padding:20,textAlign:"center",color:"#484f58",fontSize:13}}>데이터 없음</div>;
+
+  const{data,sectors,ranking}=trendData;
+  const fmtDate=d=>d?d.slice(5):'';
+
+  /* 범례 클릭 → 메인탭 이동 */
+  const handleSectorClick=s=>{
+    if(onSectorNav) onSectorNav(s, market);
+  };
+
+  /* ── 차트 크기 ── */
+  const W=isMobile?340:700, H=isMobile?250:340;
+  const PAD={top:16,right:isMobile?62:84,bottom:32,left:isMobile?36:44};
+  const innerW=W-PAD.left-PAD.right, innerH=H-PAD.top-PAD.bottom;
+
+  /* ── Y축 범위 ── */
+  const allVals=data.flatMap(pt=>sectors.map(s=>pt[s]??null).filter(v=>v!==null));
+  const yMin=allVals.length?Math.floor(Math.min(...allVals)-0.5):-5;
+  const yMax=allVals.length?Math.ceil(Math.max(...allVals)+0.5):5;
+  const yRange=yMax-yMin||1;
+  const xScale=i=>(i/(data.length-1||1))*innerW;
+  const yScale=v=>innerH-((v-yMin)/yRange)*innerH;
+  const yTicks=[];
+  const step=yRange<=8?1:yRange<=16?2:yRange<=40?5:10;
+  for(let v=Math.ceil(yMin/step)*step;v<=yMax;v+=step)yTicks.push(v);
+
+  return <div>
+    {/* SVG 라인 차트 */}
+    <div style={{overflowX:"auto",WebkitOverflowScrolling:"touch"}}>
+    <svg width={W} height={H} style={{display:"block",margin:"0 auto"}}>
+      <g transform={`translate(${PAD.left},${PAD.top})`}>
+        {/* 배경 격자 */}
+        {yTicks.map(v=>(
+          <g key={v}>
+            <line x1={0} y1={yScale(v)} x2={innerW} y2={yScale(v)}
+              stroke={v===0?"#ffffff30":"#21262d"} strokeWidth={v===0?1.5:1}
+              strokeDasharray={v===0?"5,4":""}/>
+            <text x={-4} y={yScale(v)+4} textAnchor="end" fontSize={isMobile?8:10} fill="#484f58">{v}%</text>
+          </g>
+        ))}
+
+        {/* 섹터 라인 */}
+        {sectors.map((s,si)=>{
+          const color=SECTOR_COLORS[si%SECTOR_COLORS.length];
+          const isHov=hoveredSector===s;
+          let pathD='';
+          data.forEach((pt,i)=>{
+            if(pt[s]==null)return;
+            const x=xScale(i),y=yScale(pt[s]);
+            const prev=data[i-1];
+            if(i===0||prev==null||prev[s]==null)pathD+=`M${x},${y}`;
+            else pathD+=`L${x},${y}`;
+          });
+          if(!pathD)return null;
+          const lastPt=data[data.length-1];
+          const lastVal=lastPt?.[s];
+          const lastX=xScale(data.length-1);
+          const lastY=lastVal!=null?yScale(lastVal):null;
+          const opacity=hoveredSector&&!isHov?0.15:1;
+          return <g key={s}>
+            <path d={pathD} fill="none" stroke={color}
+              strokeWidth={isHov?3:1.5} opacity={opacity}
+              style={{transition:"all .18s"}}/>
+            {lastY!=null&&<>
+              <circle cx={lastX} cy={lastY} r={isHov?4:2}
+                fill={color} opacity={opacity}/>
+              <text x={lastX+6} y={lastY+4} fontSize={isMobile?8:9} fill={color}
+                opacity={hoveredSector&&!isHov?0.1:1} fontWeight={isHov?800:400}>
+                {lastVal>=0?"+":""}{lastVal?.toFixed(1)}%
+              </text>
+            </>}
+          </g>;
+        })}
+
+        {/* X축 날짜 */}
+        {data.map((pt,i)=>(
+          (i===0||i===data.length-1||i%2===0)&&
+          <text key={i} x={xScale(i)} y={innerH+20} textAnchor="middle"
+            fontSize={isMobile?8:10} fill="#484f58">
+            {fmtDate(pt.date)}
+          </text>
+        ))}
+        <line x1={0} y1={innerH} x2={innerW} y2={innerH} stroke="#21262d" strokeWidth={1}/>
+      </g>
+    </svg>
+    </div>
+
+    {/* 범례 + 수익률 순위 */}
+    <div style={{marginTop:10,display:"grid",gridTemplateColumns:isMobile?"1fr 1fr":"1fr 1fr 1fr",gap:4}}>
+      {(ranking||[]).map(({sector,ret})=>{
+        const colorIdx=sectors.indexOf(sector);
+        const color=SECTOR_COLORS[colorIdx%SECTOR_COLORS.length];
+        const retColor=ret>0?"#3fb950":ret<0?"#f85149":"#484f58";
+        const isHov=hoveredSector===sector;
+        return <div key={sector}
+          onClick={()=>handleSectorClick(sector)}
+          onMouseEnter={()=>setHoveredSector(sector)}
+          onMouseLeave={()=>setHoveredSector(null)}
+          style={{display:"flex",alignItems:"center",gap:6,padding:"5px 8px",
+            borderRadius:6,cursor:onSectorNav?"pointer":"default",
+            background:isHov?color+"18":"#161b22",
+            border:`1px solid ${isHov?color+"66":"#21262d"}`,
+            transition:"all .15s",userSelect:"none"}}>
+          <div style={{width:14,height:3,borderRadius:2,background:color,flexShrink:0}}/>
+          <div style={{flex:1,fontSize:isMobile?9:10,color:isHov?"#e6edf3":"#8b949e",
+            fontWeight:isHov?700:400,
+            overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{sector}</div>
+          <div style={{fontSize:isMobile?9:11,fontWeight:700,
+            fontFamily:"'JetBrains Mono'",color:retColor,flexShrink:0}}>
+            {ret>=0?"+":""}{ret.toFixed(1)}%
+          </div>
+        </div>;
+      })}
+    </div>
+    {onSectorNav&&<div style={{fontSize:9,color:"#484f58",marginTop:4,textAlign:"right"}}>
+      섹터 클릭 → 메인탭 해당 섹터 바로 이동
+    </div>}
+  </div>;
+}
+
 /* ===== 듀얼모멘텀 강화 분석 ===== */
 function getDualMomentum(d) {
   const r3m = d.r[0], r6m = d.r[1], secRank = d.r[2];
@@ -1091,6 +1234,16 @@ export default function Dashboard(){
   const[sentiTime,setSentiTime]=useState(()=>{
     try{return localStorage.getItem('senti_time')||'-';}catch(e){return'-';}
   });
+  /* 섹터 추세 데이터 */
+  const[TREND,setTREND]=useState(()=>{
+    try{const c=localStorage.getItem('sector_trend');return c?JSON.parse(c):{loaded:false};}catch(e){return{loaded:false};}
+  });
+  const[trendRt,setTrendRt]=useState("idle");
+  const[trendTime,setTrendTime]=useState(()=>{
+    try{return localStorage.getItem('sector_trend_time')||'-';}catch(e){return'-';}
+  });
+  const[trendMarket,setTrendMarket]=useState("kr");
+
   /* 등급 전환 이력 */
   const[gradeHistory,setGradeHistory]=useState(()=>{
     try{return JSON.parse(localStorage.getItem('grade_history')||'{}');}catch(e){return{};}
@@ -1457,6 +1610,43 @@ export default function Dashboard(){
     setTimeout(()=>setSentiRt("idle"),4000);
   },[log,sentiRt]);
 
+  /* ============ 섹터 추세 갱신 ============ */
+  const doSectorTrend=useCallback(async()=>{
+    if(trendRt==="fetching")return;
+    setTrendRt("fetching");
+    log("📊 섹터 주간 추세 갱신 시작 (한국+미국)","if");
+    try{
+      // stocks 데이터에서 score 포함해서 전달
+      const payload=stocks.map(d=>{
+        const vd=getVerdict(d);
+        return {t:d.t,n:d.n,k:!!d.k,s:d.s,score:vd.totalPt,verdict:vd.verdict};
+      });
+      const resp=await fetch("/api/sectorTrend",{
+        method:"POST",
+        headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({stocks:payload}),
+        signal:AbortSignal.timeout(120000)
+      });
+      if(!resp.ok)throw new Error("API "+resp.status);
+      const json=await resp.json();
+      if(!json.kr||!json.us)throw new Error("No data");
+      const newTREND={...json,loaded:true};
+      setTREND(newTREND);
+      try{
+        localStorage.setItem('sector_trend',JSON.stringify(newTREND));
+        const ts=new Date().toLocaleString("ko");
+        localStorage.setItem('sector_trend_time',ts);
+        setTrendTime(ts);
+      }catch(e){}
+      log(`📊 섹터 추세 완료! 한국 ${json.kr.sectors?.length}섹터, 미국 ${json.us.sectors?.length}섹터`,"ok");
+      setTrendRt("done");
+    }catch(e){
+      log(`❌ 섹터 추세 실패: ${e.message}`,"er");
+      setTrendRt("error");
+    }
+    setTimeout(()=>setTrendRt("idle"),4000);
+  },[log,trendRt,stocks]);
+
   /* ============ Filter & Sort ============ */
   const sectors=useMemo(()=>[...new Set(stocks.map(d=>d.s))].sort(),[stocks]);
   const filtered=useMemo(()=>stocks.filter(d=>{
@@ -1616,7 +1806,7 @@ export default function Dashboard(){
       {/* Tab Nav */}
       <div className="tab-nav" style={{maxWidth:1800,margin:"6px auto",padding:"0 20px"}}>
         <div style={{display:"flex",gap:4,overflowX:"auto",WebkitOverflowScrolling:"touch",paddingBottom:2,scrollbarWidth:"none"}}>
-          {[["main",isMobile?"📊":"📊 메인"],["watch",isMobile?("👁"+watchlist.length):("👁 워치("+watchlist.length+")")],["port",isMobile?"💼":"💼 보유종목"],["filter",isMobile?"🌐":"🌐 시장필터"],["calc",isMobile?"🧮":"🧮 포지션"],["check",isMobile?"✅":"✅ 체크리스트"]].map(([k,l])=>
+          {[["main",isMobile?"📊":"📊 메인"],["watch",isMobile?("👁"+watchlist.length):("👁 워치("+watchlist.length+")")],["port",isMobile?"💼":"💼 보유종목"],["filter",isMobile?"🌐":"🌐 시장필터"],["calc",isMobile?"🧮":"🧮 포지션"],["check",isMobile?"✅":"✅ 체크리스트"],["content",isMobile?"📝":"📝 콘텐츠"]].map(([k,l])=>
             <Tb key={k} label={l} active={tab===k} onClick={()=>setTab(k)}/>
           )}
         </div>
@@ -1808,6 +1998,56 @@ export default function Dashboard(){
               </div>;
             })()}
           </div>
+        </div>
+
+        {/* ============ 섹터 주간 수익률 추세 ============ */}
+        <div style={{background:"#0d1117",border:"1px solid #21262d",borderRadius:10,padding:14,marginTop:10}}>
+          {/* 헤더 + 갱신 버튼 */}
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
+            <div>
+              <div style={{fontSize:16,fontWeight:800,color:"#ffd43b"}}>📊 섹터별 주간 수익률 추세</div>
+              <div style={{fontSize:10,color:"#484f58",marginTop:2}}>
+                섹터당 점수 TOP 3 종목 평균 · 최근 10거래일 기준
+                {trendTime!=='-'&&<span style={{marginLeft:8}}>갱신: {trendTime}</span>}
+              </div>
+            </div>
+            <button onClick={doSectorTrend} disabled={trendRt==="fetching"}
+              style={{padding:"6px 14px",borderRadius:6,border:"1px solid #ffd43b",
+                background:trendRt==="fetching"?"#ffd43b25":"#ffd43b12",
+                color:"#ffd43b",cursor:trendRt==="fetching"?"wait":"pointer",
+                fontSize:12,fontWeight:700,whiteSpace:"nowrap"}}>
+              {trendRt==="fetching"?"⏳ 분석중...":trendRt==="done"?"✅ 완료":"📊 추세 갱신"}
+            </button>
+          </div>
+
+          {!TREND.loaded && <div style={{textAlign:"center",padding:30,color:"#484f58",fontSize:13}}>
+            ⏳ 추세 갱신 버튼을 누르면 한국/미국 섹터별 10거래일 수익률을 가져옵니다.<br/>
+            <span style={{fontSize:11}}>섹터당 점수 TOP 3 종목을 자동 선정합니다 (약 1~2분)</span>
+          </div>}
+
+          {TREND.loaded && <div>
+            <div style={{display:"flex",gap:8,marginBottom:12}}>
+              {[["kr","🇰🇷 한국"],["us","🇺🇸 미국"]].map(([k,l])=>(
+                <button key={k} onClick={()=>setTrendMarket(k)}
+                  style={{padding:"6px 16px",borderRadius:6,fontSize:12,fontWeight:700,cursor:"pointer",
+                    border:"1px solid "+(trendMarket===k?"#ffd43b":"#21262d"),
+                    background:trendMarket===k?"#ffd43b15":"#161b22",
+                    color:trendMarket===k?"#ffd43b":"#8b949e"}}>
+                  {l}
+                </button>
+              ))}
+              <span style={{fontSize:10,color:"#484f58",alignSelf:"center",marginLeft:4}}>
+                {trendMarket==="kr"
+                  ?`${TREND.kr?.sectors?.length||0}개 섹터 · ${TREND.kr?.dates?.length||0}거래일`
+                  :`${TREND.us?.sectors?.length||0}개 섹터 · ${TREND.us?.dates?.length||0}거래일`}
+              </span>
+            </div>
+            <SectorChart
+              trendData={trendMarket==="kr"?TREND.kr:TREND.us}
+              isMobile={isMobile}
+              market={trendMarket}
+              onSectorNav={(s,mkt)=>{setMk(mkt);setSec(s);}}/>
+          </div>}
         </div>
       </div>}
 
@@ -2826,6 +3066,451 @@ export default function Dashboard(){
         </table>
         {sorted.length===0 && <div style={{textAlign:"center",padding:30,color:"#484f58",fontSize:14}}>결과 없음</div>}
       </div>}
+
+      {/* ============ 콘텐츠 자동생성기 탭 ============ */}
+      {tab==="content" && (()=>{
+        const today=new Date();
+        const dateStr=`${today.getFullYear()}.${String(today.getMonth()+1).padStart(2,'0')}.${String(today.getDate()).padStart(2,'0')}`;
+        const LINE="─────────────────────";
+
+        /* ─── 데이터 계산 ─── */
+        const all=stocks.map(d=>({d,vd:getVerdict(d),dm:getDualMomentum(d)}));
+
+        const buyNow=all.filter(({vd,d})=>vd.totalPt>=80&&(vd.details.volPt>=9||['성숙🔥','성숙','돌파✅'].includes(vcpMt(d))))
+          .sort((a,b)=>b.vd.totalPt-a.vd.totalPt).slice(0,5);
+        const soonBreak=all.filter(({vd,d})=>vd.totalPt>=60&&vd.totalPt<85&&['형성중','성숙','성숙🔥'].includes(vcpMt(d))&&Math.abs(vcpPx(d))<=10)
+          .sort((a,b)=>Math.abs(vcpPx(a.d))-Math.abs(vcpPx(b.d))).slice(0,5);
+        const silent=all.filter(({vd,d,dm})=>seTt(d)>=7&&dm.signalScore>=7&&vd.totalPt>=55&&vd.totalPt<80&&vd.details.volPt>=4&&vd.details.volPt<=8)
+          .sort((a,b)=>b.vd.totalPt-a.vd.totalPt).slice(0,4);
+        const tripleGreen=all.filter(({d})=>{
+          const ind=d._indicators;if(!ind)return false;
+          return ind.bb.signal==='squeeze'&&['golden','bullish'].includes(ind.macd.signal)&&['accumulation','confirm'].includes(ind.obv.signal);
+        }).sort((a,b)=>b.vd.totalPt-a.vd.totalPt).slice(0,4);
+
+        /* 등급 분포 */
+        const gradeDist={최강:0,매수:0,관심:0,관망:0,위험:0};
+        all.forEach(({vd})=>{
+          if(vd.totalPt>=80)gradeDist.최강++;
+          else if(vd.totalPt>=65)gradeDist.매수++;
+          else if(vd.totalPt>=50)gradeDist.관심++;
+          else if(vd.totalPt>=35)gradeDist.관망++;
+          else gradeDist.위험++;
+        });
+        const bullRatio=Math.round((gradeDist.최강+gradeDist.매수)/all.length*100);
+        const prevBullRatio=bullRatio; // 히스토리 없으면 동일값
+
+        /* 섹터 평균 점수 */
+        const sectorMap={};
+        all.forEach(({d,vd})=>{if(!sectorMap[d.s])sectorMap[d.s]={sum:0,cnt:0};sectorMap[d.s].sum+=vd.totalPt;sectorMap[d.s].cnt++;});
+        const sectorAvg=Object.entries(sectorMap).map(([s,v])=>({s,avg:Math.round(v.sum/v.cnt)})).sort((a,b)=>b.avg-a.avg);
+        const topSectors=sectorAvg.slice(0,3);
+        const botSectors=sectorAvg.slice(-3).reverse();
+
+        /* 한국/미국 분리 */
+        const krAll=all.filter(({d})=>d.k);
+        const usAll=all.filter(({d})=>!d.k);
+        const krBull=krAll.filter(({vd})=>vd.totalPt>=65).length;
+        const usBull=usAll.filter(({vd})=>vd.totalPt>=65).length;
+
+        /* ─── 종목 설명 생성기 ─── */
+        const getStockDesc=(d,vd)=>{
+          const lines=[];
+          const vol=d._volData;
+          const ind=d._indicators;
+          // 추세 설명
+          const sepaOk=seTt(d)>=7;
+          const dm=getDualMomentum(d);
+          if(sepaOk&&dm.signalScore>=8)lines.push("상승 추세가 탄탄하고 시장 대비 강한 흐름을 보이고 있습니다.");
+          else if(sepaOk)lines.push("중장기 상승 추세가 유지되고 있습니다.");
+          else if(dm.signalScore>=8)lines.push("시장 대비 강한 모멘텀이 이어지고 있습니다.");
+          // 거래량 설명
+          if(vol&&vol.signalType==='buy'){
+            const isAccum=vol.signal&&vol.signal.includes('매집');
+            if(isAccum)lines.push("기관·세력의 조용한 매집이 감지됩니다.");
+            else lines.push("거래량이 수반된 건강한 상승세입니다.");
+          }
+          // VCP 설명
+          const vm=vcpMt(d);
+          if(vm.includes('성숙'))lines.push("변동성 수축이 완성된 상태 — 진입 타이밍에 가깝습니다.");
+          else if(vm==='돌파✅')lines.push("이미 돌파가 시작되었습니다. 추격 진입 시 리스크 확인 필수.");
+          else if(vm==='형성중'){
+            const px=vcpPx(d);
+            lines.push(`조용히 에너지를 모으는 중. 돌파 기준선까지 ${Math.abs(px).toFixed(1)}% 남았습니다.`);
+          }
+          // 보조지표
+          if(ind){
+            if(ind.macd.signal==='golden')lines.push("단기 모멘텀 지표(MACD)가 상승 전환했습니다.");
+            if(ind.obv.signal==='accumulation')lines.push("스마트머니(큰손)가 조용히 사들이는 패턴이 보입니다.");
+            if(ind.bb.signal==='squeeze')lines.push("가격 변동폭이 극도로 좁아져 큰 움직임이 임박했습니다.");
+          }
+          return lines.slice(0,2).join(' ');
+        };
+
+        /* ─── ① Threads용 추천 종목 ─── */
+        /* ─── 가격 정보 한 줄 생성기 ─── */
+        const getPriceLine=(d)=>{
+          const cur=d.p||0;
+          const entry=d.q&&d.q[0]?d.q[0]:vcpPv(d)||cur;
+          const stop=d.q&&d.q[1]?d.q[1]:entry*0.93;
+          const t1=d.q&&d.q[2]?d.q[2]:entry*1.15;
+          const t2=d.q&&d.q[3]?d.q[3]:entry*1.30;
+          const fmt=(v)=>d.k?`₩${Math.round(v).toLocaleString()}`:`$${v.toFixed(2)}`;
+          if(!cur)return '';
+          return `현재가 ${fmt(cur)}  |  손절 ${fmt(stop)}  |  1차 ${fmt(t1)}  |  2차 ${fmt(t2)}`;
+        };
+
+        const genRecommend=()=>{
+          const flag=d=>d.k?'🇰🇷':'🇺🇸';
+          let txt='';
+          txt+=`📰 오늘의 주목 종목 | ${dateStr}\n\n`;
+          txt+=`289개 종목을 멀티팩터 엔진으로 분석한 결과,\n오늘 가장 힘 있는 종목들을 추렸습니다.\n\n`;
+
+          if(buyNow.length>0){
+            txt+=`${LINE}\n`;
+            txt+=`🔥 지금 들어가도 되는 종목\n\n`;
+            buyNow.forEach(({d,vd})=>{
+              txt+=`${flag(d)} ${d.n}\n`;
+              const desc=getStockDesc(d,vd);
+              if(desc)txt+=`→ ${desc}\n`;
+              const pl=getPriceLine(d);
+              if(pl)txt+=`   ${pl}\n`;
+              txt+='\n';
+            });
+          }
+
+          if(soonBreak.length>0){
+            txt+=`${LINE}\n`;
+            txt+=`👀 곧 터질 것 같은 종목\n\n`;
+            soonBreak.forEach(({d,vd})=>{
+              const px=vcpPx(d);
+              txt+=`${flag(d)} ${d.n}\n`;
+              txt+=`→ 조용히 에너지를 모으는 중입니다.\n`;
+              txt+=`   돌파 기준선까지 ${Math.abs(px).toFixed(1)}% 남았습니다.\n`;
+              const pl=getPriceLine(d);
+              if(pl)txt+=`   ${pl}\n`;
+              txt+='\n';
+            });
+          }
+
+          if(silent.length>0){
+            txt+=`${LINE}\n`;
+            txt+=`📈 아직 주목받지 못한 강자\n\n`;
+            silent.forEach(({d,vd,dm})=>{
+              txt+=`${flag(d)} ${d.n}\n`;
+              txt+=`→ 상승 추세는 탄탄하지만 아직 시장의 관심이 덜합니다.\n`;
+              if(dm.r3m)txt+=`   최근 3개월 수익률이 시장 평균을 웃돌고 있습니다.\n`;
+              const pl=getPriceLine(d);
+              if(pl)txt+=`   ${pl}\n`;
+              txt+='\n';
+            });
+          }
+
+          if(tripleGreen.length>0){
+            txt+=`${LINE}\n`;
+            txt+=`🎯 모든 보조지표가 초록불인 종목\n\n`;
+            tripleGreen.forEach(({d,vd})=>{
+              txt+=`${flag(d)} ${d.n}\n`;
+              txt+=`→ 가격 수축 + 매수 전환 + 큰손 매집이 동시에 포착됩니다.\n`;
+              const pl=getPriceLine(d);
+              if(pl)txt+=`   ${pl}\n`;
+              txt+='\n';
+            });
+          }
+
+          txt+=`${LINE}\n`;
+          txt+=`💡 이 분석은 참고용입니다.\n`;
+          txt+=`   투자 결정은 반드시 본인 판단으로 하세요.\n\n`;
+          txt+=`#주식 #오늘의추천종목 #주식투자 #한국주식 #미국주식`;
+          return txt;
+        };
+
+        /* ─── ② Threads용 시황 분석 ─── */
+        const genMarket=()=>{
+          // 시장 전반 판단
+          const marketMood=bullRatio>=50?'강세':'약세';
+          const moodEmoji=bullRatio>=60?'🟢':bullRatio>=40?'🟡':'🔴';
+          const moodDesc=bullRatio>=60?'매수 신호 종목이 절반을 넘었습니다. 공격적 접근이 유효한 구간입니다.':
+            bullRatio>=40?'매수와 관망이 혼재하는 중립 구간입니다. 종목 선별이 핵심입니다.':
+            '시장 전반이 약세입니다. 현금 비중을 높이고 강한 종목만 압축 대응하세요.';
+
+          let txt='';
+          txt+=`📰 오늘의 시장 시황 | ${dateStr}\n\n`;
+          txt+=`매일 289개 종목을 분석해 시장의 온도를 측정합니다.\n\n`;
+
+          txt+=`${LINE}\n`;
+          txt+=`${moodEmoji} 지금 시장 온도 — ${marketMood}\n\n`;
+          txt+=`매수 신호 이상 종목 비율: ${bullRatio}%\n`;
+          txt+=`(${gradeDist.최강+gradeDist.매수}개 종목 / 전체 ${all.length}개)\n\n`;
+          txt+=`${moodDesc}\n\n`;
+
+          txt+=`${LINE}\n`;
+          txt+=`🌐 한국 · 미국 비교\n\n`;
+          txt+=`🇰🇷 한국 ${krAll.length}종목 중 매수이상 ${krBull}개 (${Math.round(krBull/krAll.length*100)}%)\n`;
+          txt+=`🇺🇸 미국 ${usAll.length}종목 중 매수이상 ${usBull}개 (${Math.round(usBull/usAll.length*100)}%)\n\n`;
+
+          txt+=`${LINE}\n`;
+          txt+=`💪 지금 가장 강한 섹터\n\n`;
+          topSectors.forEach(({s,avg},i)=>{
+            const rank=['1위','2위','3위'][i];
+            txt+=`${rank}  ${s}\n`;
+          });
+          txt+='\n';
+
+          txt+=`📉 힘을 못 쓰는 섹터\n\n`;
+          botSectors.forEach(({s,avg})=>{
+            txt+=`  ${s}\n`;
+          });
+          txt+='\n';
+
+          if(MKT.loaded){
+            txt+=`${LINE}\n`;
+            txt+=`📊 글로벌 지표\n\n`;
+            const vixDesc=MKT.vix<15?'매우 낮음(안심 구간)':MKT.vix<20?'낮음(정상)':MKT.vix<25?'보통':MKT.vix<30?'높음(주의)':'매우 높음(공포)';
+            txt+=`S&P 500(SPY) 12M: ${MKT.spy12m>0?'+':''}${MKT.spy12m}%\n`;
+            txt+=`공포지수(VIX): ${MKT.vix} → ${vixDesc}\n`;
+            txt+=`시장 모드: ${MKT.health?.mode}\n\n`;
+          }
+
+          txt+=`${LINE}\n`;
+          txt+=`💡 강한 섹터 안에서 종목을 고르는 것이\n`;
+          txt+=`   승률을 높이는 가장 쉬운 방법입니다.\n\n`;
+          txt+=`#주식시황 #오늘의시황 #섹터분석 #주식투자`;
+          return txt;
+        };
+
+        /* ─── Canvas 카드 이미지 생성 ─── */
+        const genCanvas=(type,text,canvasRef)=>{
+          const canvas=canvasRef.current;if(!canvas)return;
+          const ctx=canvas.getContext('2d');
+          const W=600;
+          // 텍스트 줄 수 기반 높이 자동 계산
+          const lines=text.split('\n');
+          const H=Math.min(Math.max(lines.length*19+80,400),860);
+          canvas.width=W;canvas.height=H;
+
+          // 배경 그라디언트
+          const bg=ctx.createLinearGradient(0,0,0,H);
+          bg.addColorStop(0,'#07090f');bg.addColorStop(1,'#0d1525');
+          ctx.fillStyle=bg;ctx.fillRect(0,0,W,H);
+
+          // 좌측 컬러바
+          const barColor=type==='market'?'#58a6ff':'#ff1744';
+          const barGrad=ctx.createLinearGradient(0,0,0,H);
+          barGrad.addColorStop(0,barColor);barGrad.addColorStop(1,barColor+'44');
+          ctx.fillStyle=barGrad;ctx.fillRect(0,0,4,H);
+
+          // 헤더 구분선
+          ctx.fillStyle='#161b22';ctx.fillRect(0,0,W,38);
+          ctx.fillStyle='#21262d';ctx.fillRect(0,38,W,1);
+
+          // 로고
+          ctx.fillStyle='#484f58';ctx.font='bold 10px "Helvetica Neue", sans-serif';
+          ctx.fillText('DUAL ENGINE PRO',14,24);
+          // 날짜 우측 정렬
+          ctx.textAlign='right';ctx.fillText(dateStr,W-14,24);ctx.textAlign='left';
+
+          // 텍스트 렌더링
+          let y=58;
+          lines.forEach(line=>{
+            if(y>H-20)return;
+            if(!line.trim()){y+=9;return;}
+
+            const isSep=line.startsWith('─');
+            const isTitle=line.startsWith('📰');
+            const isSection=line.match(/^[🔥👀📈🎯🌐💪📉📊🟢🟡🔴💡]/u);
+            const isBullet=line.startsWith('→')||line.startsWith('   ');
+            const isTag=line.startsWith('#');
+            const isFlag=line.startsWith('🇰🇷')||line.startsWith('🇺🇸');
+
+            if(isSep){
+              ctx.strokeStyle='#21262d';ctx.lineWidth=1;
+              ctx.beginPath();ctx.moveTo(14,y-4);ctx.lineTo(W-14,y-4);ctx.stroke();
+              y+=10;return;
+            }
+            if(isTitle){
+              ctx.font='bold 16px "Helvetica Neue", sans-serif';
+              ctx.fillStyle='#e6edf3';
+            }else if(isSection){
+              ctx.font='bold 13px "Helvetica Neue", sans-serif';
+              ctx.fillStyle=barColor;
+            }else if(isFlag){
+              ctx.font='bold 12px "Helvetica Neue", sans-serif';
+              ctx.fillStyle='#e6edf3';
+            }else if(isBullet){
+              ctx.font='12px "Helvetica Neue", sans-serif';
+              ctx.fillStyle='#8b949e';
+            }else if(isTag){
+              ctx.font='10px "Helvetica Neue", sans-serif';
+              ctx.fillStyle='#30363d';
+            }else{
+              ctx.font='12px "Helvetica Neue", sans-serif';
+              ctx.fillStyle='#c9d1d9';
+            }
+            const maxW=W-28;
+            // 긴 줄 자동 줄바꿈
+            const words=line;
+            if(ctx.measureText(words).width>maxW){
+              const half=Math.floor(words.length*maxW/ctx.measureText(words).width);
+              ctx.fillText(words.slice(0,half),14,y);y+=17;
+              ctx.fillText(words.slice(half),14,y);
+            }else{
+              ctx.fillText(words,14,y);
+            }
+            y+=isTitle?22:isSection?20:isTag?16:17;
+          });
+        };
+
+        /* ─── ContentTabInner 컴포넌트 ─── */
+        const ContentTabInner=()=>{
+          const [ctype,setCtype]=useState('recommend');
+          const [copied,setCopied]=useState(false);
+          const canvasRef=useRef(null);
+
+          const texts={recommend:genRecommend(),market:genMarket()};
+          const curText=texts[ctype];
+
+          const doCopy=()=>{
+            navigator.clipboard.writeText(curText).then(()=>{setCopied(true);setTimeout(()=>setCopied(false),2500);});
+          };
+
+          useEffect(()=>{setTimeout(()=>{if(canvasRef.current)genCanvas(ctype,curText,canvasRef);},50);},[ctype]);
+
+          const doSaveImage=()=>{
+            if(!canvasRef.current)return;
+            genCanvas(ctype,curText,canvasRef);
+            setTimeout(()=>{
+              const a=document.createElement('a');
+              a.download=`dual_engine_${ctype}_${dateStr.replace(/\./g,'')}.png`;
+              a.href=canvasRef.current.toDataURL('image/png');a.click();
+            },100);
+          };
+
+          const typeConfig={
+            recommend:{icon:'🔥',label:'오늘의 추천 종목',color:'#ff1744',
+              sub:'매수 신호 종목을 뉴스레터 형식으로 정리',
+              count:`${buyNow.length+soonBreak.length+silent.length+tripleGreen.length}개 종목`},
+            market:{icon:'📈',label:'시황 분석',color:'#58a6ff',
+              sub:'시장 온도·섹터 강약·글로벌 지표 요약',
+              count:`${all.length}개 종목 기반`},
+          };
+
+          return <div style={{maxWidth:1800,margin:"0 auto",padding:"6px 20px"}}>
+            <div style={{background:"#0d1117",border:"1px solid #21262d",borderRadius:10,padding:16}}>
+
+              {/* 헤더 */}
+              <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:4}}>
+                <div style={{fontSize:16,fontWeight:800,color:"#bc8cff"}}>📝 Threads 콘텐츠 생성기</div>
+                <div style={{fontSize:10,padding:"2px 8px",borderRadius:10,background:"#bc8cff15",color:"#bc8cff",border:"1px solid #bc8cff33"}}>뉴스레터형</div>
+              </div>
+              <div style={{fontSize:11,color:"#484f58",marginBottom:16}}>분석 데이터를 일반 독자가 읽기 쉬운 뉴스레터 형식으로 자동 변환합니다.</div>
+
+              {/* 타입 선택 카드 */}
+              <div style={{display:"flex",gap:10,marginBottom:18,flexWrap:"wrap"}}>
+                {Object.entries(typeConfig).map(([k,cfg])=>(
+                  <button key={k} onClick={()=>setCtype(k)}
+                    style={{flex:1,minWidth:isMobile?'100%':200,padding:"12px 16px",borderRadius:10,
+                      border:`1.5px solid ${ctype===k?cfg.color:"#21262d"}`,
+                      background:ctype===k?`linear-gradient(135deg,${cfg.color}18,${cfg.color}08)`:"#161b22",
+                      cursor:"pointer",textAlign:"left",transition:"all .2s",outline:"none"}}>
+                    <div style={{fontSize:15,fontWeight:800,color:ctype===k?cfg.color:"#8b949e",marginBottom:3}}>{cfg.icon} {cfg.label}</div>
+                    <div style={{fontSize:10,color:"#484f58",marginBottom:4}}>{cfg.sub}</div>
+                    <div style={{fontSize:10,fontFamily:"'JetBrains Mono'",color:ctype===k?cfg.color+"99":"#333",fontWeight:700}}>{cfg.count}</div>
+                  </button>
+                ))}
+              </div>
+
+              {/* 메인 2컬럼 */}
+              <div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"1fr 1fr",gap:16,alignItems:"start"}}>
+
+                {/* 왼쪽: 텍스트 */}
+                <div>
+                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
+                    <div style={{fontSize:11,fontWeight:700,color:"#8b949e"}}>Threads 포스팅 텍스트</div>
+                    <button onClick={doCopy}
+                      style={{display:"flex",alignItems:"center",gap:5,padding:"6px 14px",borderRadius:6,
+                        border:`1px solid ${copied?"#3fb950":"#58a6ff"}`,
+                        background:copied?"#3fb95018":"#58a6ff15",
+                        color:copied?"#3fb950":"#58a6ff",cursor:"pointer",fontSize:12,fontWeight:700,transition:"all .2s"}}>
+                      {copied?"✅ 복사 완료!":"📋 복사하기"}
+                    </button>
+                  </div>
+                  <div style={{position:"relative"}}>
+                    <pre style={{background:"#0a0d16",border:`1px solid ${typeConfig[ctype].color}22`,borderRadius:10,
+                      padding:"14px 16px",fontSize:12.5,color:"#e6edf3",
+                      fontFamily:'"Pretendard","Apple SD Gothic Neo","Malgun Gothic",sans-serif',
+                      lineHeight:1.8,whiteSpace:"pre-wrap",wordBreak:"break-word",
+                      maxHeight:isMobile?380:520,overflowY:"auto",margin:0}}>
+                      {curText}
+                    </pre>
+                    {/* 글자수 */}
+                    <div style={{position:"absolute",bottom:8,right:10,fontSize:9,color:"#484f58",fontFamily:"'JetBrains Mono'"}}>
+                      {curText.length}자
+                    </div>
+                  </div>
+                  <div style={{marginTop:6,fontSize:10,color:"#484f58"}}>
+                    💡 위 텍스트를 복사해 Threads에 바로 붙여넣기 하세요.
+                  </div>
+                </div>
+
+                {/* 오른쪽: 이미지 카드 */}
+                <div>
+                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
+                    <div style={{fontSize:11,fontWeight:700,color:"#8b949e"}}>카드 이미지 미리보기</div>
+                    <button onClick={doSaveImage}
+                      style={{display:"flex",alignItems:"center",gap:5,padding:"6px 14px",borderRadius:6,
+                        border:"1px solid #bc8cff",background:"#bc8cff15",color:"#bc8cff",
+                        cursor:"pointer",fontSize:12,fontWeight:700}}>
+                      ⬇ PNG 저장
+                    </button>
+                  </div>
+                  <div style={{background:"#0a0d16",border:"1px solid #21262d",borderRadius:10,padding:12,
+                    display:"flex",justifyContent:"center",minHeight:160,overflow:"hidden"}}>
+                    <canvas ref={canvasRef} style={{maxWidth:"100%",borderRadius:8,boxShadow:"0 6px 24px rgba(0,0,0,.6)"}}/>
+                  </div>
+                  <div style={{marginTop:6,fontSize:10,color:"#484f58",textAlign:"center"}}>PNG 이미지로 저장 → SNS 업로드</div>
+                </div>
+              </div>
+
+              {/* 하단: 현황 요약 바 */}
+              <div style={{marginTop:18,background:"#0a0d16",borderRadius:10,padding:"12px 16px",border:"1px solid #21262d"}}>
+                <div style={{fontSize:11,fontWeight:700,color:"#8b949e",marginBottom:10}}>📊 오늘 시장 현황 ({dateStr} 기준)</div>
+                <div style={{display:"grid",gridTemplateColumns:isMobile?"1fr 1fr":"repeat(5,1fr)",gap:8,marginBottom:12}}>
+                  {[
+                    {label:"🔥 최강",val:gradeDist.최강,color:"#ff1744"},
+                    {label:"🟢 매수",val:gradeDist.매수,color:"#3fb950"},
+                    {label:"🔵 관심",val:gradeDist.관심,color:"#448aff"},
+                    {label:"🟡 관망",val:gradeDist.관망,color:"#ffd600"},
+                    {label:"⛔ 위험",val:gradeDist.위험,color:"#78909c"},
+                  ].map(({label,val,color})=>(
+                    <div key={label} style={{textAlign:"center",background:"#161b22",borderRadius:8,padding:"8px 6px",border:`1px solid ${color}22`}}>
+                      <div style={{fontSize:9,color:"#484f58",marginBottom:2}}>{label}</div>
+                      <div style={{fontSize:22,fontWeight:900,color,fontFamily:"'JetBrains Mono'",lineHeight:1}}>{val}</div>
+                      <div style={{fontSize:9,color:"#484f58",marginTop:1}}>{Math.round(val/all.length*100)}%</div>
+                    </div>
+                  ))}
+                </div>
+                {/* 섹터 강도 바 차트 */}
+                <div style={{fontSize:10,fontWeight:700,color:"#8b949e",marginBottom:6}}>섹터별 평균 점수</div>
+                <div style={{display:"grid",gap:5}}>
+                  {sectorAvg.slice(0,8).map(({s,avg})=>{
+                    const color=avg>=65?"#3fb950":avg>=50?"#58a6ff":avg>=35?"#ffd600":"#f85149";
+                    return <div key={s} style={{display:"flex",alignItems:"center",gap:8}}>
+                      <div style={{width:isMobile?72:130,fontSize:10,color:"#8b949e",textAlign:"right",flexShrink:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{s}</div>
+                      <div style={{flex:1,height:14,background:"#161b22",borderRadius:3,overflow:"hidden",position:"relative"}}>
+                        <div style={{height:"100%",width:avg+"%",background:`linear-gradient(90deg,${color}44,${color}88)`,borderRadius:3,transition:"width .4s"}}/>
+                        <div style={{position:"absolute",left:6,top:0,height:"100%",display:"flex",alignItems:"center",fontSize:9,color,fontWeight:700,fontFamily:"'JetBrains Mono'"}}>{avg}</div>
+                      </div>
+                    </div>;
+                  })}
+                </div>
+              </div>
+
+            </div>
+          </div>;
+        };
+
+        return <ContentTabInner/>;
+      })()}
 
       {/* 상세분석 모달 */}
       {showDetail && <StockDetailModal key={detailStock?.t} stock={detailStock} onClose={()=>setShowDetail(false)} isWatched={watchlist.includes(detailStock?.t)} onToggleWatch={toggleWatch} gradeHistory={gradeHistory} onCalcPosition={(s)=>{
