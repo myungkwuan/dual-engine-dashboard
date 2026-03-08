@@ -1920,7 +1920,7 @@ export default function Dashboard(){
   /* ============ RENDER ============ */
   return(
     <>
-    <div style={{background:"#06080d",color:"#e6edf3",minHeight:"100vh",fontFamily:"'Noto Sans KR',system-ui,sans-serif"}} suppressHydrationWarning>
+    <div style={{background:"#06080d",color:"#e6edf3",minHeight:"100vh",fontFamily:"'Noto Sans KR',system-ui,sans-serif",overflowX:"hidden"}} suppressHydrationWarning>
       {/* Header */}
       <div className="dash-header" style={{background:"linear-gradient(135deg,#0d1117,#161b22,#0d1117)",borderBottom:"1px solid #21262d",padding:"12px 20px"}}>
         <div style={{maxWidth:1800,margin:"0 auto",display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap",gap:8}}>
@@ -3824,7 +3824,7 @@ export default function Dashboard(){
             </div>
           );
         };
-        return <div style={{width:"100%",padding:isMobile?"10px 12px":"16px 24px",boxSizing:"border-box",maxWidth:960,margin:"0 auto"}}>
+        return <div style={{width:"100%",padding:isMobile?"10px 12px":"16px 24px",boxSizing:"border-box",maxWidth:960,margin:"0 auto",overflowX:"hidden"}}>
           <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:4}}>
             <div style={{fontSize:isMobile?16:20,fontWeight:900,color:"#e6edf3"}}>💰 자산관리</div>
             {/* 환율 인라인 */}
@@ -3857,47 +3857,37 @@ export default function Dashboard(){
               </div>
               <div style={{fontSize:10,color:"#484f58"}}>🟢 미국/한국주식은 보유종목 탭에서 자동 계산</div>
             </div>
-            {/* 오른쪽: 현황 */}
+            {/* 오른쪽: 현황 — 모바일에서 입력 아래 배치됨 */}
             <div>
-              {/* 자산 현황 테이블 */}
+              {/* 자산 현황 — 모바일: 카드형, PC: 테이블형 */}
               <div style={{background:"#0d1117",border:"1px solid #21262d",borderRadius:10,padding:12,marginBottom:10}}>
-                <div style={{fontSize:13,fontWeight:800,color:"#e6edf3",marginBottom:10}}>📊 전체 자산 현황</div>
-                <table style={{width:"100%",borderCollapse:"collapse",fontSize:isMobile?10:12}}>
-                  <thead><tr style={{borderBottom:"2px solid #21262d"}}>
-                    {["자산 구분","원화 환산","달러 환산","비중","그래프"].map(h=>
-                      <th key={h} style={{textAlign:h==="자산 구분"?"left":"right",padding:"4px 5px",color:"#484f58",fontWeight:600,whiteSpace:"nowrap"}}>{h}</th>
-                    )}
-                  </tr></thead>
-                  <tbody>
-                    {items.map((item,i)=>{
-                      const pct=totalKRW>0?(item.krw/totalKRW*100):0;
-                      return <tr key={i} style={{borderBottom:"1px solid #21262d22"}}>
-                        <td style={{padding:"5px 5px",color:item.color,fontWeight:600,whiteSpace:"nowrap"}}>
-                          {item.label}{item.auto&&<span style={{fontSize:9,color:"#484f58",marginLeft:2}}>auto</span>}
-                        </td>
-                        <td style={{padding:"5px 5px",textAlign:"right",fontFamily:"'JetBrains Mono'",color:item.krw>0?"#e6edf3":"#484f58",fontSize:11}}>
-                          {item.krw>0?`₩${Math.round(item.krw).toLocaleString()}`:"₩0"}
-                        </td>
-                        <td style={{padding:"5px 5px",textAlign:"right",fontFamily:"'JetBrains Mono'",color:"#8b949e",fontSize:10}}>
-                          ${item.usd>0?Math.round(item.usd).toLocaleString():"0"}
-                        </td>
-                        <td style={{padding:"5px 5px",textAlign:"right",fontFamily:"'JetBrains Mono'",color:"#8b949e",fontSize:10}}>{pct.toFixed(1)}%</td>
-                        <td style={{padding:"4px 5px",minWidth:60}}>
-                          <div style={{height:10,background:"#161b22",borderRadius:3,overflow:"hidden"}}>
-                            <div style={{height:"100%",width:pct+"%",background:item.color,borderRadius:3}}/>
-                          </div>
-                        </td>
-                      </tr>;
-                    })}
-                  </tbody>
-                  <tfoot><tr style={{borderTop:"2px solid #21262d"}}>
-                    <td style={{padding:"7px 5px",fontWeight:800,color:"#e6edf3"}}>총 합계</td>
-                    <td style={{padding:"7px 5px",textAlign:"right",fontFamily:"'JetBrains Mono'",fontWeight:900,color:"#3fb950",fontSize:13}}>₩{Math.round(totalKRW).toLocaleString()}</td>
-                    <td style={{padding:"7px 5px",textAlign:"right",fontFamily:"'JetBrains Mono'",color:"#3fb950",fontSize:11}}>${Math.round(totalKRW/fx).toLocaleString()}</td>
-                    <td style={{padding:"7px 5px",textAlign:"right",color:"#484f58",fontSize:10}}>100%</td>
-                    <td/>
-                  </tr></tfoot>
-                </table>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
+                  <span style={{fontSize:13,fontWeight:800,color:"#e6edf3"}}>📊 전체 자산 현황</span>
+                  <span style={{fontSize:14,fontWeight:900,color:"#3fb950",fontFamily:"'JetBrains Mono'"}}>₩{Math.round(totalKRW/1e8).toFixed(2)}억</span>
+                </div>
+                {items.map((item,i)=>{
+                  const pct=totalKRW>0?(item.krw/totalKRW*100):0;
+                  return <div key={i} style={{marginBottom:7}}>
+                    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:2}}>
+                      <span style={{fontSize:11,fontWeight:600,color:item.color}}>
+                        {item.label}{item.auto&&<span style={{fontSize:9,color:"#484f58",marginLeft:3}}>auto</span>}
+                      </span>
+                      <span style={{fontSize:11,fontFamily:"'JetBrains Mono'",color:item.krw>0?"#e6edf3":"#484f58",fontWeight:600}}>
+                        ₩{Math.round(item.krw).toLocaleString()} <span style={{fontSize:9,color:"#484f58"}}>{pct.toFixed(1)}%</span>
+                      </span>
+                    </div>
+                    <div style={{height:8,background:"#161b22",borderRadius:4,overflow:"hidden"}}>
+                      <div style={{height:"100%",width:pct+"%",background:item.color,borderRadius:4,transition:"width .3s"}}/>
+                    </div>
+                  </div>;
+                })}
+                <div style={{marginTop:10,paddingTop:8,borderTop:"1px solid #21262d",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                  <span style={{fontSize:11,color:"#484f58"}}>총 합계</span>
+                  <div style={{textAlign:"right"}}>
+                    <div style={{fontSize:14,fontWeight:900,color:"#3fb950",fontFamily:"'JetBrains Mono'"}}>₩{Math.round(totalKRW).toLocaleString()}</div>
+                    <div style={{fontSize:10,color:"#484f58",fontFamily:"'JetBrains Mono'"}}>${Math.round(totalKRW/fx).toLocaleString()}</div>
+                  </div>
+                </div>
               </div>
               {/* 투자 여력 */}
               <div style={{background:"#0d1117",border:"1px solid #21262d",borderRadius:10,padding:12,marginBottom:10}}>
