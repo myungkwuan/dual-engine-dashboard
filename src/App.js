@@ -150,7 +150,7 @@ function SectorChart({trendData,isMobile,onSectorNav,market}){
           style={{display:"flex",alignItems:"center",gap:6,padding:"5px 8px",
             borderRadius:6,cursor:onSectorNav?"pointer":"default",
             background:isHov?color+"18":"#161b22",
-            border:`1px solid ${isHov?color+"66":"#21262d"}`,
+            border:"1px solid "+(isHov?color+"66":"#21262d")+"",
             transition:"all .15s",userSelect:"none"}}>
           <div style={{width:14,height:3,borderRadius:2,background:color,flexShrink:0}}/>
           <div style={{flex:1,fontSize:isMobile?9:10,color:isHov?"#e6edf3":"#8b949e",
@@ -752,7 +752,7 @@ function StockDetailModal({ stock, onClose, isWatched, onToggleWatch, gradeHisto
 
   // ── 해석 표시 컴포넌트 ──
   const InterpBox = ({interp}) => interp ? (
-    <div style={{marginTop:'8px',padding:'8px 10px',background:interp.color+'08',border:`1px solid ${interp.color}22`,borderRadius:'6px'}}>
+    <div style={{marginTop:'8px',padding:'8px 10px',background:interp.color+'08',border:"1px solid "+(interp.color)+"22",borderRadius:'6px'}}>
       <div style={{fontSize:'11px',fontWeight:700,color:interp.color,marginBottom:'3px'}}>{interp.icon} {interp.signal}</div>
       <div style={{fontSize:'10px',color:'#999',lineHeight:1.6,marginBottom:'4px'}}>{interp.desc}</div>
       <div style={{fontSize:'10px',fontWeight:700,color:interp.color,lineHeight:1.4}}>{interp.action}</div>
@@ -782,7 +782,7 @@ function StockDetailModal({ stock, onClose, isWatched, onToggleWatch, gradeHisto
             </div>
           </div>
           <div style={{display:'flex',flexDirection:'column',alignItems:'center',gap:'4px',flexShrink:0}}>
-            <div style={{padding:'8px 14px',borderRadius:'10px',background:verdict.color+'20',border:`2px solid ${verdict.color}`,textAlign:'center'}}>
+            <div style={{padding:'8px 14px',borderRadius:'10px',background:verdict.color+'20',border:"2px solid "+(verdict.color)+"",textAlign:'center'}}>
               <div style={{fontSize:'16px',fontWeight:900,color:verdict.color,whiteSpace:'nowrap'}}>{verdict.verdict}</div>
               <div style={{fontSize:'9px',color:'#666'}}>{'⭐'.repeat(verdict.stars)}</div>
             </div>
@@ -794,12 +794,12 @@ function StockDetailModal({ stock, onClose, isWatched, onToggleWatch, gradeHisto
                 'WATCH':{bg:'#ffd60020',border:'#ffd600',color:'#ffd600',label:'🟡 WATCH'},
                 'AVOID':{bg:'#f8514920',border:'#f85149',color:'#f85149',label:'🔴 AVOID'},
               }[stock._execTag]||{bg:'#ffffff10',border:'#666',color:'#aaa',label:stock._execTag};
-              return <div style={{padding:'3px 10px',borderRadius:'6px',background:tagStyle.bg,border:`1px solid ${tagStyle.border}`,fontSize:'10px',fontWeight:800,color:tagStyle.color,whiteSpace:'nowrap'}}>{tagStyle.label}</div>;
+              return <div style={{padding:'3px 10px',borderRadius:'6px',background:tagStyle.bg,border:"1px solid "+(tagStyle.border)+"",fontSize:'10px',fontWeight:800,color:tagStyle.color,whiteSpace:'nowrap'}}>{tagStyle.label}</div>;
             })()}
             {/* v1.5: Gate 실패 표시 */}
             {verdict.details.gateLabel && <div style={{padding:'2px 8px',borderRadius:'5px',background:'#f8514918',border:'1px solid #f85149',fontSize:'9px',fontWeight:700,color:'#f85149',whiteSpace:'nowrap'}}>{verdict.details.gateLabel}</div>}
             <div style={{display:'flex',gap:'4px',alignItems:'center'}}>
-              <span style={{padding:'3px 8px',borderRadius:'5px',background:dm.signalColor+'20',border:`1px solid ${dm.signalColor}44`,fontSize:'10px',fontWeight:700,color:dm.signalColor,whiteSpace:'nowrap'}}>{dm.signal}</span>
+              <span style={{padding:'3px 8px',borderRadius:'5px',background:dm.signalColor+'20',border:"1px solid "+(dm.signalColor)+"44",fontSize:'10px',fontWeight:700,color:dm.signalColor,whiteSpace:'nowrap'}}>{dm.signal}</span>
               <button onClick={()=>onToggleWatch(stock.t)} style={{padding:'3px 8px',borderRadius:'5px',border:'1px solid '+(isWatched?'#ffd43b':'#21262d'),background:isWatched?'#ffd43b18':'#161b22',color:isWatched?'#ffd43b':'#8b949e',cursor:'pointer',fontSize:'10px',fontWeight:700,whiteSpace:'nowrap'}}>
                 {isWatched?'⭐':'☆ 추가'}
               </button>
@@ -887,7 +887,7 @@ function StockDetailModal({ stock, onClose, isWatched, onToggleWatch, gradeHisto
                     </span>
                   </div>
                 </div>
-                <div style={{padding:'8px 10px',background:dm.signalColor+'10',borderRadius:'6px',textAlign:'center',border:`1px solid ${dm.signalColor}33`}}>
+                <div style={{padding:'8px 10px',background:dm.signalColor+'10',borderRadius:'6px',textAlign:'center',border:"1px solid "+(dm.signalColor)+"33"}}>
                   <div style={{fontSize:'9px',color:'#888'}}>듀얼모멘텀 종합</div>
                   <div style={{fontSize:'16px',fontWeight:900,color:dm.signalColor,marginTop:'2px'}}>{dm.signal}</div>
                   <div style={{fontSize:'10px',color:'#666',marginTop:'2px'}}>RS: {dm.rsScore}/100 | 섹터 {dm.secRank}위</div>
@@ -1023,7 +1023,7 @@ function StockDetailModal({ stock, onClose, isWatched, onToggleWatch, gradeHisto
             return <div style={{background:'#080818',borderRadius:'10px',padding:'14px',marginBottom:'12px'}}>
             <div style={{fontSize:'12px',fontWeight:700,color:'#ffa94d',marginBottom:'10px'}}>◈ 거래량 분석 <span style={{fontSize:'9px',fontWeight:400,color:'#8b949e'}}>— 큰손이 사고 있나 팔고 있나?</span></div>
             {/* 시그널 배너 */}
-            <div style={{background:sigBg,border:`1px solid ${sigClr}44`,borderRadius:'8px',padding:'10px',marginBottom:'10px',textAlign:'center'}}>
+            <div style={{background:sigBg,border:"1px solid "+(sigClr)+"44",borderRadius:'8px',padding:'10px',marginBottom:'10px',textAlign:'center'}}>
               <div style={{fontSize:'16px',fontWeight:800,color:sigClr}}>{vl.signal}</div>
               <div style={{fontSize:'10px',color:'#888',marginTop:'2px'}}>
                 5일 가격변화: <span style={{color:vl.priceChg5d>0?'#3fb950':'#f85149'}}>{vl.priceChg5d>0?'+':''}{vl.priceChg5d}%</span>
@@ -1289,9 +1289,18 @@ export default function Dashboard(){
   const[calcData,setCalcData]=useState(_assetInit);
   const[draftVals,setDraftVals]=useState(_draftInit);
   const aRefs=useRef({});
-  /* onDraftChange: 입력중 표시만 바꿈 (리렌더 최소화) */
-  const onDraftChange=useCallback((k,v)=>setDraftVals(p=>({...p,[k]:v})),[]);
-  /* onDraftBlur: blur시 숫자 파싱→calcData+localStorage 저장 */
+  /* onDraftChange: input 표시(draftVals) + 계산(calcData) 동시 업데이트
+     → 타이핑 즉시 전체자산현황 반영. value=draftVals이므로 리렌더해도 포커스 안 날아감 */
+  const onDraftChange=useCallback((k,v)=>{
+    setDraftVals(p=>({...p,[k]:v}));
+    if(k!=='memo'){
+      const num=Number(String(v).replace(/[^0-9.]/g,''))||0;
+      setCalcData(p=>({...p,[k]:num}));
+    } else {
+      setCalcData(p=>({...p,[k]:v}));
+    }
+  },[]);
+  /* onDraftBlur: blur시 localStorage만 저장 (calcData는 이미 onChange에서 최신) */
   const onDraftBlur=useCallback((k,v)=>{
     const num=(k==='memo')?v:(Number(String(v).replace(/[^0-9.]/g,''))||0);
     setCalcData(p=>{const n={...p,[k]:num};try{localStorage.setItem('asset_data',JSON.stringify(n));}catch(e){}return n;});
@@ -1926,7 +1935,7 @@ export default function Dashboard(){
         <div style={{maxWidth:1800,margin:"0 auto",display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap",gap:8}}>
           <h1 className="dash-title" style={{fontSize:22,fontWeight:900,background:"linear-gradient(135deg,#58a6ff,#bc8cff,#f778ba)",WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent",margin:0}}>{isMobile?("⚡ 듀얼엔진 ("+D.length+")"):("⚡ 듀얼 엔진 프로 — MF × SEPA × 듀얼모멘텀 ("+D.length+"종목)")}</h1>
           <div style={{display:"flex",gap:12,alignItems:"center"}}>
-            {MKT.loaded && <span style={{fontSize:11,fontWeight:700,padding:"2px 8px",borderRadius:5,background:MKT.health?.modeColor+"20",border:`1px solid ${MKT.health?.modeColor}44`,color:MKT.health?.modeColor}}>{MKT.health?.modeIcon} {MKT.health?.mode}</span>}
+            {MKT.loaded && <span style={{fontSize:11,fontWeight:700,padding:"2px 8px",borderRadius:5,background:MKT.health?.modeColor+"20",border:"1px solid "+(MKT.health?.modeColor)+"44",color:MKT.health?.modeColor}}>{MKT.health?.modeIcon} {MKT.health?.mode}</span>}
             <span style={{fontSize:13,color:"#3fb950",fontFamily:"'JetBrains Mono'",fontWeight:600}}>Yahoo Finance Live</span>
             <span style={{fontSize:13,color:"#484f58",fontFamily:"'JetBrains Mono'"}}>{new Date().toISOString().slice(0,10)}</span>
           </div>
@@ -1967,7 +1976,7 @@ export default function Dashboard(){
         </div>}
       </div>
 
-      {showLog && <div style={{maxWidth:1800,margin:"0 auto",padding:"0 20px 4px"}}><div style={{background:"#0d1117",border:"1px solid #21262d",borderRadius:6,padding:"6px 10px",maxHeight:100,overflowY:"auto",fontFamily:"'JetBrains Mono'",fontSize:12}}>{logs.map((l,i)=><div key={i} style={{padding:"1px 0"}}><span style={{color:"#484f58",marginRight:4}}>{l.ts}</span><span style={{color:l.c==="ok"?"#3fb950":l.c==="er"?"#f85149":"#58a6ff"}}>{l.msg}</span></div>)}</div></div>}
+      {showLog && <div style={{maxWidth:1800,margin:"0 auto",padding:"0 20px 4px",background:"#06080d"}}><div style={{background:"#0d1117",border:"1px solid #21262d",borderRadius:6,padding:"6px 10px",maxHeight:100,overflowY:"auto",fontFamily:"'JetBrains Mono'",fontSize:12}}>{logs.map((l,i)=><div key={i} style={{padding:"1px 0"}}><span style={{color:"#484f58",marginRight:4}}>{l.ts}</span><span style={{color:l.c==="ok"?"#3fb950":l.c==="er"?"#f85149":"#58a6ff"}}>{l.msg}</span></div>)}</div></div>}
 
       {/* Tab Nav */}
       <div className="tab-nav" style={{maxWidth:1800,margin:"6px auto",padding:"0 20px"}}>
@@ -1979,7 +1988,7 @@ export default function Dashboard(){
       </div>
 
       {/* ============ 시장필터 탭 ============ */}
-      {tab==="filter" && <div style={{maxWidth:1800,margin:"0 auto",padding:"6px 20px"}}>
+      {tab==="filter" && <div style={{maxWidth:1800,margin:"0 auto",background:"#06080d",padding:"6px 20px"}}>
         <div style={{background:"#0d1117",border:"1px solid #21262d",borderRadius:10,padding:14}}>
           {/* 헤더 + 갱신 버튼 */}
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
@@ -1996,7 +2005,7 @@ export default function Dashboard(){
 
           {MKT.loaded && <>
             {/* 모드 판정 대형 카드 */}
-            <div style={{background:MKT.health?.modeColor+"12",border:`2px solid ${MKT.health?.modeColor}44`,borderRadius:10,padding:16,marginBottom:12,display:"flex",alignItems:"center",gap:16}}>
+            <div style={{background:MKT.health?.modeColor+"12",border:"2px solid "+(MKT.health?.modeColor)+"44",borderRadius:10,padding:16,marginBottom:12,display:"flex",alignItems:"center",gap:16}}>
               <div style={{fontSize:44,lineHeight:1}}>{MKT.health?.modeIcon}</div>
               <div style={{flex:1}}>
                 <div style={{fontSize:24,fontWeight:900,color:MKT.health?.modeColor}}>{MKT.health?.mode} 모드</div>
@@ -2054,7 +2063,7 @@ export default function Dashboard(){
                   <div>3M: <b style={{color:(MKT.kospi3m||0)>0?"#3fb950":"#f85149"}}>{(MKT.kospi3m||0)>0?"+":""}{MKT.kospi3m||"-"}%</b></div>
                 </div>
                 {/* KR Risk State 뱃지 */}
-                <div style={{marginTop:8,padding:"4px 8px",background:(MKT.krRiskColor||"#484f58")+"15",borderRadius:5,border:`1px solid ${MKT.krRiskColor||"#484f58"}33`,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                <div style={{marginTop:8,padding:"4px 8px",background:(MKT.krRiskColor||"#484f58")+"15",borderRadius:5,border:"1px solid "+(MKT.krRiskColor||"#484f58")+"33",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
                   <span style={{fontSize:11,fontWeight:800,color:MKT.krRiskColor||"#484f58"}}>{MKT.krRiskLabel||"⏳ 조회전"}</span>
                   <span style={{fontSize:10,color:"#8b949e"}}>최대 {MKT.krMaxPositionPct??100}%</span>
                 </div>
@@ -2066,12 +2075,12 @@ export default function Dashboard(){
               <div style={{fontSize:12,fontWeight:700,color:"#58a6ff",marginBottom:8}}>🩺 시장 건강도 체크리스트</div>
               {/* v2: US / KR Risk State 분리 표시 */}
               <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:6,marginBottom:8}}>
-                {MKT.riskLabel && <div style={{padding:"6px 10px",background:(MKT.riskColor||"#484f58")+"15",border:`1px solid ${MKT.riskColor||"#484f58"}44`,borderRadius:6}}>
+                {MKT.riskLabel && <div style={{padding:"6px 10px",background:(MKT.riskColor||"#484f58")+"15",border:"1px solid "+(MKT.riskColor||"#484f58")+"44",borderRadius:6}}>
                   <div style={{fontSize:10,color:"#8b949e",marginBottom:2}}>🇺🇸 미국 (SPY/VIX)</div>
                   <div style={{fontSize:12,fontWeight:800,color:MKT.riskColor||"#484f58"}}>{MKT.riskLabel}</div>
                   <div style={{fontSize:10,color:"#8b949e"}}>최대 {MKT.maxPositionPct??100}%</div>
                 </div>}
-                {MKT.krRiskLabel && <div style={{padding:"6px 10px",background:(MKT.krRiskColor||"#484f58")+"15",border:`1px solid ${MKT.krRiskColor||"#484f58"}44`,borderRadius:6}}>
+                {MKT.krRiskLabel && <div style={{padding:"6px 10px",background:(MKT.krRiskColor||"#484f58")+"15",border:"1px solid "+(MKT.krRiskColor||"#484f58")+"44",borderRadius:6}}>
                   <div style={{fontSize:10,color:"#8b949e",marginBottom:2}}>🇰🇷 한국 (KOSPI)</div>
                   <div style={{fontSize:12,fontWeight:800,color:MKT.krRiskColor||"#484f58"}}>{MKT.krRiskLabel}</div>
                   <div style={{fontSize:10,color:"#8b949e"}}>최대 {MKT.krMaxPositionPct??100}%</div>
@@ -2090,7 +2099,7 @@ export default function Dashboard(){
                   ["KOSPI 골든크로스",MKT.health.details.kospiGoldenCross],
                   ["섹터 브레드스",MKT.health.details.sectorBreadth+" 상승"],
                 ].map(([label,ok])=>(
-                  <div key={label} style={{display:"flex",alignItems:"center",gap:6,padding:"4px 8px",borderRadius:6,background:ok?"#3fb95010":"#f8514910",border:`1px solid ${ok?"#3fb95022":"#f8514922"}`}}>
+                  <div key={label} style={{display:"flex",alignItems:"center",gap:6,padding:"4px 8px",borderRadius:6,background:ok?"#3fb95010":"#f8514910",border:"1px solid "+(ok?"#3fb95022":"#f8514922")+""}}>
                     <span style={{fontSize:12}}>{ok?"✅":"❌"}</span>
                     <span style={{fontSize:11,color:ok?"#3fb950":"#f85149"}}>{label}</span>
                   </div>
@@ -2131,7 +2140,7 @@ export default function Dashboard(){
             </div>
 
             {/* 역발상 시그널 배너 */}
-            {SENTI.contrarian && <div style={{background:SENTI.contrarian.color+"12",border:`2px solid ${SENTI.contrarian.color}44`,borderRadius:8,padding:12,marginBottom:12,display:"flex",alignItems:"center",gap:12}}>
+            {SENTI.contrarian && <div style={{background:SENTI.contrarian.color+"12",border:"2px solid "+(SENTI.contrarian.color)+"44",borderRadius:8,padding:12,marginBottom:12,display:"flex",alignItems:"center",gap:12}}>
               <span style={{fontSize:28}}>{SENTI.contrarian.icon}</span>
               <div>
                 <div style={{fontSize:14,fontWeight:800,color:SENTI.contrarian.color}}>역발상 시그널</div>
@@ -2181,7 +2190,7 @@ export default function Dashboard(){
               const composite=Math.round(scores.reduce((a,s)=>a+s.v*s.w,0)/totalW);
               const cColor=composite<=25?"#3fb950":composite<=40?"#58a6ff":composite<=60?"#ffd600":composite<=75?"#ff922b":"#f85149";
               const cLabel=composite<=25?"극단적 공포 → 적극 매수":composite<=40?"공포 → 분할 매수":composite<=60?"중립 → 전략 유지":composite<=75?"탐욕 → 비중 축소":"극단적 탐욕 → 이익실현";
-              return <div style={{marginTop:12,background:cColor+"12",border:`2px solid ${cColor}44`,borderRadius:10,padding:14}}>
+              return <div style={{marginTop:12,background:cColor+"12",border:"2px solid "+(cColor)+"44",borderRadius:10,padding:14}}>
                 <div style={{display:"flex",alignItems:"center",justifyContent:"space-between"}}>
                   <div>
                     <div style={{fontSize:14,fontWeight:800,color:cColor}}>🧠 종합 심리 판정</div>
@@ -2254,7 +2263,7 @@ export default function Dashboard(){
       </div>}
 
       {/* ============ 포지션 계산기 ============ */}
-      {tab==="calc" && <div style={{maxWidth:1800,margin:"0 auto",padding:"6px 20px"}}>
+      {tab==="calc" && <div style={{maxWidth:1800,margin:"0 auto",background:"#06080d",padding:"6px 20px"}}>
         <div style={{background:"#0d1117",border:"1px solid #21262d",borderRadius:10,padding:14}}>
           <div style={{fontSize:18,fontWeight:800,color:"#bc8cff",marginBottom:10}}>🧮 포지션 사이징 계산기</div>
 
@@ -2294,7 +2303,7 @@ export default function Dashboard(){
             const dm=getDualMomentum(s);
             const pivot=vcpPv(s);
             const proxPct=vcpPx(s);
-            return <div style={{background:vd.color+"08",border:`1px solid ${vd.color}33`,borderRadius:8,padding:12,marginBottom:12}}>
+            return <div style={{background:vd.color+"08",border:"1px solid "+(vd.color)+"33",borderRadius:8,padding:12,marginBottom:12}}>
               <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
                 <div>
                   <span style={{fontSize:16,fontWeight:800,color:"#e6edf3"}}>{s.k?"🇰🇷":"🇺🇸"} {s.n}</span>
@@ -2422,7 +2431,7 @@ export default function Dashboard(){
 
             return <>
               {/* v2: 시장 상태 × 점수 기반 권장 포지션 — KR/US 분리 적용 */}
-              {MKT.loaded && <div style={{marginTop:10,padding:"10px 14px",background:activeMktColor+"12",border:`1px solid ${activeMktColor}44`,borderRadius:8}}>
+              {MKT.loaded && <div style={{marginTop:10,padding:"10px 14px",background:activeMktColor+"12",border:"1px solid "+(activeMktColor)+"44",borderRadius:8}}>
                 <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap",gap:8}}>
                   <div style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
                     <span style={{fontSize:11,color:"#484f58"}}>{isKRStock?"🇰🇷 한국주식":"🇺🇸 미국주식"}</span>
@@ -2576,7 +2585,7 @@ export default function Dashboard(){
                   if(rr1>=3)warns.push({t:"✅ 1차 손익비 "+rr1.toFixed(1)+":1 — 우수",c:"#3fb950"});
                   if(rr2>=4)warns.push({t:"🎯 2차 손익비 "+rr2.toFixed(1)+":1 — 탁월한 기회",c:"#3fb950"});
                   if(pc<=10)warns.push({t:"✅ 비중 "+pc.toFixed(1)+"% — 적정",c:"#3fb950"});
-                  return warns.map((w,i)=><div key={i} style={{padding:"4px 10px",borderRadius:5,fontSize:11,fontWeight:600,background:w.c+"12",border:`1px solid ${w.c}33`,color:w.c}}>{w.t}</div>);
+                  return warns.map((w,i)=><div key={i} style={{padding:"4px 10px",borderRadius:5,fontSize:11,fontWeight:600,background:w.c+"12",border:"1px solid "+(w.c)+"33",color:w.c}}>{w.t}</div>);
                 })()}
               </div>
             </>;
@@ -2586,7 +2595,7 @@ export default function Dashboard(){
       </div>}
 
       {/* ============ 체크리스트 탭 ============ */}
-      {tab==="check" && <div style={{maxWidth:1800,margin:"0 auto",padding:"6px 20px"}}>
+      {tab==="check" && <div style={{maxWidth:1800,margin:"0 auto",background:"#06080d",padding:"6px 20px"}}>
         <div style={{background:"#0d1117",border:"1px solid #21262d",borderRadius:10,padding:14}}>
           <h3 style={{color:"#b197fc",fontSize:16,marginBottom:12,marginTop:0}}>✅ 4엔진 매수 전 체크리스트</h3>
           <div style={{marginBottom:12}}>
@@ -2615,7 +2624,7 @@ export default function Dashboard(){
               const isAutoChecked=item.auto&&selectedChkStock?item.check(selectedChkStock):false;
               const isManualChecked=!item.auto?manualChecks[item.id]:false;
               const isChecked=item.auto?isAutoChecked:isManualChecked;
-              return(<div key={item.id} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 12px",borderRadius:6,background:isChecked?"#0d2818":"#1a1a1a",border:`1px solid ${isChecked?"#00ff8833":"#222"}`,cursor:item.auto?"default":"pointer",opacity:!selectedChkStock&&item.auto?0.5:1}}
+              return(<div key={item.id} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 12px",borderRadius:6,background:isChecked?"#0d2818":"#1a1a1a",border:"1px solid "+(isChecked?"#00ff8833":"#222")+"",cursor:item.auto?"default":"pointer",opacity:!selectedChkStock&&item.auto?0.5:1}}
                 onClick={()=>{if(!item.auto)setManualChecks(p=>({...p,[item.id]:!p[item.id]}));}}>
                 <div style={{width:22,height:22,borderRadius:5,background:isChecked?"#00ff88":"#333",display:"flex",alignItems:"center",justifyContent:"center",fontSize:12,color:isChecked?"#000":"#555",flexShrink:0}}>{isChecked?"✓":idx+1}</div>
                 <span style={{padding:"2px 6px",borderRadius:4,fontSize:10,background:item.engine==='MF'?'#4dabf720':item.engine==='SEPA'?'#69db7c20':item.engine==='DM'?'#bc8cff20':item.engine==='VCP'?'#ffd43b20':item.engine==='CF'?'#ff922b20':item.engine==='시장'?'#b197fc20':'#ff6b6b20',color:item.engine==='MF'?'#4dabf7':item.engine==='SEPA'?'#69db7c':item.engine==='DM'?'#bc8cff':item.engine==='VCP'?'#ffd43b':item.engine==='CF'?'#ff922b':item.engine==='시장'?'#b197fc':'#ff6b6b',fontWeight:700,flexShrink:0}}>{item.engine}</span>
@@ -2630,7 +2639,7 @@ export default function Dashboard(){
             const total=autoCount+manualCount;
             const color=total>=8?'#00ff88':total>=6?'#ffd43b':'#ff6b6b';
             const msg=total>=8?'✅ 매수 조건 충족!':total>=6?'⚠️ 조건부 매수':'❌ 매수 비추천';
-            return(<div style={{marginTop:12,padding:14,borderRadius:8,background:color+'15',border:`2px solid ${color}33`,textAlign:"center"}}>
+            return(<div style={{marginTop:12,padding:14,borderRadius:8,background:color+'15',border:"2px solid "+(color)+"33",textAlign:"center"}}>
               <div style={{fontSize:22,fontWeight:800,color}}>{total}/10</div>
               <div style={{fontSize:13,fontWeight:600,color,marginTop:2}}>{msg}</div>
             </div>);
@@ -2639,7 +2648,7 @@ export default function Dashboard(){
       </div>}
 
       {/* ============ 워치리스트 탭 ============ */}
-      {tab==="watch" && <div style={{maxWidth:1800,margin:"0 auto",padding:"6px 20px"}}>
+      {tab==="watch" && <div style={{maxWidth:1800,margin:"0 auto",background:"#06080d",padding:"6px 20px"}}>
         <div style={{background:"#0d1117",border:"1px solid #21262d",borderRadius:10,padding:14}}>
           <h3 style={{color:"#ffd43b",fontSize:16,marginBottom:12,marginTop:0}}>👁 워치리스트 ({watchlist.length}종목)</h3>
           {/* 동기화 버튼 */}
@@ -2845,7 +2854,7 @@ export default function Dashboard(){
       </div>}
 
       {/* ============ 보유종목 탭 ============ */}
-      {tab==="port" && <div style={{maxWidth:1800,margin:"0 auto",padding:"6px 20px"}}>
+      {tab==="port" && <div style={{maxWidth:1800,margin:"0 auto",background:"#06080d",padding:"6px 20px"}}>
         <div style={{background:"#0d1117",border:"1px solid #21262d",borderRadius:10,padding:14}}>
           <h3 style={{color:"#bc8cff",fontSize:16,marginBottom:12,marginTop:0}}>💼 보유종목</h3>
 
@@ -2909,7 +2918,7 @@ export default function Dashboard(){
 
                 {/* 선택된 종목 정보 + 매수가·수량 입력 */}
                 {pfAddSelected && vd && (
-                  <div style={{background:"#0d1117",borderRadius:8,padding:"10px 12px",border:`1px solid ${vd.color}33`}}>
+                  <div style={{background:"#0d1117",borderRadius:8,padding:"10px 12px",border:"1px solid "+(vd.color)+"33"}}>
                     <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
                       <div>
                         <span style={{fontSize:14,fontWeight:700,color:"#e6edf3"}}>{pfAddSelected.k?"🇰🇷":"🇺🇸"} {pfAddSelected.n}</span>
@@ -3405,7 +3414,7 @@ export default function Dashboard(){
           {/* KR / US 분리 배너 */}
           <div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"1fr 1fr",gap:6}}>
             {/* 🇺🇸 US 배너 */}
-            <div style={{padding:"8px 12px",background:rc+"14",border:`1px solid ${rc}44`,borderRadius:8}}>
+            <div style={{padding:"8px 12px",background:rc+"14",border:"1px solid "+(rc)+"44",borderRadius:8}}>
               <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap",gap:6}}>
                 <div style={{display:"flex",alignItems:"center",gap:8}}>
                   <span style={{fontSize:13,color:"#484f58"}}>🇺🇸</span>
@@ -3418,7 +3427,7 @@ export default function Dashboard(){
               </div>}
             </div>
             {/* 🇰🇷 KR 배너 */}
-            <div style={{padding:"8px 12px",background:krMissing?"#21262d":krc+"14",border:`1px solid ${krMissing?"#30363d":krc+"44"}`,borderRadius:8}}>
+            <div style={{padding:"8px 12px",background:krMissing?"#21262d":krc+"14",border:"1px solid "+(krMissing?"#30363d":krc+"44")+"",borderRadius:8}}>
               <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap",gap:6}}>
                 <div style={{display:"flex",alignItems:"center",gap:8}}>
                   <span style={{fontSize:13,color:"#484f58"}}>🇰🇷</span>
@@ -3441,7 +3450,7 @@ export default function Dashboard(){
           {/* 건강도 미니 */}
           <div style={{marginTop:4,display:"flex",alignItems:"center",gap:8,padding:"4px 8px"}}>
             <span style={{fontSize:10,color:"#484f58"}}>건강도 {MKT.health?.score}/100</span>
-            <span style={{padding:"1px 6px",borderRadius:3,background:(MKT.health?.modeColor||"#484f58")+"20",border:`1px solid ${MKT.health?.modeColor||"#484f58"}33`,fontSize:10,fontWeight:700,color:MKT.health?.modeColor||"#484f58"}}>{MKT.health?.mode}모드</span>
+            <span style={{padding:"1px 6px",borderRadius:3,background:(MKT.health?.modeColor||"#484f58")+"20",border:"1px solid "+((MKT.health?.modeColor||"#484f58"))+"33",fontSize:10,fontWeight:700,color:MKT.health?.modeColor||"#484f58"}}>{MKT.health?.mode}모드</span>
             <span style={{fontSize:10,color:"#484f58"}}>VIX {MKT.vix}</span>
           </div>
         </div>;
@@ -3539,7 +3548,7 @@ export default function Dashboard(){
         }).sort((a,b)=>b.vd.totalPt-a.vd.totalPt).slice(0,5);
         if(buyNow.length===0&&soonBreak.length===0&&silent.length===0&&tripleGreen.length===0)return null;
         const Card=({icon,title,color,items,getTag,getReason})=>(
-          items.length===0?null:<div style={{flex:1,minWidth:isMobile?'100%':280,background:'linear-gradient(135deg,#0a0a1e,#0d1830)',borderRadius:10,padding:'12px 14px',border:`1px solid ${color}33`}}>
+          items.length===0?null:<div style={{flex:1,minWidth:isMobile?'100%':280,background:'linear-gradient(135deg,#0a0a1e,#0d1830)',borderRadius:10,padding:'12px 14px',border:"1px solid "+(color)+"33"}}>
             <div style={{fontSize:13,fontWeight:800,color,marginBottom:8}}>{icon} {title}</div>
             {items.map(({d,vd})=>(
               <div key={d.t} onClick={()=>{setDetailStock(d);setShowDetail(true);}} style={{padding:'6px 8px',marginBottom:4,background:'#161b2288',borderRadius:6,cursor:'pointer',border:'1px solid transparent',transition:'border .2s'}}
@@ -3795,39 +3804,10 @@ export default function Dashboard(){
         /* 공통 input 스타일 */
         const iSt={padding:"8px 10px",borderRadius:6,border:"1px solid #30363d",background:"#0d1117",color:"#e6edf3",fontSize:14,fontFamily:"'JetBrains Mono'",outline:"none",width:"100%",boxSizing:"border-box"};
         /* 입력 그룹: ₩ / $ 2열 그리드 + 아래 환산값 풀폭 */
-        const AGroup=({emoji,label,krwKey,usdKey,krwVal,usdVal})=>{
-          const total=Math.round((D[krwKey]||0)+(D[usdKey]||0)*fx);
-          return(
-            <div style={{background:"#161b22",borderRadius:8,padding:"10px 12px",marginBottom:6}}>
-              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
-                <span style={{fontSize:12,fontWeight:700,color:"#8b949e"}}>{emoji} {label}</span>
-                <span style={{fontSize:12,fontWeight:700,color:"#3fb950",fontFamily:"'JetBrains Mono'"}}>₩{total.toLocaleString()}</span>
-              </div>
-              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
-                <div>
-                  <div style={{fontSize:10,color:"#484f58",marginBottom:3}}>원화 ₩</div>
-                  <input type="text" inputMode="numeric" placeholder="0"
-                    value={krwVal}
-                    onChange={e=>onDraftChange(krwKey,e.target.value)}
-                    onBlur={e=>onDraftBlur(krwKey,e.target.value)}
-                    style={iSt}/>
-                </div>
-                <div>
-                  <div style={{fontSize:10,color:"#484f58",marginBottom:3}}>달러 $</div>
-                  <input type="text" inputMode="numeric" placeholder="0"
-                    value={usdVal}
-                    onChange={e=>onDraftChange(usdKey,e.target.value)}
-                    onBlur={e=>onDraftBlur(usdKey,e.target.value)}
-                    style={iSt}/>
-                </div>
-              </div>
-            </div>
-          );
-        };
-        return <div style={{width:"100%",padding:isMobile?"10px 12px":"16px 24px",boxSizing:"border-box",maxWidth:960,margin:"0 auto",overflowX:"hidden"}}>
+        return <div style={{width:"100%",background:"#06080d",overflowX:"hidden"}}>
+        <div style={{maxWidth:960,margin:"0 auto",padding:isMobile?"10px 12px":"16px 24px",boxSizing:"border-box"}}>
           <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:4}}>
             <div style={{fontSize:isMobile?16:20,fontWeight:900,color:"#e6edf3"}}>💰 자산관리</div>
-            {/* 환율 인라인 */}
             <div style={{display:"flex",alignItems:"center",gap:6,background:"#161b22",border:"1px solid #ffd43b44",borderRadius:8,padding:"5px 10px"}}>
               <span style={{fontSize:11,color:"#ffd43b",fontWeight:700}}>💱</span>
               <input type="text" inputMode="numeric"
@@ -3841,11 +3821,71 @@ export default function Dashboard(){
           </div>
           <div style={{fontSize:11,color:"#484f58",marginBottom:12}}>보유종목 자동 연계 · 시장필터 Risk 상태 반영</div>
           <div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"1fr 1fr",gap:10}}>
-            {/* 왼쪽: 입력 */}
+            {/* 왼쪽: 입력 — AGroup 컴포넌트 없이 완전 인라인 (컴포넌트 정의 시 매 렌더마다 unmount/remount → 1글자만 입력됨) */}
             <div>
-              <AGroup emoji="💵" label="현금 (예비군)" krwKey="cashKRW" usdKey="cashUSD" krwVal={draftVals.cashKRW} usdVal={draftVals.cashUSD}/>
-              <AGroup emoji="📦" label="펀드 / 연금" krwKey="fundKRW" usdKey="fundUSD" krwVal={draftVals.fundKRW} usdVal={draftVals.fundUSD}/>
-              <AGroup emoji="🏠" label="기타 자산" krwKey="otherKRW" usdKey="otherUSD" krwVal={draftVals.otherKRW} usdVal={draftVals.otherUSD}/>
+              {/* 💵 현금 */}
+              <div style={{background:"#161b22",borderRadius:8,padding:"10px 12px",marginBottom:6}}>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
+                  <span style={{fontSize:12,fontWeight:700,color:"#8b949e"}}>💵 현금 (예비군)</span>
+                  <span style={{fontSize:12,fontWeight:700,color:"#3fb950",fontFamily:"'JetBrains Mono'"}}>₩{Math.round((D.cashKRW||0)+(D.cashUSD||0)*fx).toLocaleString()}</span>
+                </div>
+                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
+                  <div><div style={{fontSize:10,color:"#484f58",marginBottom:3}}>원화 ₩</div>
+                    <input type="text" inputMode="numeric" placeholder="0"
+                      value={draftVals.cashKRW}
+                      onChange={e=>onDraftChange('cashKRW',e.target.value)}
+                      onBlur={e=>onDraftBlur('cashKRW',e.target.value)}
+                      style={iSt}/></div>
+                  <div><div style={{fontSize:10,color:"#484f58",marginBottom:3}}>달러 $</div>
+                    <input type="text" inputMode="numeric" placeholder="0"
+                      value={draftVals.cashUSD}
+                      onChange={e=>onDraftChange('cashUSD',e.target.value)}
+                      onBlur={e=>onDraftBlur('cashUSD',e.target.value)}
+                      style={iSt}/></div>
+                </div>
+              </div>
+              {/* 📦 펀드/연금 */}
+              <div style={{background:"#161b22",borderRadius:8,padding:"10px 12px",marginBottom:6}}>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
+                  <span style={{fontSize:12,fontWeight:700,color:"#8b949e"}}>📦 펀드 / 연금</span>
+                  <span style={{fontSize:12,fontWeight:700,color:"#3fb950",fontFamily:"'JetBrains Mono'"}}>₩{Math.round((D.fundKRW||0)+(D.fundUSD||0)*fx).toLocaleString()}</span>
+                </div>
+                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
+                  <div><div style={{fontSize:10,color:"#484f58",marginBottom:3}}>원화 ₩</div>
+                    <input type="text" inputMode="numeric" placeholder="0"
+                      value={draftVals.fundKRW}
+                      onChange={e=>onDraftChange('fundKRW',e.target.value)}
+                      onBlur={e=>onDraftBlur('fundKRW',e.target.value)}
+                      style={iSt}/></div>
+                  <div><div style={{fontSize:10,color:"#484f58",marginBottom:3}}>달러 $</div>
+                    <input type="text" inputMode="numeric" placeholder="0"
+                      value={draftVals.fundUSD}
+                      onChange={e=>onDraftChange('fundUSD',e.target.value)}
+                      onBlur={e=>onDraftBlur('fundUSD',e.target.value)}
+                      style={iSt}/></div>
+                </div>
+              </div>
+              {/* 🏠 기타 */}
+              <div style={{background:"#161b22",borderRadius:8,padding:"10px 12px",marginBottom:6}}>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
+                  <span style={{fontSize:12,fontWeight:700,color:"#8b949e"}}>🏠 기타 자산</span>
+                  <span style={{fontSize:12,fontWeight:700,color:"#3fb950",fontFamily:"'JetBrains Mono'"}}>₩{Math.round((D.otherKRW||0)+(D.otherUSD||0)*fx).toLocaleString()}</span>
+                </div>
+                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
+                  <div><div style={{fontSize:10,color:"#484f58",marginBottom:3}}>원화 ₩</div>
+                    <input type="text" inputMode="numeric" placeholder="0"
+                      value={draftVals.otherKRW}
+                      onChange={e=>onDraftChange('otherKRW',e.target.value)}
+                      onBlur={e=>onDraftBlur('otherKRW',e.target.value)}
+                      style={iSt}/></div>
+                  <div><div style={{fontSize:10,color:"#484f58",marginBottom:3}}>달러 $</div>
+                    <input type="text" inputMode="numeric" placeholder="0"
+                      value={draftVals.otherUSD}
+                      onChange={e=>onDraftChange('otherUSD',e.target.value)}
+                      onBlur={e=>onDraftBlur('otherUSD',e.target.value)}
+                      style={iSt}/></div>
+                </div>
+              </div>
               <div style={{background:"#161b22",borderRadius:8,padding:"10px 12px",marginBottom:6}}>
                 <div style={{fontSize:11,fontWeight:700,color:"#8b949e",marginBottom:4}}>📝 메모</div>
                 <textarea
@@ -3900,7 +3940,7 @@ export default function Dashboard(){
                   <div key={flag} style={{background:"#161b22",borderRadius:8,padding:"10px 12px",marginBottom:6}}>
                     <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}>
                       <span style={{fontSize:12,fontWeight:700,color:"#e6edf3"}}>{flag} {label}</span>
-                      <span style={{fontSize:10,fontWeight:700,color:rc,padding:"2px 7px",borderRadius:4,background:rc+"18",border:`1px solid ${rc}44`}}>{rl} · 최대{pct}%</span>
+                      <span style={{fontSize:10,fontWeight:700,color:rc,padding:"2px 7px",borderRadius:4,background:rc+"18",border:"1px solid "+(rc)+"44"}}>{rl} · 최대{pct}%</span>
                     </div>
                     <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:4}}>
                       <div><div style={{fontSize:9,color:"#484f58"}}>현재 투자중</div>
@@ -3937,13 +3977,13 @@ export default function Dashboard(){
               </div>
             </div>
           </div>
-        </div>;
+        </div></div>;
       })()}
 
       {/* ============ 가이드 탭 ============ */}
       {tab==="guide" && (()=>{
         const Section=({icon,title,color,children})=>(
-          <div style={{background:"#0d1117",border:`1px solid ${color}33`,borderRadius:10,padding:16,marginBottom:12}}>
+          <div style={{background:"#0d1117",border:"1px solid "+(color)+"33",borderRadius:10,padding:16,marginBottom:12}}>
             <div style={{fontSize:14,fontWeight:800,color,marginBottom:10}}>{icon} {title}</div>
             {children}
           </div>
@@ -3958,7 +3998,7 @@ export default function Dashboard(){
           </div>
         );
         const Badge=({txt,color})=>(
-          <span style={{display:"inline-block",padding:"2px 8px",borderRadius:4,border:`1px solid ${color}55`,background:color+"15",color,fontSize:11,fontWeight:700,marginRight:4,marginBottom:4}}>{txt}</span>
+          <span style={{display:"inline-block",padding:"2px 8px",borderRadius:4,border:"1px solid "+(color)+"55",background:color+"15",color,fontSize:11,fontWeight:700,marginRight:4,marginBottom:4}}>{txt}</span>
         );
 
         return <div style={{maxWidth:900,margin:"0 auto",padding:isMobile?"12px 14px":"20px 24px"}}>
@@ -4022,7 +4062,7 @@ export default function Dashboard(){
                 ["🟡 관망","35~49","#ffd600"],
                 ["⛔ 위험","~34","#78909c"],
               ].map(([v,r,c])=>(
-                <div key={v} style={{textAlign:"center",padding:"8px 4px",background:c+"12",border:`1px solid ${c}44`,borderRadius:8}}>
+                <div key={v} style={{textAlign:"center",padding:"8px 4px",background:c+"12",border:"1px solid "+(c)+"44",borderRadius:8}}>
                   <div style={{fontSize:13,fontWeight:800,color:c}}>{v}</div>
                   <div style={{fontSize:11,color:"#484f58",fontFamily:"'JetBrains Mono'"}}>{r}점</div>
                 </div>
@@ -4036,7 +4076,7 @@ export default function Dashboard(){
                 ["👀 WATCH","조건 미달 · 추적 관찰 필요","#ffd600"],
                 ["🚫 AVOID","매수 금지 · Gate 실패·위험 신호","#f85149"],
               ].map(([t,d,c])=>(
-                <div key={t} style={{padding:"8px 10px",background:c+"10",border:`1px solid ${c}33`,borderRadius:8}}>
+                <div key={t} style={{padding:"8px 10px",background:c+"10",border:"1px solid "+(c)+"33",borderRadius:8}}>
                   <div style={{fontSize:11,fontWeight:700,color:c,marginBottom:3}}>{t}</div>
                   <div style={{fontSize:10,color:"#484f58",whiteSpace:"pre-line",lineHeight:1.4}}>{d}</div>
                 </div>
@@ -4108,7 +4148,7 @@ export default function Dashboard(){
               ["🟡 Risk Off","최대 25%","소규모만 허용","#ffd600"],
               ["🔴 Defensive","신규 매수 금지","현금 보유 유지","#f85149"],
             ].map(([s,p,d,c])=>(
-              <div key={s} style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"6px 10px",borderRadius:6,marginBottom:4,background:c+"10",border:`1px solid ${c}22`}}>
+              <div key={s} style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"6px 10px",borderRadius:6,marginBottom:4,background:c+"10",border:"1px solid "+(c)+"22"}}>
                 <span style={{fontSize:12,fontWeight:700,color:c}}>{s}</span>
                 <span style={{fontSize:12,fontWeight:900,color:c,fontFamily:"'JetBrains Mono'"}}>{p}</span>
                 <span style={{fontSize:10,color:"#484f58"}}>{d}</span>
