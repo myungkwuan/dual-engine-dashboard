@@ -508,6 +508,75 @@ function calcVolume(bars) {
   };
 }
 
+/* ===== v1.5: Gate 검증 ===== */
+function calcGates(sepa, mom) {
+  // G1: 가격 > 150일선 AND 가격 > 200일선
+  const G1 = sepa.sma150 > 0 && sepa.sma200 > 0
+    && sepa.curPrice > sepa.sma150
+    && sepa.curPrice > sepa.sma200;
+
+  // G2: 200일선 상승 추세 (conditions[2] = s200 > s200_30일전)
+  const G2 = !!(sepa.conditions && sepa.conditions[2]);
+
+  // G3: 6M 또는 12M 수익률 양수 (절대모멘텀 최소 하나)
+  const G3 = mom.r6m > 0 || mom.r12m > 0;
+
+  return { G1, G2, G3, passed: G1 && G2 && G3 };
+}
+
+/* ===== v1.5: Risk Penalty (최대 -10pt) ===== */
+function calcRiskPenalty(sepa, mom, vcp) {
+  let penalty = 0;
+  const reasons = [];
+
+  // 1. Pivot 위 +15% 이상 = 추격매수 위험
+  if (vcp.pivot > 0 && sepa.curPrice > vcp.pivot * 1.15) {
+    penalty += 2; reasons.push('피봇과열+2');
+  }
+  // 2. 가격 < SMA50 = 단기 추세 이탈
+  if (sepa.sma50 > 0 && sepa.curPrice < sepa.sma50) {
+    penalty += 2; reasons.push('SMA50이탈+2');
+  }
+  // 3. 3M AND 6M 동시 음수 = 모멘텀 쌍악화
+  if (mom.r3m < 0 && mom.r6m < 0) {
+    penalty += 2; reasons.push('모멘텀쌍악화+2');
+  }
+  // 4. 52주 고점 -3% 이내 AND SMA50 대비 +20% 초과 = 단기 과열
+  if (sepa.high52 > 0 && sepa.curPrice > sepa.high52 * 0.97 && sepa.sma50 > 0 && sepa.curPrice > sepa.sma50 * 1.20) {
+    penalty += 2; reasons.push('단기과열+2');
+  }
+  // 5. 12M 수익률 -30% 이하 = 장기 하락종목
+  if (mom.r12m < -30) {
+    penalty += 2; reasons.push('장기하락+2');
+  }
+
+  return { penalty: Math.min(penalty, 10), reasons };
+}
+
+/* ===== v1.5: Execution Tag ===== */
+function calcExecTag(vcp, vol) {
+  // 거래량 매도신호 최우선
+  if (vol && vol.signalType === 'sell') return 'AVOID';
+
+  const prox = vcp.proximity;  // 양수 = 피봇 아래, 음수 = 피봇 위 (돌파)
+  const mature = vcp.maturity || '';
+
+  // BUY NOW: 피봇 0~3% 아래, 성숙 또는 성숙🔥
+  if (prox >= 0 && prox <= 3 && (mature.includes('성숙') || mature.includes('돌파'))) return 'BUY NOW';
+  // BUY NOW: 피봇 0~5% 아래, 성숙🔥 (거래량 수축 동반)
+  if (prox >= 0 && prox <= 5 && mature === '성숙🔥') return 'BUY NOW';
+  // BUY ON BREAKOUT: 피봇 5~10% 아래, 형성 진행 중
+  if (prox >= 3 && prox <= 10 && (mature.includes('성숙') || mature.includes('형성'))) return 'BUY ON BREAKOUT';
+  // BUY ON BREAKOUT: 막 돌파 (피봇 위 0~5%)
+  if (prox < 0 && prox >= -5 && mature.includes('돌파')) return 'BUY ON BREAKOUT';
+  // WATCH: 이미 5~15% 위 (돌파 후 추격 위험)
+  if (prox < -5 && prox >= -15) return 'WATCH';
+  // AVOID: 15% 이상 이탈
+  if (prox < -15) return 'AVOID';
+
+  return 'WATCH';
+}
+
 /* ===== 종목 분석 메인 ===== */
 let spyCache = null;
 async function getSpyBars() {
@@ -540,6 +609,11 @@ async function analyzeStock(stock) {
   
   // 보조지표 (볼린저/MACD/OBV)
   const indicators = calcIndicators(bars);
+
+  // v1.5: Gate / Risk Penalty / Execution Tag
+  const gate = calcGates(sepa, mom);
+  const risk = calcRiskPenalty(sepa, mom, vcp);
+  const execTag = calcExecTag(vcp, vol);
   
   // e 배열: [판정, 스테이지, 템플릿수, RS]
   const rs = mom.relM3 && mom.relM6 ? 3 : mom.relM3 || mom.relM6 ? 2 : 1;
@@ -554,6 +628,10 @@ async function analyzeStock(stock) {
   return {
     ticker,
     e, v, r,
+    gate,          // v1.5: { G1, G2, G3, passed }
+    riskPenalty: risk.penalty,    // v1.5: 0~10
+    riskReasons: risk.reasons,    // v1.5: ['피봇과열+2', ...]
+    execTag,       // v1.5: 'BUY NOW' | 'BUY ON BREAKOUT' | 'WATCH' | 'AVOID'
     sepaDetail: {
       count: sepa.count,
       stage: sepa.stage,

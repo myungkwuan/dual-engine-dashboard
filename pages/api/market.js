@@ -88,15 +88,34 @@ export default async function handler(req, res) {
       const kospiBars = await fetchChart("^KS11");
       const kospiCur = kospiBars[kospiBars.length - 1].close;
       const kospi200 = sma(kospiBars, 200);
+      const kospi50  = sma(kospiBars, 50);
       const kospi12m = returnPct(kospiBars, 252) || returnPct(kospiBars, kospiBars.length - 1);
+      const kospi6m  = returnPct(kospiBars, 126);
+      const kospi3m  = returnPct(kospiBars, 63);
+
+      // SMA200 추세: 현재 SMA200이 20일 전 SMA200보다 높은지
+      const kospi200Trend = kospi200 && kospiBars.length > 220
+        ? kospi200 > sma(kospiBars.slice(0, -20), 200)
+        : true;
+
+      const kospiAbove200 = kospi200 ? kospiCur > kospi200 : null;
+      const kospiAbove50  = kospi50  ? kospiCur > kospi50  : null;
+      const kospi50Above200 = kospi50 && kospi200 ? kospi50 > kospi200 : false;
+
       results.kospi = {
         price: +kospiCur.toFixed(2),
         sma200: kospi200 ? +kospi200.toFixed(2) : null,
-        above200: kospi200 ? kospiCur > kospi200 : null,
-        r12m: kospi12m
+        sma50:  kospi50  ? +kospi50.toFixed(2)  : null,
+        above200: kospiAbove200,
+        above50:  kospiAbove50,
+        sma200Rising: kospi200Trend,
+        goldenCross: kospi50Above200,
+        r12m: kospi12m,
+        r6m:  kospi6m,
+        r3m:  kospi3m
       };
     } catch (e) {
-      results.kospi = { price: null, r12m: null, above200: null };
+      results.kospi = { price: null, r12m: null, r6m: null, r3m: null, above200: null, above50: null };
     }
 
     await sleep(500);
@@ -129,6 +148,10 @@ export default async function handler(req, res) {
 
     /* ── 5. 시장 건강도 판정 ── */
     const vixVal = results.vix?.value || 20;
+
+    // SPY SMA50 관련 추가 계산
+    const spyAbove50 = spy50 ? spyCur > spy50 : true;
+    const spy50Above200 = spy50 && spy200 ? spy50 > spy200 : false;
     
     // 점수 계산 (100점 만점)
     let healthScore = 0;
@@ -170,16 +193,70 @@ export default async function handler(req, res) {
       modeAction = "신규매수 금지, 현금 비중 확대";
     }
 
+    // ── v2: Risk State (4단계 분류) ──
+    // Risk On  : 가격 > SMA50 > SMA200, VIX < 25
+    // Neutral  : 가격 > SMA200 but SMA50 약화, 또는 VIX 25~30
+    // Risk Off : 가격 < SMA50, 또는 VIX > 30
+    // Defensive: 가격 < SMA200 (장기 하락장)
+    let riskState, riskColor, riskLabel, canBuy, maxPositionPct;
+    if (!spyAbove200) {
+      riskState = 'defensive'; riskColor = '#f85149'; riskLabel = '🔴 Defensive';
+      canBuy = false; maxPositionPct = 0;
+    } else if (!spyAbove50 || vixVal >= 30) {
+      riskState = 'risk_off'; riskColor = '#ff922b'; riskLabel = '🟠 Risk Off';
+      canBuy = false; maxPositionPct = 25;
+    } else if (!spy50Above200 || vixVal >= 25) {
+      riskState = 'neutral'; riskColor = '#ffd600'; riskLabel = '🟡 Neutral';
+      canBuy = true; maxPositionPct = 50;
+    } else {
+      riskState = 'risk_on'; riskColor = '#3fb950'; riskLabel = '🟢 Risk On';
+      canBuy = true; maxPositionPct = 100;
+    }
+
+    // ── v2: KR Risk State (한국 전용 — KOSPI 기반) ──
+    // 한국 종목은 SPY/VIX 대신 KOSPI SMA50/SMA200 기준 적용
+    // 단, VIX 극단 구간(≥30)에서는 글로벌 위험을 반영해 한국도 위험 강화
+    const kospiData = results.kospi;
+    const kospiOk200 = kospiData?.above200;
+    const kospiOk50  = kospiData?.above50;
+    const kospi50Ok200 = kospiData?.goldenCross;
+
+    let krRiskState, krRiskColor, krRiskLabel, krCanBuy, krMaxPositionPct;
+    if (kospiOk200 === false) {
+      // KOSPI가 200일선 아래 → 한국 장기 하락
+      krRiskState = 'defensive'; krRiskColor = '#f85149'; krRiskLabel = '🔴 KR Defensive';
+      krCanBuy = false; krMaxPositionPct = 0;
+    } else if (kospiOk50 === false || vixVal >= 30) {
+      // KOSPI가 50일선 아래 또는 글로벌 VIX 극단
+      krRiskState = 'risk_off'; krRiskColor = '#ff922b'; krRiskLabel = '🟠 KR Risk Off';
+      krCanBuy = false; krMaxPositionPct = 25;
+    } else if (!kospi50Ok200 || vixVal >= 25) {
+      // KOSPI 50일선 > 200일선 미충족 또는 VIX 보통 상승
+      krRiskState = 'neutral'; krRiskColor = '#ffd600'; krRiskLabel = '🟡 KR Neutral';
+      krCanBuy = true; krMaxPositionPct = 50;
+    } else {
+      // KOSPI 완전 상승장
+      krRiskState = 'risk_on'; krRiskColor = '#3fb950'; krRiskLabel = '🟢 KR Risk On';
+      krCanBuy = true; krMaxPositionPct = 100;
+    }
+
     results.health = {
       score: healthScore,
       mode, modeColor, modeIcon, modeAction,
+      // US 시장 (SPY/VIX 기반)
+      riskState, riskColor, riskLabel, canBuy, maxPositionPct,
+      // KR 시장 (KOSPI 기반)
+      krRiskState, krRiskColor, krRiskLabel, krCanBuy, krMaxPositionPct,
       details: {
         spyAbove200: spyAbove200,
         spy200Rising: spy200Trend,
-        spyGoldenCross: spy50 && spy200 ? spy50 > spy200 : false,
+        spyGoldenCross: spy50Above200,
+        spyAbove50: spyAbove50,
         spy12mPositive: spy12m > 0,
         vixLow: vixVal < 25,
-        kospiAbove200: results.kospi?.above200 || false,
+        kospiAbove200: kospiData?.above200 || false,
+        kospiAbove50: kospiData?.above50 || false,
+        kospiGoldenCross: kospiData?.goldenCross || false,
         sectorBreadth: `${upSectors}/${sectorResults.length}`
       }
     };

@@ -2,12 +2,21 @@ import { useState, useEffect, useRef, useCallback, useMemo, Fragment } from "rea
 
 import D from "./data";
 
+/* ===== 캐시 버전 태그 ===== */
+// 배점/로직 변경 시 이 값을 올리면 구버전 캐시 자동 무효화
+const SCHEMA_VERSION = "v1.5.3"; // 형식: vMAJOR.MINOR.PATCH
+
 /* ===== 유틸 ===== */
 const fP=(v,k)=>k?`₩${Math.round(v).toLocaleString()}`:`$${v.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}`;
 const MKT_DEFAULT={spy12m:0,spy200:"조회전",kospi12m:0,vix:0,nh:"-",ad:"-",
   sec:[["XLK",0,0],["XLC",0,0],["XLI",0,0],["XLY",0,0],["XLV",0,0],["XLU",0,0],["XLE",0,0],["XLF",0,0],["XLB",0,0],["XLP",0,0],["XLRE",0,0]],
-  health:{score:0,mode:"조회전",modeColor:"#484f58",modeIcon:"⏳",modeAction:"시장필터를 먼저 실행하세요"},
-  spy:{},vixData:{},kospi:{},loaded:false};
+  health:{score:0,mode:"조회전",modeColor:"#484f58",modeIcon:"⏳",modeAction:"시장필터를 먼저 실행하세요",
+    riskState:"unknown",riskColor:"#484f58",riskLabel:"⏳ 조회전",canBuy:true,maxPositionPct:100,
+    krRiskState:"unknown",krRiskColor:"#484f58",krRiskLabel:"⏳ 조회전",krCanBuy:true,krMaxPositionPct:100},
+  spy:{},vixData:{},kospi:{},loaded:false,
+  // v2: KR/US 분리 직접 접근 필드
+  krRiskState:"unknown",krRiskColor:"#484f58",krRiskLabel:"⏳ 조회전",krCanBuy:true,krMaxPositionPct:100,
+  riskState:"unknown",riskColor:"#484f58",riskLabel:"⏳ 조회전",canBuy:true,maxPositionPct:100};
 
 /* 데이터 접근자 */
 const mfTd=d=>d.m[1];const mfTs=d=>d.m[0];const mfAl=d=>d.m[2];
@@ -161,9 +170,15 @@ function SectorChart({trendData,isMobile,onSectorNav,market}){
 }
 
 /* ===== 듀얼모멘텀 강화 분석 ===== */
+// v2: SPY 실시간 벤치마크 (시장필터 갱신 시 업데이트됨)
+// getDualMomentum은 전역 함수라 MKT state를 직접 못 읽음 → 이 변수로 브릿지
+let _SPY_BENCH = { b3: 4.2, b6: 8.7 };
+
 function getDualMomentum(d) {
   const r3m = d.r[0], r6m = d.r[1], secRank = d.r[2];
-  const spyBench3 = 4.2, spyBench6 = 8.7;
+  // 실시간 SPY 수익률 사용 (시장필터 갱신 전엔 기본값 유지)
+  const spyBench3 = _SPY_BENCH.b3;
+  const spyBench6 = _SPY_BENCH.b6;
 
   /* 절대 모멘텀: 양의 수익률 */
   const absM3 = r3m > 0;
@@ -357,16 +372,41 @@ function getVerdict(d) {
   const todayDrop = d.c <= -5;             // 당일 -5% 이하 급락
   if (todayDrop && volPt <= 0) crossPt -= 3; // 급락+매도거래량 동시 → -3 추가
 
-  const totalPt = Math.max(0, Math.min(sepaPt + dmPt + vcpPt + mfPt + cfPt + volPt + crossPt, 100));
+  const totalPt_raw = sepaPt + dmPt + vcpPt + mfPt + cfPt + volPt + crossPt;
+
+  /* ── v1.5: Gate 실패 페널티 ── */
+  const gate = d._gate;
+  let gatePenalty = 0;
+  let gateLabel = null;
+  if (gate && !gate.passed) {
+    if (!gate.G1 && !gate.G2) { gatePenalty = 20; gateLabel = '⛔G1+G2실패'; }
+    else if (!gate.G1)        { gatePenalty = 15; gateLabel = '⛔G1실패(추세이탈)'; }
+    else if (!gate.G2)        { gatePenalty = 10; gateLabel = '⛔G2실패(200일하락)'; }
+    else if (!gate.G3)        { gatePenalty = 8;  gateLabel = '⛔G3실패(모멘텀음수)'; }
+  }
+
+  /* ── v1.5: Risk Penalty ── */
+  const riskPenalty = d._riskPenalty || 0;
+
+  let totalPt = Math.max(0, Math.min(totalPt_raw - gatePenalty - riskPenalty, 100));
+
+  /* ── v1.5: MF 하위등급 clamp ── */
+  // 펀더멘탈 미충족(F등급, mfScore<60) → 최대 64점
+  if (!isETF && mfGrade === 'F') totalPt = Math.min(totalPt, 64);
+  // CF 단기·중기·장기 모두 약함 → 최대 69점
+  if (!isETF) {
+    const cfAllWeak = cfS(d) <= 1 && cfM(d) <= 1 && cfL(d) <= 1;
+    if (cfAllWeak) totalPt = Math.min(totalPt, 69);
+  }
 
   let verdict, color, stars;
-  if (totalPt >= 80) { verdict = '\u{1F525}최강'; color = '#ff1744'; stars = 5; }
+  if (totalPt >= 85) { verdict = '\u{1F525}최강'; color = '#ff1744'; stars = 5; }      // v1.5: 80→85
   else if (totalPt >= 65) { verdict = '\u{1F7E2}매수'; color = '#00e676'; stars = 4; }
   else if (totalPt >= 50) { verdict = '\u{1F535}관심'; color = '#448aff'; stars = 3; }
   else if (totalPt >= 35) { verdict = '\u{1F7E1}관망'; color = '#ffd600'; stars = 2; }
   else { verdict = '\u26D4위험'; color = '#78909c'; stars = 1; }
 
-  return { verdict, color, stars, totalPt, details: { mfGrade, mfScore, sepaLevel, vcpScore, hasFCF, dm, sepaPt, dmPt, vcpPt, mfPt, cfPt, volPt, crossPt } };
+  return { verdict, color, stars, totalPt, details: { mfGrade, mfScore, sepaLevel, vcpScore, hasFCF, dm, sepaPt, dmPt, vcpPt, mfPt, cfPt, volPt, crossPt, gatePenalty, gateLabel, riskPenalty } };
 }
 
 /* ===== AI 분석 텍스트 생성 ===== */
@@ -375,7 +415,7 @@ function genAnalysis(d) {
   const dm = v.details.dm;
   const lines = [];
   const st = seTt(d), vm = vcpMt(d), vol = d._volData;
-  const {sepaPt, dmPt, vcpPt, mfPt, cfPt, volPt, crossPt} = v.details;
+  const {sepaPt, dmPt, vcpPt, mfPt, cfPt, volPt, crossPt, gatePenalty, gateLabel, riskPenalty} = v.details;
 
   /* ── 한줄 요약 ── */
   const good = [], bad = [];
@@ -394,7 +434,16 @@ function genAnalysis(d) {
   lines.push(`💬 ${summary}`);
 
   /* ── 점수 한줄 ── */
-  lines.push(`📊 ${v.totalPt}점 | SEPA ${sepaPt}/30 · DM ${dmPt}/23 · VCP ${vcpPt}/15 · MF ${mfPt}/10 · CF ${cfPt}/5 · 거래량 ${volPt}/12${crossPt?(' · 교차'+(crossPt>0?'+':'')+crossPt):''}`);
+  lines.push(`📊 ${v.totalPt}점 | SEPA ${sepaPt}/30 · DM ${dmPt}/23 · VCP ${vcpPt}/15 · MF ${mfPt}/10 · CF ${cfPt}/5 · 거래량 ${volPt}/12${crossPt?(' · 교차'+(crossPt>0?'+':'')+crossPt):''}${gatePenalty?(' · Gate'+(-gatePenalty)):''}${riskPenalty?(' · Risk'+(-riskPenalty)):''}`);
+  /* ── v1.5: Gate 경고 ── */
+  if (gateLabel) lines.push(`🚧 Gate 실패 (${-gatePenalty}pt): ${gateLabel}. 매수 조건 미충족.`);
+  /* ── v1.5: Risk 경고 ── */
+  if (riskPenalty > 0 && d._riskReasons?.length) lines.push(`⚠️ 위험 요소 (-${riskPenalty}pt): ${d._riskReasons.join(' / ')}`);
+  /* ── v1.5: Execution Tag ── */
+  if (d._execTag) {
+    const tagMap = { 'BUY NOW':'🟢 지금 매수 가능 구간 (BUY NOW)', 'BUY ON BREAKOUT':'🔵 돌파 시 매수 (BUY ON BREAKOUT)', 'WATCH':'🟡 추가 관찰 필요 (WATCH)', 'AVOID':'🔴 진입 회피 (AVOID)' };
+    lines.push(tagMap[d._execTag] || `🏷️ ${d._execTag}`);
+  }
 
   /* ── 추세 (SEPA) ── */
   if (st === 8) lines.push(`📈 추세: 완벽한 상승추세! 모든 이동평균선이 정배열. 가장 이상적인 매수 구간.`);
@@ -671,7 +720,7 @@ function StockDetailModal({ stock, onClose, isWatched, onToggleWatch, gradeHisto
 
   const rsInterp = dm.rsScore >= 80
     ? { signal: '상대강도 최상위', color: '#00ff88', icon: '🟢',
-        desc: `RS ${dm.rsScore}/100으로 전체 시장 상위 ${100-dm.rsScore}%에 위치. 3M 수익률 ${dm.r3m>0?'+':''}${dm.r3m}%(SPY 대비 ${(dm.r3m-4.2).toFixed(1)}%p 초과). 기관·스마트머니가 집중 매수하는 리더 종목.`,
+        desc: `RS ${dm.rsScore}/100으로 전체 시장 상위 ${100-dm.rsScore}%에 위치. 3M 수익률 ${dm.r3m>0?'+':''}${dm.r3m}%(SPY 대비 ${(dm.r3m-_SPY_BENCH.b3).toFixed(1)}%p 초과). 기관·스마트머니가 집중 매수하는 리더 종목.`,
         action: '✅ 시장 리더! 추세 추종 매수 최적' }
     : dm.rsScore >= 60
     ? { signal: '상대강도 양호', color: '#3fb950', icon: '🔵',
@@ -737,6 +786,18 @@ function StockDetailModal({ stock, onClose, isWatched, onToggleWatch, gradeHisto
               <div style={{fontSize:'16px',fontWeight:900,color:verdict.color,whiteSpace:'nowrap'}}>{verdict.verdict}</div>
               <div style={{fontSize:'9px',color:'#666'}}>{'⭐'.repeat(verdict.stars)}</div>
             </div>
+            {/* v1.5: Execution Tag */}
+            {stock._execTag && (()=>{
+              const tagStyle={
+                'BUY NOW':{bg:'#00e67620',border:'#00e676',color:'#00e676',label:'🟢 BUY NOW'},
+                'BUY ON BREAKOUT':{bg:'#448aff20',border:'#448aff',color:'#448aff',label:'🔵 돌파매수'},
+                'WATCH':{bg:'#ffd60020',border:'#ffd600',color:'#ffd600',label:'🟡 WATCH'},
+                'AVOID':{bg:'#f8514920',border:'#f85149',color:'#f85149',label:'🔴 AVOID'},
+              }[stock._execTag]||{bg:'#ffffff10',border:'#666',color:'#aaa',label:stock._execTag};
+              return <div style={{padding:'3px 10px',borderRadius:'6px',background:tagStyle.bg,border:`1px solid ${tagStyle.border}`,fontSize:'10px',fontWeight:800,color:tagStyle.color,whiteSpace:'nowrap'}}>{tagStyle.label}</div>;
+            })()}
+            {/* v1.5: Gate 실패 표시 */}
+            {verdict.details.gateLabel && <div style={{padding:'2px 8px',borderRadius:'5px',background:'#f8514918',border:'1px solid #f85149',fontSize:'9px',fontWeight:700,color:'#f85149',whiteSpace:'nowrap'}}>{verdict.details.gateLabel}</div>}
             <div style={{display:'flex',gap:'4px',alignItems:'center'}}>
               <span style={{padding:'3px 8px',borderRadius:'5px',background:dm.signalColor+'20',border:`1px solid ${dm.signalColor}44`,fontSize:'10px',fontWeight:700,color:dm.signalColor,whiteSpace:'nowrap'}}>{dm.signal}</span>
               <button onClick={()=>onToggleWatch(stock.t)} style={{padding:'3px 8px',borderRadius:'5px',border:'1px solid '+(isWatched?'#ffd43b':'#21262d'),background:isWatched?'#ffd43b18':'#161b22',color:isWatched?'#ffd43b':'#8b949e',cursor:'pointer',fontSize:'10px',fontWeight:700,whiteSpace:'nowrap'}}>
@@ -1214,13 +1275,36 @@ export default function Dashboard(){
   });
   /* 보유종목 입력폼 */
   const[pfForm,setPfForm]=useState({ticker:'',buyPrice:0,qty:0,stopLoss:0});
-  /* 보유종목 검색 */
-  const[pfSearch,setPfSearch]=useState('');
+  /* 보유종목 추가 검색 */
+  const[pfAddSearch,setPfAddSearch]=useState('');
+  const[pfAddOpen,setPfAddOpen]=useState(false);
+  const[pfAddSelected,setPfAddSelected]=useState(null); // 선택된 종목 객체
+  // v2: 거래 로그
+  const[tradeLog,setTradeLog]=useState(()=>{
+    try{const s=localStorage.getItem('trade_log');return s?JSON.parse(s):[];}catch(e){return[];}
+  });
+  const[sellModal,setSellModal]=useState(null); // {portIdx, stock, buyPrice, qty, name, ticker, isKR, score, execTag}
   /* 듀얼모멘텀 필터 */
   const[dmFilter,setDmFilter]=useState("all");
   /* 시장필터 실시간 데이터 */
   const[MKT,setMKT]=useState(()=>{
-    try{const c=localStorage.getItem('mkt_data');return c?JSON.parse(c):MKT_DEFAULT;}catch(e){return MKT_DEFAULT;}
+    try{
+      const c=localStorage.getItem('mkt_data');
+      if(c){
+        const parsed=JSON.parse(c);
+        // v2: 캐시된 SPY 수익률로 벤치마크 즉시 복원
+        if(parsed.spy3m!=null) _SPY_BENCH.b3=parsed.spy3m;
+        if(parsed.spy6m!=null) _SPY_BENCH.b6=parsed.spy6m;
+        // v2: KR 필드 없는 구버전 캐시 보완
+        if(parsed.krRiskState==null) parsed.krRiskState="unknown";
+        if(parsed.krRiskColor==null) parsed.krRiskColor="#484f58";
+        if(parsed.krRiskLabel==null) parsed.krRiskLabel="⏳ 재조회 필요";
+        if(parsed.krCanBuy==null) parsed.krCanBuy=true;
+        if(parsed.krMaxPositionPct==null) parsed.krMaxPositionPct=100;
+        return parsed;
+      }
+      return MKT_DEFAULT;
+    }catch(e){return MKT_DEFAULT;}
   });
   const[mktRt,setMktRt]=useState("idle");
   const[mktTime,setMktTime]=useState(()=>{
@@ -1254,6 +1338,7 @@ export default function Dashboard(){
   const[anaTime,setAnaTime]=useState(()=>{
     try{const s=localStorage.getItem('ana_time');return s||'-';}catch(e){return'-';}
   });
+  const[isV1Cache,setIsV1Cache]=useState(false); // v1.5: 구버전 캐시 감지
   const autoRef=useRef(null);
   const busy=useRef(false);
   const anaBusy=useRef(false);
@@ -1264,6 +1349,22 @@ export default function Dashboard(){
       const cached=localStorage.getItem('ana_data');
       if(cached){
         const parsed=JSON.parse(cached);
+
+        // ── 버전 태그 검사 ──
+        const savedVer = localStorage.getItem('ana_schema_ver');
+        const savedTs  = localStorage.getItem('ana_time') || '-';
+        if(savedVer && savedVer !== SCHEMA_VERSION){
+          // 버전 불일치 → 캐시 무효화, 재분석 배너 표시
+          setIsV1Cache(true);
+          log(`⚠️ 캐시 버전 불일치 (저장: ${savedVer} → 현재: ${SCHEMA_VERSION}) — 재분석 필요`,"er");
+          return; // 구버전 데이터 적용 안 함
+        }
+
+        // ── 구버전 gate 필드 없는 캐시 감지 (fallback) ──
+        const sampleKeys=Object.keys(parsed).slice(0,3);
+        const isOldCache=sampleKeys.length>0 && !parsed[sampleKeys[0]]?.gate;
+        if(isOldCache){ setIsV1Cache(true); return; }
+
         setStocks(prev=>prev.map(d=>{
           const a=parsed[d.t];
           if(!a)return d;
@@ -1272,10 +1373,14 @@ export default function Dashboard(){
             r:[a.r?a.r[0]:d.r[0], a.r?a.r[1]:d.r[1], d.r[2]],
             v:a.v||d.v,
             _volData:a.volData||null,
-            _indicators:a.indicators||null
+            _indicators:a.indicators||null,
+            _gate:a.gate||null,
+            _riskPenalty:a.riskPenalty||0,
+            _riskReasons:a.riskReasons||[],
+            _execTag:a.execTag||null,
           };
         }));
-        log("📂 마지막 분석 결과 로드 ("+anaTime+")","ok");
+        log(`📂 분석 캐시 로드 [${SCHEMA_VERSION}] (${savedTs})`,"ok");
       }
     }catch(e){}
   },[]);
@@ -1287,6 +1392,7 @@ export default function Dashboard(){
   /* watchlist localStorage 동기화 */
   useEffect(()=>{try{localStorage.setItem('watchlist',JSON.stringify(watchlist));}catch(e){}},[watchlist]);
   useEffect(()=>{try{localStorage.setItem('portfolio',JSON.stringify(portfolio));}catch(e){}},[portfolio]);
+  useEffect(()=>{try{localStorage.setItem('trade_log',JSON.stringify(tradeLog));}catch(e){}},[tradeLog]);
 
   const toggleWatch=useCallback((ticker)=>{
     setWatchlist(p=>p.includes(ticker)?p.filter(t=>t!==ticker):[...p,ticker]);
@@ -1476,6 +1582,10 @@ export default function Dashboard(){
         _vcpDetail: a.vcpDetail,
         _volData: a.volData,
         _indicators: a.indicators,
+        _gate: a.gate||null,
+        _riskPenalty: a.riskPenalty||0,
+        _riskReasons: a.riskReasons||[],
+        _execTag: a.execTag||null,
       };
     });
 
@@ -1515,9 +1625,11 @@ export default function Dashboard(){
     /* localStorage에 캐시 */
     try{
       localStorage.setItem('ana_data',JSON.stringify(allResults));
+      localStorage.setItem('ana_schema_ver', SCHEMA_VERSION); // 버전 태그 저장
       const timeStr=new Date().toLocaleString("ko");
       localStorage.setItem('ana_time',timeStr);
       setAnaTime(timeStr);
+      setIsV1Cache(false); // 새 분석 완료 → 구버전 배너 해제
     }catch(e){}
 
     const elapsed=((Date.now()-t0)/1000).toFixed(1);
@@ -1549,16 +1661,37 @@ export default function Dashboard(){
         spy3m:d.spy?.r3m||0,
         spy6m:d.spy?.r6m||0,
         kospi12m:d.kospi?.r12m||0,
+        kospi6m:d.kospi?.r6m||0,
+        kospi3m:d.kospi?.r3m||0,
         kospiAbove200:d.kospi?.above200,
+        kospiAbove50:d.kospi?.above50,
+        kospiSma200:d.kospi?.sma200,
+        kospiSma50:d.kospi?.sma50,
+        kospiSma200Rising:d.kospi?.sma200Rising,
         kospiPrice:d.kospi?.price,
         vix:d.vix?.value||0,
         vixLevel:d.vix?.level||"-",
         nh:"-",ad:"-",
         sec:(d.sectors||[]).map(s=>[s.sym,s.r3m,s.r1m||0]),
         health:d.health||MKT_DEFAULT.health,
+        // v2: US Risk State (SPY/VIX 기반)
+        riskState:d.health?.riskState||"unknown",
+        riskColor:d.health?.riskColor||"#484f58",
+        riskLabel:d.health?.riskLabel||"⏳",
+        canBuy:d.health?.canBuy!==false,
+        maxPositionPct:d.health?.maxPositionPct??100,
+        // v2: KR Risk State (KOSPI 기반 — 한국 종목 전용)
+        krRiskState:d.health?.krRiskState||"unknown",
+        krRiskColor:d.health?.krRiskColor||"#484f58",
+        krRiskLabel:d.health?.krRiskLabel||"⏳",
+        krCanBuy:d.health?.krCanBuy!==false,
+        krMaxPositionPct:d.health?.krMaxPositionPct??100,
         loaded:true
       };
       setMKT(newMKT);
+      // v2: 전역 SPY 벤치마크 실시간 업데이트 → getDualMomentum에 반영
+      if (d.spy?.r3m != null) _SPY_BENCH.b3 = d.spy.r3m;
+      if (d.spy?.r6m != null) _SPY_BENCH.b6 = d.spy.r6m;
       try{
         localStorage.setItem('mkt_data',JSON.stringify(newMKT));
         const ts=new Date().toLocaleString("ko");
@@ -1799,6 +1932,13 @@ export default function Dashboard(){
         {anaTime!=='-' && anaRt!=="fetching" && <div style={{marginTop:2,fontSize:11,color:"#484f58",textAlign:"right",padding:"0 4px"}}>
           마지막 분석: {anaTime} {anaRt==="done" && <span style={{color:"#3fb950"}}>✅</span>}
         </div>}
+        {/* 캐시 버전 불일치 / 구버전 캐시 감지 배너 */}
+        {isV1Cache && anaRt!=="fetching" && <div style={{marginTop:4,padding:"8px 14px",background:"linear-gradient(90deg,#2d1b0020,#3d2b1020)",border:"1px solid #ff922b55",borderRadius:8,display:"flex",alignItems:"center",justifyContent:"space-between",gap:8}}>
+          <div style={{fontSize:11,color:"#ff922b"}}>
+            ⚡ <b>스키마 업데이트 ({SCHEMA_VERSION})</b> — 저장된 분석 결과가 현재 로직과 다릅니다. 정확한 점수를 위해 <b>재분석</b>을 실행하세요.
+          </div>
+          <button onClick={()=>setIsV1Cache(false)} style={{background:"transparent",border:"none",color:"#484f58",cursor:"pointer",fontSize:13,padding:"0 4px",flexShrink:0}}>✕</button>
+        </div>}
       </div>
 
       {showLog && <div style={{maxWidth:1800,margin:"0 auto",padding:"0 20px 4px"}}><div style={{background:"#0d1117",border:"1px solid #21262d",borderRadius:6,padding:"6px 10px",maxHeight:100,overflowY:"auto",fontFamily:"'JetBrains Mono'",fontSize:12}}>{logs.map((l,i)=><div key={i} style={{padding:"1px 0"}}><span style={{color:"#484f58",marginRight:4}}>{l.ts}</span><span style={{color:l.c==="ok"?"#3fb950":l.c==="er"?"#f85149":"#58a6ff"}}>{l.msg}</span></div>)}</div></div>}
@@ -1806,7 +1946,7 @@ export default function Dashboard(){
       {/* Tab Nav */}
       <div className="tab-nav" style={{maxWidth:1800,margin:"6px auto",padding:"0 20px"}}>
         <div style={{display:"flex",gap:4,overflowX:"auto",WebkitOverflowScrolling:"touch",paddingBottom:2,scrollbarWidth:"none"}}>
-          {[["main",isMobile?"📊":"📊 메인"],["watch",isMobile?("👁"+watchlist.length):("👁 워치("+watchlist.length+")")],["port",isMobile?"💼":"💼 보유종목"],["filter",isMobile?"🌐":"🌐 시장필터"],["calc",isMobile?"🧮":"🧮 포지션"],["check",isMobile?"✅":"✅ 체크리스트"],["content",isMobile?"📝":"📝 콘텐츠"]].map(([k,l])=>
+          {[["main",isMobile?"📊":"📊 메인"],["watch",isMobile?("👁"+watchlist.length):("👁 워치("+watchlist.length+")")],["port",isMobile?"💼":"💼 보유종목"],["filter",isMobile?"🌐":"🌐 시장필터"],["calc",isMobile?"🧮":"🧮 포지션"],["check",isMobile?"✅":"✅ 체크리스트"],["guide",isMobile?"📖":"📖 가이드"]].map(([k,l])=>
             <Tb key={k} label={l} active={tab===k} onClick={()=>setTab(k)}/>
           )}
         </div>
@@ -1855,6 +1995,15 @@ export default function Dashboard(){
                   <div>6M: <b style={{color:MKT.spy6m>0?"#3fb950":"#f85149"}}>{MKT.spy6m>0?"+":""}{MKT.spy6m}%</b></div>
                   <div>3M: <b style={{color:MKT.spy3m>0?"#3fb950":"#f85149"}}>{MKT.spy3m>0?"+":""}{MKT.spy3m}%</b></div>
                 </div>
+                {/* v2: DM 벤치마크 적용 현황 */}
+                <div style={{marginTop:8,padding:"4px 8px",background:"#bc8cff12",borderRadius:5,border:"1px solid #bc8cff22",fontSize:10,color:"#bc8cff"}}>
+                  📐 DM벤치 (실시간 적용 중)<br/>
+                  <span style={{fontFamily:"'JetBrains Mono'",fontSize:11}}>
+                    3M: <b>{MKT.spy3m!=null?MKT.spy3m.toFixed(1):"4.2"}%</b>
+                    &nbsp;·&nbsp;6M: <b>{MKT.spy6m!=null?MKT.spy6m.toFixed(1):"8.7"}%</b>
+                  </span>
+                  <span style={{color:"#484f58",marginLeft:4}}>{MKT.spy3m!=null?"✅ 실시간":"⏳ 기본값"}</span>
+                </div>
               </div>
               {/* VIX */}
               <div style={{background:"#161b22",borderRadius:8,padding:12}}>
@@ -1870,22 +2019,49 @@ export default function Dashboard(){
               <div style={{background:"#161b22",borderRadius:8,padding:12}}>
                 <div style={{fontSize:12,color:"#484f58",marginBottom:6,fontWeight:700}}>🇰🇷 KOSPI</div>
                 <div style={{fontSize:18,fontWeight:900,fontFamily:"'JetBrains Mono'",color:"#e6edf3"}}>{MKT.kospiPrice?MKT.kospiPrice.toLocaleString():"-"}</div>
-                <div style={{fontSize:11,marginTop:4}}>200MA: <b style={{color:MKT.kospiAbove200?"#3fb950":"#f85149"}}>{MKT.kospiAbove200?"위 ✅":"아래 ❌"}</b></div>
-                <div style={{fontSize:11}}>12M 수익률: <b style={{color:MKT.kospi12m>0?"#3fb950":"#f85149"}}>{MKT.kospi12m>0?"+":""}{MKT.kospi12m}%</b></div>
+                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:4,marginTop:6,fontSize:11}}>
+                  <div>200MA: <b style={{color:MKT.kospiAbove200?"#3fb950":"#f85149"}}>{MKT.kospiAbove200?"위 ✅":"아래 ❌"}</b></div>
+                  <div>200MA추세: <b style={{color:MKT.kospiSma200Rising?"#3fb950":"#f85149"}}>{MKT.kospiSma200Rising?"상승✅":"하락❌"}</b></div>
+                  <div>50MA: <b style={{color:MKT.kospiAbove50?"#3fb950":"#f85149"}}>{MKT.kospiAbove50!=null?(MKT.kospiAbove50?"위 ✅":"아래 ❌"):"조회중"}</b></div>
+                  <div>12M: <b style={{color:MKT.kospi12m>0?"#3fb950":"#f85149"}}>{MKT.kospi12m>0?"+":""}{MKT.kospi12m}%</b></div>
+                  <div>6M: <b style={{color:(MKT.kospi6m||0)>0?"#3fb950":"#f85149"}}>{(MKT.kospi6m||0)>0?"+":""}{MKT.kospi6m||"-"}%</b></div>
+                  <div>3M: <b style={{color:(MKT.kospi3m||0)>0?"#3fb950":"#f85149"}}>{(MKT.kospi3m||0)>0?"+":""}{MKT.kospi3m||"-"}%</b></div>
+                </div>
+                {/* KR Risk State 뱃지 */}
+                <div style={{marginTop:8,padding:"4px 8px",background:(MKT.krRiskColor||"#484f58")+"15",borderRadius:5,border:`1px solid ${MKT.krRiskColor||"#484f58"}33`,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                  <span style={{fontSize:11,fontWeight:800,color:MKT.krRiskColor||"#484f58"}}>{MKT.krRiskLabel||"⏳ 조회전"}</span>
+                  <span style={{fontSize:10,color:"#8b949e"}}>최대 {MKT.krMaxPositionPct??100}%</span>
+                </div>
               </div>
             </div>
 
             {/* 건강도 체크리스트 */}
             {MKT.health?.details && <div style={{background:"#161b22",borderRadius:8,padding:12,marginBottom:12}}>
               <div style={{fontSize:12,fontWeight:700,color:"#58a6ff",marginBottom:8}}>🩺 시장 건강도 체크리스트</div>
+              {/* v2: US / KR Risk State 분리 표시 */}
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:6,marginBottom:8}}>
+                {MKT.riskLabel && <div style={{padding:"6px 10px",background:(MKT.riskColor||"#484f58")+"15",border:`1px solid ${MKT.riskColor||"#484f58"}44`,borderRadius:6}}>
+                  <div style={{fontSize:10,color:"#8b949e",marginBottom:2}}>🇺🇸 미국 (SPY/VIX)</div>
+                  <div style={{fontSize:12,fontWeight:800,color:MKT.riskColor||"#484f58"}}>{MKT.riskLabel}</div>
+                  <div style={{fontSize:10,color:"#8b949e"}}>최대 {MKT.maxPositionPct??100}%</div>
+                </div>}
+                {MKT.krRiskLabel && <div style={{padding:"6px 10px",background:(MKT.krRiskColor||"#484f58")+"15",border:`1px solid ${MKT.krRiskColor||"#484f58"}44`,borderRadius:6}}>
+                  <div style={{fontSize:10,color:"#8b949e",marginBottom:2}}>🇰🇷 한국 (KOSPI)</div>
+                  <div style={{fontSize:12,fontWeight:800,color:MKT.krRiskColor||"#484f58"}}>{MKT.krRiskLabel}</div>
+                  <div style={{fontSize:10,color:"#8b949e"}}>최대 {MKT.krMaxPositionPct??100}%</div>
+                </div>}
+              </div>
               <div style={{display:"grid",gridTemplateColumns:isMobile?"1fr 1fr":"repeat(4,1fr)",gap:6}}>
                 {[
                   ["SPY > 200MA",MKT.health.details.spyAbove200],
+                  ["SPY > 50MA",MKT.health.details.spyAbove50],
                   ["200MA 상승추세",MKT.health.details.spy200Rising],
                   ["골든크로스(50>200)",MKT.health.details.spyGoldenCross],
                   ["SPY 12M 양수",MKT.health.details.spy12mPositive],
                   ["VIX < 25",MKT.health.details.vixLow],
                   ["KOSPI > 200MA",MKT.health.details.kospiAbove200],
+                  ["KOSPI > 50MA",MKT.health.details.kospiAbove50],
+                  ["KOSPI 골든크로스",MKT.health.details.kospiGoldenCross],
                   ["섹터 브레드스",MKT.health.details.sectorBreadth+" 상승"],
                 ].map(([label,ok])=>(
                   <div key={label} style={{display:"flex",alignItems:"center",gap:6,padding:"4px 8px",borderRadius:6,background:ok?"#3fb95010":"#f8514910",border:`1px solid ${ok?"#3fb95022":"#f8514922"}`}}>
@@ -2192,6 +2368,19 @@ export default function Dashboard(){
             const pc=(sz/acct*100);
             const stopPct=((stop-entry)/entry*100);
 
+            // v2: 종목 국적에 따라 KR/US 시장 상태 분리 적용
+            const isKRStock = posCal.selStock?.k || posCal.isKR;
+            const activeMktPct = isKRStock ? (MKT.krMaxPositionPct??100) : (MKT.maxPositionPct??100);
+            const activeMktState = isKRStock ? (MKT.krRiskState||"unknown") : (MKT.riskState||"unknown");
+            const activeMktColor = isKRStock ? (MKT.krRiskColor||"#484f58") : (MKT.riskColor||"#484f58");
+            const activeMktLabel = isKRStock ? (MKT.krRiskLabel||"") : (MKT.riskLabel||"");
+            const mktMult = activeMktPct / 100;
+            const selScore=posCal.selStock?getVerdict(posCal.selStock).totalPt:0;
+            const scoreMult=selScore>=85?1.0:selScore>=75?0.75:selScore>=65?0.5:0;
+            const recPct=+(pc*mktMult*scoreMult).toFixed(1);
+            const recSh=Math.floor(recPct/100*acct/entry);
+            const recSz=recSh*entry;
+
             // 목표가 계산
             const t1Pct=target1>entry?((target1-entry)/entry*100):0;
             const t2Pct=target2>entry?((target2-entry)/entry*100):0;
@@ -2206,6 +2395,34 @@ export default function Dashboard(){
             const splitProfit=target1>entry&&target2>entry?(halfSh*(target1-entry)+restSh*(target2-entry)):0;
 
             return <>
+              {/* v2: 시장 상태 × 점수 기반 권장 포지션 — KR/US 분리 적용 */}
+              {MKT.loaded && <div style={{marginTop:10,padding:"10px 14px",background:activeMktColor+"12",border:`1px solid ${activeMktColor}44`,borderRadius:8}}>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap",gap:8}}>
+                  <div style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
+                    <span style={{fontSize:11,color:"#484f58"}}>{isKRStock?"🇰🇷 한국주식":"🇺🇸 미국주식"}</span>
+                    <span style={{fontSize:12,fontWeight:800,color:activeMktColor}}>{activeMktLabel||"시장상태"}</span>
+                    <span style={{fontSize:11,color:"#8b949e"}}>배수 {(mktMult*100).toFixed(0)}% × 점수 {(scoreMult*100).toFixed(0)}%</span>
+                  </div>
+                  {scoreMult===0 && <span style={{fontSize:11,fontWeight:700,color:"#f85149"}}>🚫 점수 부족 — 매수 금지</span>}
+                  {mktMult===0 && <span style={{fontSize:11,fontWeight:700,color:"#f85149"}}>🚫 {isKRStock?"KOSPI":"SPY"} 위험 — 매수 금지</span>}
+                </div>
+                {mktMult===0&&<div style={{marginTop:4,fontSize:10,color:"#ff8a80"}}>{isKRStock?"KOSPI가 200일선 아래이거나 50일선 아래입니다.":"SPY가 200일선 아래이거나 VIX≥30입니다."} 현금 보유를 권장합니다.</div>}
+                {mktMult>0 && scoreMult>0 && <div style={{marginTop:8,display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:6}}>
+                  <div style={{background:"#0d1117",borderRadius:6,padding:"6px 8px",textAlign:"center"}}>
+                    <div style={{fontSize:9,color:"#484f58"}}>권장 수량</div>
+                    <div style={{fontSize:16,fontWeight:800,color:"#bc8cff",fontFamily:"'JetBrains Mono'"}}>{recSh}주</div>
+                  </div>
+                  <div style={{background:"#0d1117",borderRadius:6,padding:"6px 8px",textAlign:"center"}}>
+                    <div style={{fontSize:9,color:"#484f58"}}>권장 투자금</div>
+                    <div style={{fontSize:16,fontWeight:800,color:"#58a6ff",fontFamily:"'JetBrains Mono'"}}>{fN(recSz)}</div>
+                  </div>
+                  <div style={{background:"#0d1117",borderRadius:6,padding:"6px 8px",textAlign:"center"}}>
+                    <div style={{fontSize:9,color:"#484f58"}}>권장 비중</div>
+                    <div style={{fontSize:16,fontWeight:800,color:recPct>20?"#f85149":recPct>10?"#ffd600":"#3fb950",fontFamily:"'JetBrains Mono'"}}>{recPct}%</div>
+                  </div>
+                </div>}
+              </div>}
+
               {/* 기본 포지션 */}
               <div style={{display:"grid",gridTemplateColumns:isMobile?"repeat(3,1fr)":"repeat(6,1fr)",gap:6,marginTop:10}}>
                 {[
@@ -2558,9 +2775,14 @@ export default function Dashboard(){
                         <span style={{fontSize:10,color:"#484f58",marginLeft:4}}>{d.t}</span>
                         {!isMobile&&<div style={{fontSize:10,color:"#484f58"}}>{d.s}</div>}
                       </td>
-                      <td style={{padding:"4px 6px",textAlign:"center",background:vd.color+"12",borderLeft:`2px solid ${vd.color}`,minWidth:60}}>
-                        <div style={{fontSize:12,fontWeight:800,color:vd.color}}>{vd.verdict}</div>
-                        <div style={{fontSize:10,color:vd.color,fontFamily:"'JetBrains Mono'",fontWeight:700}}>{vd.totalPt}점</div>
+                      <td style={{padding:"4px 6px",textAlign:"center",background:vd.color+"12",borderLeft:`2px solid ${vd.color}`,minWidth:70}}>
+                        <div style={{display:"flex",alignItems:"center",justifyContent:"center",gap:3}}>
+                          <span style={{fontSize:12,fontWeight:800,color:vd.color}}>{vd.verdict}</span>
+                          <span style={{fontSize:10,color:"#484f58",fontFamily:"'JetBrains Mono'",fontWeight:700}}>{vd.totalPt}</span>
+                        </div>
+                        {d._execTag && (()=>{const tC={'BUY NOW':'#00e676','BUY ON BREAKOUT':'#448aff','WATCH':'#ffd600','AVOID':'#f85149'}[d._execTag]||'#aaa';const tL={'BUY NOW':'⚡NOW','BUY ON BREAKOUT':'📈BRK','WATCH':'👀WATCH','AVOID':'🚫AVOID'}[d._execTag]||d._execTag;return <div style={{fontSize:8,fontWeight:700,color:tC,marginTop:1,whiteSpace:'nowrap'}}>{tL}</div>;})()}
+                        {vd.details.gateLabel && <div style={{fontSize:7,color:'#f85149',marginTop:1,fontWeight:700,whiteSpace:'nowrap'}}>{vd.details.gateLabel}</div>}
+                        {!vd.details.gateLabel && vd.details.riskPenalty>0 && <div style={{fontSize:7,color:'#ff922b',marginTop:1,fontWeight:600}}>⚠️Risk-{vd.details.riskPenalty}</div>}
                       </td>
                       <td style={{padding:"6px 8px",textAlign:"right",fontFamily:"'JetBrains Mono'",color:"#e6edf3",fontWeight:600,fontSize:13}}>{d.p?fP(d.p,d.k):'-'}</td>
                       <td style={{padding:"6px 8px",textAlign:"right"}}><Chg v={d.c}/></td>
@@ -2601,33 +2823,117 @@ export default function Dashboard(){
         <div style={{background:"#0d1117",border:"1px solid #21262d",borderRadius:10,padding:14}}>
           <h3 style={{color:"#bc8cff",fontSize:16,marginBottom:12,marginTop:0}}>💼 보유종목</h3>
 
-          {/* 검색창 */}
-          <div style={{marginBottom:10}}>
-            <input placeholder="🔍 종목명 또는 티커 검색..." value={pfSearch} onChange={e=>setPfSearch(e.target.value)}
-              style={{padding:"8px 14px",borderRadius:8,border:"1px solid #21262d",background:"#161b22",color:"#e6edf3",fontSize:13,width:"100%",maxWidth:400,outline:"none"}}/>
-          </div>
+          {/* 종목 검색 추가 폼 */}
+          {(()=>{
+            const addResults = pfAddSearch.trim().length>=1
+              ? stocks.filter(d=>
+                  d.n.toLowerCase().includes(pfAddSearch.toLowerCase()) ||
+                  d.t.toLowerCase().includes(pfAddSearch.toLowerCase())
+                ).slice(0,8)
+              : [];
+            const vd = pfAddSelected ? getVerdict(pfAddSelected) : null;
+            return (
+              <div style={{marginBottom:14,background:"#161b22",borderRadius:10,border:"1px solid #21262d",padding:12}}>
+                <div style={{fontSize:12,fontWeight:700,color:"#8b949e",marginBottom:8}}>➕ 종목 추가</div>
 
-          {/* 종목 추가 폼 */}
-          <div style={{display:"flex",gap:6,marginBottom:14,flexWrap:"wrap",alignItems:"center",padding:10,background:"#161b22",borderRadius:8,border:"1px solid #21262d"}}>
-            <span style={{fontSize:12,color:"#8b949e",fontWeight:600}}>➕ 추가:</span>
-            <select value={pfForm.ticker} onChange={e=>setPfForm(p=>({...p,ticker:e.target.value}))}
-              style={{padding:"5px 8px",borderRadius:5,border:"1px solid #21262d",background:"#0d1117",color:"#e6edf3",fontSize:12,minWidth:140}}>
-              <option value="">종목 선택</option>
-              <optgroup label="🇺🇸 미국">
-                {stocks.filter(d=>!d.k).map(d=><option key={d.t} value={d.t}>{d.n} ({d.t})</option>)}
-              </optgroup>
-              <optgroup label="🇰🇷 한국">
-                {stocks.filter(d=>d.k).map(d=><option key={d.t} value={d.t}>{d.n} ({d.t})</option>)}
-              </optgroup>
-            </select>
-            <input type="number" placeholder="매수가" value={pfForm.buyPrice||''} onChange={e=>setPfForm(p=>({...p,buyPrice:e.target.value}))}
-              style={{padding:"5px 8px",borderRadius:5,border:"1px solid #21262d",background:"#0d1117",color:"#e6edf3",fontSize:12,width:100,fontFamily:"'JetBrains Mono'"}}/>
-            <input type="number" placeholder="수량" value={pfForm.qty||''} onChange={e=>setPfForm(p=>({...p,qty:e.target.value}))}
-              style={{padding:"5px 8px",borderRadius:5,border:"1px solid #21262d",background:"#0d1117",color:"#e6edf3",fontSize:12,width:70,fontFamily:"'JetBrains Mono'"}}/>
-            <button onClick={()=>{addPortfolio(pfForm.ticker,pfForm.buyPrice,pfForm.qty,0);setPfForm({ticker:'',buyPrice:0,qty:0,stopLoss:0});}}
-              style={{padding:"5px 14px",borderRadius:5,border:"1px solid #bc8cff",background:"#bc8cff18",color:"#bc8cff",cursor:"pointer",fontSize:12,fontWeight:700}}>추가</button>
-            <span style={{fontSize:10,color:"#484f58"}}>손절가 자동계산 (진입-7% / 트레일링-9%)</span>
-          </div>
+                {/* 검색 인풋 */}
+                <div style={{position:"relative",marginBottom:pfAddSelected?10:0}}>
+                  <input
+                    placeholder="🔍 종목명 또는 티커로 검색 (예: 삼성, AAPL)"
+                    value={pfAddSearch}
+                    onChange={e=>{setPfAddSearch(e.target.value);setPfAddOpen(true);if(!e.target.value)setPfAddSelected(null);}}
+                    onFocus={()=>setPfAddOpen(true)}
+                    style={{padding:"9px 14px",borderRadius:8,border:"1px solid "+(pfAddSelected?"#bc8cff":"#21262d"),background:"#0d1117",color:"#e6edf3",fontSize:13,width:"100%",outline:"none",boxSizing:"border-box"}}
+                  />
+
+                  {/* 드롭다운 */}
+                  {pfAddOpen && addResults.length>0 && (
+                    <div style={{position:"absolute",top:"100%",left:0,right:0,background:"#161b22",border:"1px solid #30363d",borderRadius:8,zIndex:100,marginTop:2,boxShadow:"0 8px 24px rgba(0,0,0,.5)",maxHeight:280,overflowY:"auto"}}>
+                      {addResults.map(d=>{
+                        const dv=getVerdict(d);
+                        return (
+                          <div key={d.t}
+                            onClick={()=>{
+                              setPfAddSelected(d);
+                              setPfAddSearch(d.n+" ("+d.t+")");
+                              setPfAddOpen(false);
+                              setPfForm(p=>({...p,ticker:d.t,buyPrice:d.p?+(d.p.toFixed(d.k?0:2)):0}));
+                            }}
+                            style={{padding:"9px 14px",cursor:"pointer",display:"flex",justifyContent:"space-between",alignItems:"center",borderBottom:"1px solid #21262d22"}}
+                            onMouseEnter={e=>e.currentTarget.style.background="#21262d"}
+                            onMouseLeave={e=>e.currentTarget.style.background="transparent"}
+                          >
+                            <div style={{display:"flex",alignItems:"center",gap:8}}>
+                              <span style={{fontSize:11}}>{d.k?"🇰🇷":"🇺🇸"}</span>
+                              <div>
+                                <div style={{fontSize:13,fontWeight:600,color:"#e6edf3"}}>{d.n}</div>
+                                <div style={{fontSize:10,color:"#484f58",fontFamily:"'JetBrains Mono'"}}>{d.t} · {d.s}</div>
+                              </div>
+                            </div>
+                            <div style={{textAlign:"right"}}>
+                              <div style={{fontSize:12,fontWeight:700,color:dv.color}}>{dv.verdict}</div>
+                              <div style={{fontSize:11,color:"#484f58",fontFamily:"'JetBrains Mono'"}}>{d.p?fP(d.p,d.k):"-"}</div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+
+                {/* 선택된 종목 정보 + 매수가·수량 입력 */}
+                {pfAddSelected && vd && (
+                  <div style={{background:"#0d1117",borderRadius:8,padding:"10px 12px",border:`1px solid ${vd.color}33`}}>
+                    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
+                      <div>
+                        <span style={{fontSize:14,fontWeight:700,color:"#e6edf3"}}>{pfAddSelected.k?"🇰🇷":"🇺🇸"} {pfAddSelected.n}</span>
+                        <span style={{fontSize:11,color:"#484f58",marginLeft:6,fontFamily:"'JetBrains Mono'"}}>{pfAddSelected.t}</span>
+                      </div>
+                      <div style={{textAlign:"right"}}>
+                        <span style={{fontSize:12,fontWeight:800,color:vd.color}}>{vd.verdict} {vd.totalPt}점</span>
+                        <div style={{fontSize:11,color:"#8b949e",fontFamily:"'JetBrains Mono'"}}>{pfAddSelected.p?fP(pfAddSelected.p,pfAddSelected.k):"-"}</div>
+                      </div>
+                    </div>
+                    <div style={{display:"flex",gap:6,alignItems:"center",flexWrap:"wrap"}}>
+                      <div style={{display:"flex",flexDirection:"column",gap:2}}>
+                        <span style={{fontSize:10,color:"#484f58"}}>매수가</span>
+                        <input type="number" value={pfForm.buyPrice||''} onChange={e=>setPfForm(p=>({...p,buyPrice:e.target.value}))}
+                          style={{padding:"6px 10px",borderRadius:6,border:"1px solid #30363d",background:"#161b22",color:"#e6edf3",fontSize:13,width:120,fontFamily:"'JetBrains Mono'",outline:"none"}}/>
+                      </div>
+                      <div style={{display:"flex",flexDirection:"column",gap:2}}>
+                        <span style={{fontSize:10,color:"#484f58"}}>수량</span>
+                        <input type="number" value={pfForm.qty||''} onChange={e=>setPfForm(p=>({...p,qty:e.target.value}))}
+                          style={{padding:"6px 10px",borderRadius:6,border:"1px solid #30363d",background:"#161b22",color:"#e6edf3",fontSize:13,width:80,fontFamily:"'JetBrains Mono'",outline:"none"}}/>
+                      </div>
+                      {pfForm.buyPrice>0 && pfForm.qty>0 && (
+                        <div style={{display:"flex",flexDirection:"column",gap:2}}>
+                          <span style={{fontSize:10,color:"#484f58"}}>예상 손절가</span>
+                          <span style={{padding:"6px 10px",fontSize:13,fontWeight:700,color:"#ff922b",fontFamily:"'JetBrains Mono'"}}>{fP(+(pfForm.buyPrice*0.93).toFixed(pfAddSelected.k?0:2),pfAddSelected.k)}</span>
+                        </div>
+                      )}
+                      <button
+                        onClick={()=>{
+                          if(!pfForm.ticker||!pfForm.buyPrice||!pfForm.qty)return;
+                          addPortfolio(pfForm.ticker,pfForm.buyPrice,pfForm.qty,0);
+                          setPfForm({ticker:'',buyPrice:0,qty:0,stopLoss:0});
+                          setPfAddSelected(null);
+                          setPfAddSearch('');
+                        }}
+                        disabled={!pfForm.buyPrice||!pfForm.qty}
+                        style={{padding:"8px 20px",borderRadius:6,border:"1px solid #bc8cff",background:(!pfForm.buyPrice||!pfForm.qty)?"#21262d":"#bc8cff25",color:(!pfForm.buyPrice||!pfForm.qty)?"#484f58":"#bc8cff",cursor:(!pfForm.buyPrice||!pfForm.qty)?"not-allowed":"pointer",fontSize:13,fontWeight:700,marginTop:16,alignSelf:"flex-end"}}>
+                        ✅ 추가
+                      </button>
+                      <button onClick={()=>{setPfAddSelected(null);setPfAddSearch('');setPfForm({ticker:'',buyPrice:0,qty:0,stopLoss:0});}}
+                        style={{padding:"8px 12px",borderRadius:6,border:"1px solid #21262d",background:"transparent",color:"#484f58",cursor:"pointer",fontSize:12,marginTop:16,alignSelf:"flex-end"}}>
+                        취소
+                      </button>
+                    </div>
+                    <div style={{fontSize:10,color:"#484f58",marginTop:8}}>손절가 자동계산: 진입 -7% / 트레일링 최고가 -9%</div>
+                  </div>
+                )}
+              </div>
+            );
+          })()}
 
           {portfolio.length===0 ? <div style={{color:"#484f58",fontSize:13,padding:20,textAlign:"center"}}>보유종목이 없습니다. 위에서 종목을 추가하세요.</div> : <>
             {/* 총 요약 — 원화/달러 분리 */}
@@ -2714,12 +3020,7 @@ export default function Dashboard(){
 
             {/* 미국 / 한국 분리 */}
             {["us","kr"].map(market=>{
-              let items=portfolio.filter(p=>{const s=stocks.find(d=>d.t===p.ticker);return s?(market==="us"?!s.k:s.k):false;});
-              /* 검색 필터 */
-              if(pfSearch.trim()){
-                const q=pfSearch.trim().toLowerCase();
-                items=items.filter(p=>{const s=stocks.find(d=>d.t===p.ticker);return s&&(s.n.toLowerCase().includes(q)||s.t.toLowerCase().includes(q));});
-              }
+              const items=portfolio.filter(p=>{const s=stocks.find(d=>d.t===p.ticker);return s?(market==="us"?!s.k:s.k):false;});
               if(items.length===0)return null;
               let mktBuy=0,mktCur=0;
               items.forEach(p=>{const s=stocks.find(d=>d.t===p.ticker);if(s&&s.p){mktBuy+=p.buyPrice*p.qty;mktCur+=s.p*p.qty;}});
@@ -2742,6 +3043,7 @@ export default function Dashboard(){
                     <th style={{padding:"6px 8px",textAlign:"center",color:"#ff922b",fontSize:11,whiteSpace:"nowrap"}}>진입-7%</th>
                     <th style={{padding:"6px 8px",textAlign:"center",color:"#bc8cff",fontSize:11,whiteSpace:"nowrap"}}>트레일-9%</th>
                     <th style={{padding:"6px 8px",textAlign:"center",color:"#f85149",fontSize:11,whiteSpace:"nowrap"}}>활성손절</th>
+                    <th style={{padding:"6px 8px",textAlign:"center",color:"#3fb950",fontSize:11,whiteSpace:"nowrap"}}>매도규칙</th>
                     <th style={{padding:"6px 8px",textAlign:"center",color:"#484f58",fontSize:11,whiteSpace:"nowrap"}}></th>
                   </tr></thead>
                   <tbody>{items.map((p,idx)=>{
@@ -2759,9 +3061,14 @@ export default function Dashboard(){
                         <span style={{fontSize:10,color:"#484f58",marginLeft:4}}>{s.t}</span>
                         <div style={{fontSize:10,color:s.c>=0?"#3fb950":"#f85149"}}>당일 {s.c>=0?"+":""}{s.c?.toFixed(2)||0}%</div>
                       </td>
-                      <td style={{padding:"4px 6px",textAlign:"center",background:vd.color+"12",borderLeft:`2px solid ${vd.color}`,minWidth:60}}>
-                        <div style={{fontSize:11,fontWeight:800,color:vd.color}}>{vd.verdict}</div>
-                        <div style={{fontSize:9,color:'#484f58',fontFamily:"'JetBrains Mono'"}}>{vd.totalPt}점</div>
+                      <td style={{padding:"4px 6px",textAlign:"center",background:vd.color+"12",borderLeft:`2px solid ${vd.color}`,minWidth:70}}>
+                        <div style={{display:"flex",alignItems:"center",justifyContent:"center",gap:3}}>
+                          <span style={{fontSize:11,fontWeight:800,color:vd.color}}>{vd.verdict}</span>
+                          <span style={{fontSize:9,color:"#484f58",fontFamily:"'JetBrains Mono'",fontWeight:700}}>{vd.totalPt}</span>
+                        </div>
+                        {s._execTag && (()=>{const tC={'BUY NOW':'#00e676','BUY ON BREAKOUT':'#448aff','WATCH':'#ffd600','AVOID':'#f85149'}[s._execTag]||'#aaa';const tL={'BUY NOW':'⚡NOW','BUY ON BREAKOUT':'📈BRK','WATCH':'👀WATCH','AVOID':'🚫AVOID'}[s._execTag]||s._execTag;return <div style={{fontSize:7,fontWeight:700,color:tC,marginTop:1,whiteSpace:'nowrap'}}>{tL}</div>;})()}
+                        {vd.details.gateLabel && <div style={{fontSize:7,color:'#f85149',marginTop:1,fontWeight:700,whiteSpace:'nowrap'}}>{vd.details.gateLabel}</div>}
+                        {!vd.details.gateLabel && vd.details.riskPenalty>0 && <div style={{fontSize:7,color:'#ff922b',marginTop:1}}>⚠️-{vd.details.riskPenalty}</div>}
                       </td>
                       <td style={{padding:"6px 8px",textAlign:"right",fontFamily:"'JetBrains Mono'",color:"#e6edf3",fontWeight:600,fontSize:13}}>{fP(s.p,s.k)}</td>
                       <td style={{padding:"6px 8px",textAlign:"right",fontFamily:"'JetBrains Mono'",color:"#8b949e",fontSize:11}}>
@@ -2787,7 +3094,30 @@ export default function Dashboard(){
                         <div style={{fontSize:10,fontWeight:700,color:sl.statusColor,fontFamily:"'JetBrains Mono'"}}>{fP(sl.activeStop,s.k)}</div>
                         <div style={{fontSize:9,color:sl.pctFromStop<=5?sl.statusColor:'#484f58',fontFamily:"'JetBrains Mono'"}}>거리 +{sl.pctFromStop}%</div>
                       </td>
-                      <td style={{padding:"6px 8px",textAlign:"center"}}><button onClick={()=>removePortfolio(globalIdx)} style={{padding:"2px 6px",borderRadius:3,border:"1px solid #f8514933",background:"transparent",color:"#f85149",cursor:"pointer",fontSize:10}}>✕</button></td>
+                      {/* 매도 규칙 */}
+                      <td style={{padding:"4px 6px",textAlign:"center",minWidth:90}}>
+                        {(()=>{
+                          const tp1=+(p.buyPrice*1.12).toFixed(s.k?0:2);
+                          const pct=p.buyPrice>0?((s.p/p.buyPrice-1)*100):0;
+                          const hitTp1=s.p>=tp1;
+                          const rules=[];
+                          if(pct<=-7)rules.push({t:'❌ Hard Stop',c:'#f85149'});
+                          else if(hitTp1)rules.push({t:'💰 +12% 익절',c:'#3fb950'});
+                          else rules.push({t:`🎯 +12%: ${fP(tp1,s.k)}`,c:'#484f58'});
+                          // MACD 데드크로스 경고
+                          if(s._indicators?.macd?.signal==='dead'||s._indicators?.macd?.signal==='bearish')
+                            rules.push({t:'⚠️ MACD↓',c:'#ff922b'});
+                          return <div>{rules.map((r,i)=><div key={i} style={{fontSize:9,fontWeight:700,color:r.c,lineHeight:1.4}}>{r.t}</div>)}</div>;
+                        })()}
+                      </td>
+                      <td style={{padding:"4px 6px",textAlign:"center",display:"flex",flexDirection:"column",gap:3,alignItems:"center",justifyContent:"center"}}>
+                        {/* 매도 기록 버튼 */}
+                        <button onClick={()=>{
+                          const vd=getVerdict(s);
+                          setSellModal({portIdx:globalIdx,stock:s,buyPrice:p.buyPrice,qty:p.qty,name:s.n,ticker:s.t,isKR:s.k,score:vd.totalPt,execTag:s._execTag||null,buyDate:p.buyDate||null});
+                        }} style={{padding:"2px 6px",borderRadius:3,border:"1px solid #3fb95033",background:"#3fb95012",color:"#3fb950",cursor:"pointer",fontSize:10,whiteSpace:"nowrap"}}>📝 매도</button>
+                        <button onClick={()=>removePortfolio(globalIdx)} style={{padding:"2px 6px",borderRadius:3,border:"1px solid #f8514933",background:"transparent",color:"#f85149",cursor:"pointer",fontSize:10}}>✕</button>
+                      </td>
                     </tr>;
                   })}</tbody>
                 </table>
@@ -2796,7 +3126,292 @@ export default function Dashboard(){
             })}
           </>}
         </div>
+
+        {/* ============ v2: 거래 로그 ============ */}
+        <div style={{background:"#0d1117",border:"1px solid #21262d",borderRadius:10,padding:14,marginTop:12}}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10,flexWrap:"wrap",gap:6}}>
+            <div style={{fontSize:16,fontWeight:800,color:"#58a6ff"}}>📋 거래 로그 ({tradeLog.length}건)</div>
+            <div style={{display:"flex",gap:6}}>
+              {tradeLog.length>0 && <button onClick={()=>{
+                const hd="날짜,종목,티커,매수가,매도가,수량,수익률(%),손익,보유일,점수,사유,시장상태";
+                const rows=tradeLog.map(l=>[l.date,l.name,l.ticker,l.buyPrice,l.sellPrice,l.qty,(l.pct||0).toFixed(2),Math.round(l.pnl||0),l.days||"",l.score||"",l.reason||"",l.mktState||""].join(","));
+                const csv="\uFEFF"+hd+"\n"+rows.join("\n");
+                const a=document.createElement("a");a.href=URL.createObjectURL(new Blob([csv],{type:"text/csv"}));
+                a.download="trade_log_"+(new Date().toISOString().slice(0,10))+".csv";a.click();
+              }} style={{padding:"4px 10px",borderRadius:5,border:"1px solid #58a6ff44",background:"#58a6ff12",color:"#58a6ff",cursor:"pointer",fontSize:11,fontWeight:700}}>📥 CSV</button>}
+              {tradeLog.length>0 && <button onClick={()=>{if(window.confirm("거래 로그를 모두 삭제할까요?"))setTradeLog([]);}} style={{padding:"4px 10px",borderRadius:5,border:"1px solid #f8514933",background:"transparent",color:"#f85149",cursor:"pointer",fontSize:11}}>전체삭제</button>}
+            </div>
+          </div>
+          {tradeLog.length===0 ? <div style={{textAlign:"center",color:"#484f58",fontSize:12,padding:20}}>보유종목에서 <b style={{color:"#3fb950"}}>📝 매도</b> 버튼을 누르면 거래가 자동 기록됩니다</div> : <>
+            {/* ── 전체 요약 4칸 ── */}
+            {(()=>{
+              const wins=tradeLog.filter(l=>(l.pct||0)>0).length;const total=tradeLog.length;
+              const avgPct=total>0?(tradeLog.reduce((s,l)=>s+(l.pct||0),0)/total):0;
+              const avgDays=total>0?(tradeLog.reduce((s,l)=>s+(l.days||0),0)/total):0;
+              const winRate=total>0?(wins/total*100):0;
+              const totalPnl=tradeLog.reduce((s,l)=>s+(l.pnl||0),0);
+              return <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:6,marginBottom:10}}>
+                {[["승률",winRate.toFixed(0)+"%",winRate>=50?"#3fb950":"#f85149"],["평균수익",(avgPct>=0?"+":"")+avgPct.toFixed(1)+"%",avgPct>=0?"#3fb950":"#f85149"],["평균보유",Math.round(avgDays)+"일","#8b949e"],["총손익",(totalPnl>=0?"+":"")+Math.round(totalPnl).toLocaleString(),totalPnl>=0?"#3fb950":"#f85149"]
+                ].map(([l,v,c])=><div key={l} style={{background:"#161b22",borderRadius:6,padding:"6px 10px",textAlign:"center"}}><div style={{fontSize:9,color:"#484f58"}}>{l}</div><div style={{fontSize:15,fontWeight:800,color:c,fontFamily:"'JetBrains Mono'"}}>{v}</div></div>)};
+              </div>;
+            })()}
+
+            {/* ── 성과 분류 분석 ── */}
+            {(()=>{
+              // 공통 통계 헬퍼
+              const grpStats = (items) => {
+                if(!items.length) return null;
+                const wins = items.filter(l=>(l.pct||0)>0).length;
+                const avgPct = items.reduce((s,l)=>s+(l.pct||0),0)/items.length;
+                const totalPnl = items.reduce((s,l)=>s+(l.pnl||0),0);
+                return { n:items.length, wr:(wins/items.length*100), avgPct, totalPnl };
+              };
+              const StatRow = ({label, color, stats, bg}) => {
+                if(!stats) return null;
+                const pColor = stats.avgPct>=0?"#3fb950":"#f85149";
+                return <div style={{display:"grid",gridTemplateColumns:"1fr auto auto auto auto",gap:6,alignItems:"center",padding:"5px 8px",borderRadius:6,background:bg||"#161b22",marginBottom:4}}>
+                  <div style={{fontSize:11,fontWeight:700,color:color||"#8b949e",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{label}</div>
+                  <div style={{textAlign:"right",minWidth:28}}><span style={{fontSize:9,color:"#484f58"}}>건</span><span style={{fontSize:12,fontWeight:700,color:"#8b949e",fontFamily:"'JetBrains Mono'",marginLeft:2}}>{stats.n}</span></div>
+                  <div style={{textAlign:"right",minWidth:44}}><span style={{fontSize:9,color:"#484f58"}}>승률</span><span style={{fontSize:12,fontWeight:700,color:stats.wr>=50?"#3fb950":"#f85149",fontFamily:"'JetBrains Mono'",marginLeft:2}}>{stats.wr.toFixed(0)}%</span></div>
+                  <div style={{textAlign:"right",minWidth:52}}><span style={{fontSize:9,color:"#484f58"}}>평균</span><span style={{fontSize:12,fontWeight:700,color:pColor,fontFamily:"'JetBrains Mono'",marginLeft:2}}>{stats.avgPct>=0?"+":""}{stats.avgPct.toFixed(1)}%</span></div>
+                  <div style={{textAlign:"right",minWidth:60}}><span style={{fontSize:9,color:"#484f58"}}>손익</span><span style={{fontSize:11,fontWeight:600,color:stats.totalPnl>=0?"#3fb950":"#f85149",fontFamily:"'JetBrains Mono'",marginLeft:2}}>{stats.totalPnl>=0?"+":""}{Math.round(stats.totalPnl).toLocaleString()}</span></div>
+                </div>;
+              };
+
+              // 1. 점수대별
+              const scoreBands = [
+                {label:"🔥 최강 (85점+)", min:85, max:999, color:"#ff1744"},
+                {label:"🟢 매수 (65~84점)", min:65, max:84, color:"#3fb950"},
+                {label:"🔵 관심 (50~64점)", min:50, max:64, color:"#58a6ff"},
+                {label:"⚪ 기타 (~49점)", min:0, max:49, color:"#8b949e"},
+              ];
+              // 2. ExecTag별
+              const tagBands = [
+                {label:"⚡ BUY NOW", key:"BUY NOW", color:"#00e676"},
+                {label:"📈 BUY ON BREAKOUT", key:"BUY ON BREAKOUT", color:"#448aff"},
+                {label:"👀 WATCH", key:"WATCH", color:"#ffd600"},
+                {label:"🚫 AVOID / 없음", key:null, color:"#f85149"},
+              ];
+              // 3. 시장상태별
+              const mktBands = [
+                {label:"🟢 Risk On", key:"risk_on", color:"#3fb950"},
+                {label:"🟡 Neutral", key:"neutral", color:"#ffd600"},
+                {label:"🟠 Risk Off", key:"risk_off", color:"#ff922b"},
+                {label:"🔴 Defensive", key:"defensive", color:"#f85149"},
+                {label:"❓ 미기록", key:"unknown", color:"#484f58"},
+              ];
+              // 4. 매도사유별
+              const reasonBands = [
+                {label:"Hard Stop (−7%)", key:"hard_stop(-7%)", color:"#f85149"},
+                {label:"EMA21 이탈", key:"ema21_break", color:"#ff922b"},
+                {label:"1차 익절 (+12%)", key:"partial_tp(+12%)", color:"#3fb950"},
+                {label:"트레일링 손절", key:"trailing_stop", color:"#ffd600"},
+                {label:"시간 손절", key:"time_stop", color:"#8b949e"},
+                {label:"전량 매도", key:"full_exit", color:"#58a6ff"},
+                {label:"기타", key:"기타", color:"#484f58"},
+              ];
+
+              return <div style={{marginBottom:12}}>
+                <div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"1fr 1fr",gap:10}}>
+                  {/* 점수대별 */}
+                  <div style={{background:"#0d1117",borderRadius:8,padding:10,border:"1px solid #21262d"}}>
+                    <div style={{fontSize:11,fontWeight:800,color:"#bc8cff",marginBottom:8}}>📊 점수대별 성과</div>
+                    {scoreBands.map(({label,min,max,color})=>{
+                      const items=tradeLog.filter(l=>{const sc=l.score||0;return sc>=min&&sc<=max;});
+                      return <StatRow key={label} label={label} color={color} stats={grpStats(items)}/>;
+                    })}
+                  </div>
+                  {/* ExecTag별 */}
+                  <div style={{background:"#0d1117",borderRadius:8,padding:10,border:"1px solid #21262d"}}>
+                    <div style={{fontSize:11,fontWeight:800,color:"#ffd43b",marginBottom:8}}>🏷️ ExecTag별 성과</div>
+                    {tagBands.map(({label,key,color})=>{
+                      const items=key===null
+                        ? tradeLog.filter(l=>!l.execTag||l.execTag==="AVOID")
+                        : tradeLog.filter(l=>l.execTag===key);
+                      return <StatRow key={label} label={label} color={color} stats={grpStats(items)}/>;
+                    })}
+                  </div>
+                  {/* 시장상태별 */}
+                  <div style={{background:"#0d1117",borderRadius:8,padding:10,border:"1px solid #21262d"}}>
+                    <div style={{fontSize:11,fontWeight:800,color:"#58a6ff",marginBottom:8}}>🌐 시장상태별 성과</div>
+                    {mktBands.map(({label,key,color})=>{
+                      const items=tradeLog.filter(l=>(l.mktState||"unknown")===key);
+                      return <StatRow key={label} label={label} color={color} stats={grpStats(items)}/>;
+                    })}
+                  </div>
+                  {/* 매도사유별 */}
+                  <div style={{background:"#0d1117",borderRadius:8,padding:10,border:"1px solid #21262d"}}>
+                    <div style={{fontSize:11,fontWeight:800,color:"#ff922b",marginBottom:8}}>🚪 매도사유별 성과</div>
+                    {reasonBands.map(({label,key,color})=>{
+                      const items=tradeLog.filter(l=>(l.reason||"기타")===key);
+                      return <StatRow key={label} label={label} color={color} stats={grpStats(items)}/>;
+                    })}
+                  </div>
+                </div>
+
+                {/* 인사이트 요약 */}
+                {(()=>{
+                  const total=tradeLog.length;
+                  if(total<3) return <div style={{marginTop:8,padding:"6px 10px",background:"#161b22",borderRadius:6,fontSize:10,color:"#484f58",textAlign:"center"}}>💡 거래 3건 이상 쌓이면 인사이트가 표시됩니다 ({total}/3)</div>;
+                  const insights=[];
+                  // 최고 점수대
+                  const bestBand=scoreBands.map(b=>{const it=tradeLog.filter(l=>{const sc=l.score||0;return sc>=b.min&&sc<=b.max;});const st=grpStats(it);return{...b,stats:st};}).filter(b=>b.stats&&b.stats.n>=2).sort((a,b)=>b.stats.avgPct-a.stats.avgPct)[0];
+                  if(bestBand) insights.push({icon:"🏆",text:`점수대 "${bestBand.label}" 평균수익 ${bestBand.stats.avgPct.toFixed(1)}% — 가장 수익률 좋음`,color:bestBand.color});
+                  // 최고 ExecTag
+                  const bestTag=tagBands.map(b=>{const it=b.key===null?tradeLog.filter(l=>!l.execTag||l.execTag==="AVOID"):tradeLog.filter(l=>l.execTag===b.key);const st=grpStats(it);return{...b,stats:st};}).filter(b=>b.stats&&b.stats.n>=2).sort((a,b)=>b.stats.avgPct-a.stats.avgPct)[0];
+                  if(bestTag) insights.push({icon:"🎯",text:`ExecTag "${bestTag.label}" 평균수익 ${bestTag.stats.avgPct.toFixed(1)}% — 최고 실행 타이밍`,color:bestTag.color});
+                  // Risk On 대비
+                  const riskOnItems=tradeLog.filter(l=>l.mktState==="risk_on");
+                  const riskOffItems=tradeLog.filter(l=>l.mktState==="risk_off"||l.mktState==="defensive");
+                  if(riskOnItems.length>=2&&riskOffItems.length>=2){
+                    const roSt=grpStats(riskOnItems);const rfSt=grpStats(riskOffItems);
+                    if(roSt.avgPct>rfSt.avgPct) insights.push({icon:"📈",text:`Risk On 평균 ${roSt.avgPct.toFixed(1)}% vs Risk Off ${rfSt.avgPct.toFixed(1)}% — 시장필터 유효`,color:"#3fb950"});
+                    else insights.push({icon:"⚠️",text:`Risk Off에서도 평균 ${rfSt.avgPct.toFixed(1)}% — 시장필터 재검토 권장`,color:"#ffd600"});
+                  }
+                  // Hard stop 비율
+                  const hardStops=tradeLog.filter(l=>l.reason==="hard_stop(-7%)");
+                  if(hardStops.length>=2){const pct=(hardStops.length/total*100).toFixed(0);insights.push({icon:pct>=30?"🚨":"✅",text:`Hard Stop 비율 ${pct}% (${hardStops.length}/${total}건)${pct>=30?" — 진입 타이밍 재검토 필요":""}`,color:pct>=30?"#f85149":"#3fb950"});}
+                  if(!insights.length) return null;
+                  return <div style={{marginTop:8,background:"#161b22",borderRadius:8,padding:10,border:"1px solid #21262d"}}>
+                    <div style={{fontSize:11,fontWeight:800,color:"#e6edf3",marginBottom:6}}>💡 자동 인사이트</div>
+                    {insights.map((ins,i)=><div key={i} style={{fontSize:11,color:"#8b949e",marginBottom:4,display:"flex",gap:6,alignItems:"flex-start"}}><span>{ins.icon}</span><span style={{color:ins.color}}>{ins.text}</span></div>)}
+                  </div>;
+                })()}
+              </div>;
+            })()}
+
+            {/* ── 거래 내역 테이블 ── */}
+            <div style={{overflowX:"auto"}}><table style={{borderCollapse:"collapse",fontSize:11,width:"100%"}}>
+              <thead><tr style={{borderBottom:"2px solid #21262d"}}>
+                {["날짜","종목","매수가","매도가","수익률","손익","보유일","점수","사유",""].map(h=><th key={h} style={{padding:"4px 8px",color:"#484f58",fontSize:10,whiteSpace:"nowrap"}}>{h}</th>)}
+              </tr></thead>
+              <tbody>{[...tradeLog].reverse().map((l,revI)=>{
+                const origI=tradeLog.length-1-revI;const isWin=(l.pct||0)>0;
+                return <tr key={revI} style={{borderBottom:"1px solid #21262d22",background:isWin?"#3fb95006":"#f8514906"}}>
+                  <td style={{padding:"4px 8px",color:"#484f58",whiteSpace:"nowrap",fontSize:10}}>{l.date}</td>
+                  <td style={{padding:"4px 8px",fontWeight:600,color:"#e6edf3",whiteSpace:"nowrap"}}>{l.isKR?"🇰🇷":"🇺🇸"} {l.name}<div style={{fontSize:9,color:"#484f58"}}>{l.ticker}</div></td>
+                  <td style={{padding:"4px 8px",textAlign:"right",fontFamily:"'JetBrains Mono'",color:"#8b949e",fontSize:11}}>{l.isKR?"₩":"$"}{(l.buyPrice||0).toLocaleString()}</td>
+                  <td style={{padding:"4px 8px",textAlign:"right",fontFamily:"'JetBrains Mono'",color:"#e6edf3",fontSize:11}}>{l.isKR?"₩":"$"}{(l.sellPrice||0).toLocaleString()}</td>
+                  <td style={{padding:"4px 8px",textAlign:"right",fontFamily:"'JetBrains Mono'",fontWeight:800,color:isWin?"#3fb950":"#f85149"}}>{isWin?"+":""}{(l.pct||0).toFixed(2)}%</td>
+                  <td style={{padding:"4px 8px",textAlign:"right",fontFamily:"'JetBrains Mono'",color:isWin?"#3fb950":"#f85149",fontSize:11}}>{isWin?"+":""}{Math.round(l.pnl||0).toLocaleString()}</td>
+                  <td style={{padding:"4px 8px",textAlign:"center",color:"#8b949e"}}>{l.days||"-"}일</td>
+                  <td style={{padding:"4px 8px",textAlign:"center",color:"#bc8cff"}}>{l.score||"-"}</td>
+                  <td style={{padding:"4px 8px",color:"#484f58",fontSize:10,maxWidth:100,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{l.reason||"-"}</td>
+                  <td><button onClick={()=>setTradeLog(p=>p.filter((_,j)=>j!==origI))} style={{padding:"1px 5px",borderRadius:3,border:"1px solid #f8514922",background:"transparent",color:"#f85149",cursor:"pointer",fontSize:9}}>✕</button></td>
+                </tr>;
+              })}</tbody>
+            </table></div>
+          </>}
+        </div>
       </div>}
+
+      {/* ============ v2: 매도 기록 모달 ============ */}
+      {sellModal && (()=>{
+        const m=sellModal;
+        const SellModal=()=>{
+          const [sellPrc,setSellPrc]=React.useState(m.stock?.p||m.buyPrice);
+          const [sellReason,setSellReason]=React.useState('');
+          const pct=m.buyPrice>0?((sellPrc/m.buyPrice-1)*100):0;
+          const pnl=(sellPrc-m.buyPrice)*m.qty;
+          const days=m.buyDate?Math.round((Date.now()-new Date(m.buyDate).getTime())/86400000):null;
+          const cur=m.isKR?"₩":"$";
+          const fM=v=>m.isKR?(cur+Math.round(v).toLocaleString()):(cur+v.toLocaleString(undefined,{maximumFractionDigits:2}));
+          const reasons=["hard_stop(-7%)","ema21_break","partial_tp(+12%)","trailing_stop","time_stop","full_exit","기타"];
+          return <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.8)",zIndex:3000,display:"flex",alignItems:"center",justifyContent:"center",padding:16}}>
+            <div style={{background:"#0d1117",border:"1px solid #3fb95044",borderRadius:12,padding:20,width:"100%",maxWidth:420}}>
+              <div style={{fontSize:16,fontWeight:800,color:"#3fb950",marginBottom:14}}>📝 매도 기록 — {m.isKR?"🇰🇷":"🇺🇸"} {m.name}</div>
+              <div style={{marginBottom:10}}>
+                <div style={{fontSize:11,color:"#484f58",marginBottom:4}}>매도가</div>
+                <input type="number" value={sellPrc} onChange={e=>setSellPrc(+e.target.value||0)}
+                  style={{width:"100%",padding:"8px 10px",background:"#161b22",border:"1px solid #21262d",borderRadius:6,color:"#e6edf3",fontSize:16,outline:"none",fontFamily:"'JetBrains Mono'"}}/>
+                <div style={{marginTop:4,display:"flex",gap:4,flexWrap:"wrap"}}>
+                  {[[-7,"-7% 손절"],[12,"+12% 익절"],[20,"+20%"],[30,"+30%"]].map(([p,l])=>{
+                    const v=+(m.buyPrice*(1+p/100)).toFixed(m.isKR?0:2);
+                    return <button key={p} onClick={()=>setSellPrc(v)} style={{padding:"2px 7px",borderRadius:4,border:"1px solid #21262d",background:"#161b22",color:p>0?"#3fb950":"#f85149",cursor:"pointer",fontSize:10,fontWeight:600}}>{l}</button>;
+                  })}
+                  {m.stock?.p && <button onClick={()=>setSellPrc(m.stock.p)} style={{padding:"2px 7px",borderRadius:4,border:"1px solid #58a6ff33",background:"#58a6ff12",color:"#58a6ff",cursor:"pointer",fontSize:10,fontWeight:600}}>현재가</button>}
+                </div>
+              </div>
+              <div style={{marginBottom:12}}>
+                <div style={{fontSize:11,color:"#484f58",marginBottom:4}}>매도 사유</div>
+                <div style={{display:"flex",gap:4,flexWrap:"wrap"}}>
+                  {reasons.map(r=><button key={r} onClick={()=>setSellReason(r)} style={{padding:"3px 8px",borderRadius:4,border:"1px solid "+(sellReason===r?"#bc8cff":"#21262d"),background:sellReason===r?"#bc8cff18":"#161b22",color:sellReason===r?"#bc8cff":"#8b949e",cursor:"pointer",fontSize:10,fontWeight:600}}>{r}</button>)}
+                </div>
+              </div>
+              <div style={{background:"#161b22",borderRadius:8,padding:12,marginBottom:14}}>
+                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8,textAlign:"center"}}>
+                  <div><div style={{fontSize:9,color:"#484f58"}}>수익률</div><div style={{fontSize:20,fontWeight:900,color:pct>=0?"#3fb950":"#f85149",fontFamily:"'JetBrains Mono'"}}>{pct>=0?"+":""}{pct.toFixed(2)}%</div></div>
+                  <div><div style={{fontSize:9,color:"#484f58"}}>손익</div><div style={{fontSize:14,fontWeight:800,color:pct>=0?"#3fb950":"#f85149",fontFamily:"'JetBrains Mono'"}}>{pnl>=0?"+":""}{fM(Math.abs(pnl))}</div></div>
+                  <div><div style={{fontSize:9,color:"#484f58"}}>보유일</div><div style={{fontSize:14,fontWeight:800,color:"#8b949e"}}>{days!=null?days+"일":"-"}</div></div>
+                </div>
+              </div>
+              <div style={{display:"flex",gap:8}}>
+                <button onClick={()=>{
+                  const log={date:new Date().toISOString().slice(0,10),name:m.name,ticker:m.ticker,isKR:m.isKR,
+                    buyPrice:m.buyPrice,sellPrice:sellPrc,qty:m.qty,pct:+pct.toFixed(2),pnl:+pnl.toFixed(0),
+                    days:days||0,score:m.score,execTag:m.execTag,reason:sellReason||"직접입력",mktState:MKT.riskState||"unknown"};
+                  setTradeLog(p=>[...p,log]);
+                  removePortfolio(m.portIdx);
+                  setSellModal(null);
+                }} style={{flex:1,padding:"10px",borderRadius:6,border:"none",background:"#3fb950",color:"#000",cursor:"pointer",fontSize:13,fontWeight:800}}>✅ 기록 저장 + 보유종목 제거</button>
+                <button onClick={()=>setSellModal(null)} style={{padding:"10px 16px",borderRadius:6,border:"1px solid #21262d",background:"transparent",color:"#484f58",cursor:"pointer",fontSize:12}}>취소</button>
+              </div>
+            </div>
+          </div>;
+        };
+        return <SellModal/>;
+      })()}
+      {tab==="main" && MKT.loaded && (()=>{
+        const rs=MKT.riskState||"unknown";
+        const rc=MKT.riskColor||"#484f58";
+        const rl=MKT.riskLabel||"";
+        const krs=MKT.krRiskState||"unknown";
+        const krc=MKT.krRiskColor||"#484f58";
+        const krl=MKT.krRiskLabel||"";
+        const usWarning=(rs==="risk_off"||rs==="defensive");
+        const krWarning=(krs==="risk_off"||krs==="defensive");
+        const usPct=MKT.maxPositionPct??100;
+        const krPct=MKT.krMaxPositionPct??100;
+        const usMsg=rs==="defensive"?"🚫 신규매수 금지":rs==="risk_off"?"⛔ 신규매수 자제 (최대"+usPct+"%)":rs==="neutral"?"⚠️ 선별매수 (최대"+usPct+"%)":"✅ 정상매매 (최대"+usPct+"%)";
+        const krMsg=krs==="defensive"?"🚫 신규매수 금지":krs==="risk_off"?"⛔ 신규매수 자제 (최대"+krPct+"%)":krs==="neutral"?"⚠️ 선별매수 (최대"+krPct+"%)":"✅ 정상매매 (최대"+krPct+"%)";
+        return <div style={{maxWidth:1800,margin:"0 auto",padding:"0 20px 6px"}}>
+          {/* KR / US 분리 배너 */}
+          <div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"1fr 1fr",gap:6}}>
+            {/* 🇺🇸 US 배너 */}
+            <div style={{padding:"8px 12px",background:rc+"14",border:`1px solid ${rc}44`,borderRadius:8}}>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap",gap:6}}>
+                <div style={{display:"flex",alignItems:"center",gap:8}}>
+                  <span style={{fontSize:13,color:"#484f58"}}>🇺🇸</span>
+                  <span style={{fontSize:13,fontWeight:900,color:rc}}>{rl}</span>
+                </div>
+                <span style={{fontSize:10,color:"#8b949e"}}>{usMsg}</span>
+              </div>
+              {usWarning && <div style={{marginTop:4,fontSize:10,color:"#ff8a80"}}>
+                <b>지금 미국주식 매수 비추.</b> {rs==="defensive"?"SPY 200일선 아래 — 장기 하락":"SPY 50일선 아래 or VIX≥30"}
+              </div>}
+            </div>
+            {/* 🇰🇷 KR 배너 */}
+            <div style={{padding:"8px 12px",background:krc+"14",border:`1px solid ${krc}44`,borderRadius:8}}>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap",gap:6}}>
+                <div style={{display:"flex",alignItems:"center",gap:8}}>
+                  <span style={{fontSize:13,color:"#484f58"}}>🇰🇷</span>
+                  <span style={{fontSize:13,fontWeight:900,color:krc}}>{krl}</span>
+                </div>
+                <span style={{fontSize:10,color:"#8b949e"}}>{krMsg}</span>
+              </div>
+              {krWarning && <div style={{marginTop:4,fontSize:10,color:"#ff8a80"}}>
+                <b>지금 한국주식 매수 비추.</b> {krs==="defensive"?"KOSPI 200일선 아래 — 장기 하락":"KOSPI 50일선 아래 or 글로벌 VIX≥30"}
+              </div>}
+            </div>
+          </div>
+          {/* 건강도 미니 */}
+          <div style={{marginTop:4,display:"flex",alignItems:"center",gap:8,padding:"4px 8px"}}>
+            <span style={{fontSize:10,color:"#484f58"}}>건강도 {MKT.health?.score}/100</span>
+            <span style={{padding:"1px 6px",borderRadius:3,background:(MKT.health?.modeColor||"#484f58")+"20",border:`1px solid ${MKT.health?.modeColor||"#484f58"}33`,fontSize:10,fontWeight:700,color:MKT.health?.modeColor||"#484f58"}}>{MKT.health?.mode}모드</span>
+            <span style={{fontSize:10,color:"#484f58"}}>VIX {MKT.vix}</span>
+          </div>
+        </div>;
+      })()}
 
       {/* ============ Filters & Table ============ */}
       {(tab==="main"||tab==="filter") && <div className="filter-bar" style={{maxWidth:1800,margin:"0 auto",padding:"0 20px 4px"}}>
@@ -2852,15 +3467,34 @@ export default function Dashboard(){
       {/* ============ AI 추천 ============ */}
       {tab==="main" && (()=>{
         const all=filtered.map(d=>({d,vd:getVerdict(d),dm:getDualMomentum(d)}));
-        // 🔥 지금 사세요: 80+ & (거래량 매집 OR VCP 성숙/돌파)
-        const buyNow=all.filter(({vd,d})=>vd.totalPt>=80 && (vd.details.volPt>=9 || ['성숙🔥','성숙','돌파✅'].includes(vcpMt(d))))
+
+        // 🔥 지금 사세요: 85+ (최강 기준 일치) & (거래량 매집 OR VCP 성숙/돌파)
+        // BUG FIX: v1.5에서 최강 기준 80→85 올렸으나 buyNow는 80 유지됐던 것 수정
+        const buyNow=all.filter(({vd,d})=>vd.totalPt>=85 && (vd.details.volPt>=9 || ['성숙🔥','성숙','돌파✅'].includes(vcpMt(d))))
           .sort((a,b)=>b.vd.totalPt-a.vd.totalPt).slice(0,5);
-        // 👀 곧 터질: 65~85 & VCP 형성중/성숙 & 피봇 10% 이내
-        const soonBreak=all.filter(({vd,d})=>vd.totalPt>=60 && vd.totalPt<85 && ['형성중','성숙','성숙🔥'].includes(vcpMt(d)) && Math.abs(vcpPx(d))<=10)
-          .sort((a,b)=>Math.abs(vcpPx(a.d))-Math.abs(vcpPx(b.d))).slice(0,5);
-        // 📈 조용한 강자: SEPA 7+/8 & DM BUY+ & 아직 최강 아님 & 거래량 중립~
-        const silent=all.filter(({vd,d,dm})=>seTt(d)>=7 && dm.signalScore>=7 && vd.totalPt>=55 && vd.totalPt<80 && vd.details.volPt>=4 && vd.details.volPt<=8)
-          .sort((a,b)=>b.vd.totalPt-a.vd.totalPt).slice(0,5);
+
+        // 👀 곧 터질: 60~84 & VCP 성숙 단계 & 피봇 아직 안 뚫림(0~10% 아래)
+        // BUG FIX: Math.abs() → 피봇 위 종목 제외. vcpPx는 "피봇 대비 현재가" 이므로
+        //   vcpPx < 0 = 피봇 아래(진짜 "곧 터질"), vcpPx > 0 = 이미 돌파
+        //   허용: 피봇 -10% ~ +3% (돌파 직후 초기 포함, 단 +3% 초과는 이미 올라간 것)
+        // 개선: '형성중' 제거 (VCP 초기 단계는 신뢰도 부족), '성숙'/'성숙🔥'만
+        const soonBreak=all.filter(({vd,d})=>{
+          const px=vcpPx(d);
+          if(px==null)return false;
+          return vd.totalPt>=60 && vd.totalPt<85 &&
+            ['성숙','성숙🔥'].includes(vcpMt(d)) &&
+            px>=-10 && px<=3; // 피봇 10% 아래 ~ 3% 위 허용 (돌파 초입 포함)
+        }).sort((a,b)=>vcpPx(a.d)-vcpPx(b.d)).slice(0,5); // 피봇에 가장 가까운 순
+
+        // 📈 조용한 강자: SEPA 7+/8 & DM 강세 & 아직 최강 미달 & 거래량 중립~매집
+        // BUG FIX 1: 상한 80→85 (최강 기준과 일치, 80~84 orphan 구간 해소)
+        // 개선: volPt 상한 8→9 (매집 시작 종목도 포함)
+        const silent=all.filter(({vd,d,dm})=>
+          seTt(d)>=7 && dm.signalScore>=7 &&
+          vd.totalPt>=55 && vd.totalPt<85 &&
+          vd.details.volPt>=4 && vd.details.volPt<=9
+        ).sort((a,b)=>b.vd.totalPt-a.vd.totalPt).slice(0,5);
+
         // 🎯 보조지표 올그린: 볼린저 스퀴즈 + MACD 상승 + OBV 매집/상승확인
         const tripleGreen=all.filter(({d})=>{
           const ind=d._indicators;if(!ind)return false;
@@ -2909,12 +3543,17 @@ export default function Dashboard(){
               }}
             />
             <Card icon="👀" title="곧 터질 종목" color="#ffd600" items={soonBreak}
-              getTag={(d)=>`피봇 ${vcpPx(d)>0?'':'+'}${Math.abs(vcpPx(d))}%`}
+              getTag={(d)=>{
+                const px=vcpPx(d);
+                if(px==null)return '-';
+                return px<=0?`피봇 ${Math.abs(px)}% 아래`:`피봇 돌파 +${px}%`;
+              }}
               getReason={(d,vd)=>{
                 const px=vcpPx(d);const vm=vcpMt(d);
-                const base=vm==='성숙🔥'?'거래량까지 줄어들며 에너지 압축 중':vm==='성숙'?'변동성 수축 완료, 돌파 대기':
-                  `변동성 수축 진행 중 (T1:${d.v[0]}%→T2:${d.v[1]}%)`;
-                return `${base} · 피봇까지 ${Math.abs(px)}%`;
+                const base=vm==='성숙🔥'?'거래량까지 줄어들며 에너지 압축 중':
+                  '변동성 수축 완료, 돌파 대기';
+                const distTxt=px!=null&&px<0?`피봇까지 ${Math.abs(px)}% 남음`:px!=null&&px>0?`피봇 +${px}% 돌파 초입`:'피봇 근접';
+                return `${base} · ${distTxt}`;
               }}
             />
             <Card icon="📈" title="조용한 강자" color="#00e676" items={silent}
@@ -3003,9 +3642,22 @@ export default function Dashboard(){
                     <td style={{padding:isMobile?"4px 2px":"6px 5px",textAlign:"right",fontFamily:"'JetBrains Mono'",fontWeight:fl?700:400,color:fl?"#39d353":"#e6edf3",fontSize:isMobile?11:14}}>{d.p?fP(d.p,d.k):'-'}</td>
                     <td style={{padding:isMobile?"4px 2px":"6px 5px",textAlign:"right"}}><Chg v={d.c}/></td>
                     <td style={{padding:"6px 5px",textAlign:"center"}}><Badge v={d.f||null} g={80} r={60}/></td>
-                    <td style={{textAlign:"center",padding:isMobile?"3px 4px":"4px 6px",background:vd.color+"12",borderLeft:`2px solid ${vd.color}`,minWidth:isMobile?50:70}}>
-                      <div style={{fontSize:isMobile?10:12,fontWeight:800,color:vd.color}}>{vd.verdict}</div>
-                      <div style={{fontSize:isMobile?8:9,color:'#484f58',fontFamily:"'JetBrains Mono'"}}>{vd.totalPt}점</div>
+                    <td style={{textAlign:"center",padding:isMobile?"3px 4px":"4px 6px",background:vd.color+"12",borderLeft:`2px solid ${vd.color}`,minWidth:isMobile?50:80}}>
+                      {/* 판정 + 점수 */}
+                      <div style={{display:"flex",alignItems:"center",justifyContent:"center",gap:3,flexWrap:"nowrap"}}>
+                        <span style={{fontSize:isMobile?10:12,fontWeight:800,color:vd.color,whiteSpace:"nowrap"}}>{vd.verdict}</span>
+                        <span style={{fontSize:isMobile?8:10,color:"#484f58",fontFamily:"'JetBrains Mono'",fontWeight:700}}>{vd.totalPt}</span>
+                      </div>
+                      {/* ExecTag — 항상 표시 (모바일 포함) */}
+                      {d._execTag && (()=>{
+                        const tC={'BUY NOW':'#00e676','BUY ON BREAKOUT':'#448aff','WATCH':'#ffd600','AVOID':'#f85149'}[d._execTag]||'#aaa';
+                        const tL={'BUY NOW':'⚡NOW','BUY ON BREAKOUT':'📈BRK','WATCH':'👀WATCH','AVOID':'🚫AVOID'}[d._execTag]||d._execTag;
+                        return <div style={{fontSize:isMobile?7:8,fontWeight:700,color:tC,marginTop:1,whiteSpace:'nowrap',letterSpacing:'-0.3px'}}>{tL}</div>;
+                      })()}
+                      {/* Gate 실패 — gateLabel 전체 표시 */}
+                      {vd.details.gateLabel && <div style={{fontSize:isMobile?6:7,color:'#f85149',marginTop:1,whiteSpace:'nowrap',fontWeight:700,letterSpacing:'-0.3px'}}>{vd.details.gateLabel}</div>}
+                      {/* Risk Penalty — 있을 때만 */}
+                      {!vd.details.gateLabel && vd.details.riskPenalty>0 && <div style={{fontSize:isMobile?6:7,color:'#ff922b',marginTop:1,whiteSpace:'nowrap',fontWeight:600}}>⚠️Risk-{vd.details.riskPenalty}</div>}
                     </td>
                     {(view==="dual"||view==="mf") && <>
                       <td style={{padding:"6px 5px",textAlign:"center"}}><Badge v={mfTs(d)} g={2.5} r={1.5}/></td>
@@ -3067,449 +3719,195 @@ export default function Dashboard(){
         {sorted.length===0 && <div style={{textAlign:"center",padding:30,color:"#484f58",fontSize:14}}>결과 없음</div>}
       </div>}
 
-      {/* ============ 콘텐츠 자동생성기 탭 ============ */}
-      {tab==="content" && (()=>{
-        const today=new Date();
-        const dateStr=`${today.getFullYear()}.${String(today.getMonth()+1).padStart(2,'0')}.${String(today.getDate()).padStart(2,'0')}`;
-        const LINE="─────────────────────";
-
-        /* ─── 데이터 계산 ─── */
-        const all=stocks.map(d=>({d,vd:getVerdict(d),dm:getDualMomentum(d)}));
-
-        const buyNow=all.filter(({vd,d})=>vd.totalPt>=80&&(vd.details.volPt>=9||['성숙🔥','성숙','돌파✅'].includes(vcpMt(d))))
-          .sort((a,b)=>b.vd.totalPt-a.vd.totalPt).slice(0,5);
-        const soonBreak=all.filter(({vd,d})=>vd.totalPt>=60&&vd.totalPt<85&&['형성중','성숙','성숙🔥'].includes(vcpMt(d))&&Math.abs(vcpPx(d))<=10)
-          .sort((a,b)=>Math.abs(vcpPx(a.d))-Math.abs(vcpPx(b.d))).slice(0,5);
-        const silent=all.filter(({vd,d,dm})=>seTt(d)>=7&&dm.signalScore>=7&&vd.totalPt>=55&&vd.totalPt<80&&vd.details.volPt>=4&&vd.details.volPt<=8)
-          .sort((a,b)=>b.vd.totalPt-a.vd.totalPt).slice(0,4);
-        const tripleGreen=all.filter(({d})=>{
-          const ind=d._indicators;if(!ind)return false;
-          return ind.bb.signal==='squeeze'&&['golden','bullish'].includes(ind.macd.signal)&&['accumulation','confirm'].includes(ind.obv.signal);
-        }).sort((a,b)=>b.vd.totalPt-a.vd.totalPt).slice(0,4);
-
-        /* 등급 분포 */
-        const gradeDist={최강:0,매수:0,관심:0,관망:0,위험:0};
-        all.forEach(({vd})=>{
-          if(vd.totalPt>=80)gradeDist.최강++;
-          else if(vd.totalPt>=65)gradeDist.매수++;
-          else if(vd.totalPt>=50)gradeDist.관심++;
-          else if(vd.totalPt>=35)gradeDist.관망++;
-          else gradeDist.위험++;
-        });
-        const bullRatio=Math.round((gradeDist.최강+gradeDist.매수)/all.length*100);
-        const prevBullRatio=bullRatio; // 히스토리 없으면 동일값
-
-        /* 섹터 평균 점수 */
-        const sectorMap={};
-        all.forEach(({d,vd})=>{if(!sectorMap[d.s])sectorMap[d.s]={sum:0,cnt:0};sectorMap[d.s].sum+=vd.totalPt;sectorMap[d.s].cnt++;});
-        const sectorAvg=Object.entries(sectorMap).map(([s,v])=>({s,avg:Math.round(v.sum/v.cnt)})).sort((a,b)=>b.avg-a.avg);
-        const topSectors=sectorAvg.slice(0,3);
-        const botSectors=sectorAvg.slice(-3).reverse();
-
-        /* 한국/미국 분리 */
-        const krAll=all.filter(({d})=>d.k);
-        const usAll=all.filter(({d})=>!d.k);
-        const krBull=krAll.filter(({vd})=>vd.totalPt>=65).length;
-        const usBull=usAll.filter(({vd})=>vd.totalPt>=65).length;
-
-        /* ─── 종목 설명 생성기 ─── */
-        const getStockDesc=(d,vd)=>{
-          const lines=[];
-          const vol=d._volData;
-          const ind=d._indicators;
-          // 추세 설명
-          const sepaOk=seTt(d)>=7;
-          const dm=getDualMomentum(d);
-          if(sepaOk&&dm.signalScore>=8)lines.push("상승 추세가 탄탄하고 시장 대비 강한 흐름을 보이고 있습니다.");
-          else if(sepaOk)lines.push("중장기 상승 추세가 유지되고 있습니다.");
-          else if(dm.signalScore>=8)lines.push("시장 대비 강한 모멘텀이 이어지고 있습니다.");
-          // 거래량 설명
-          if(vol&&vol.signalType==='buy'){
-            const isAccum=vol.signal&&vol.signal.includes('매집');
-            if(isAccum)lines.push("기관·세력의 조용한 매집이 감지됩니다.");
-            else lines.push("거래량이 수반된 건강한 상승세입니다.");
-          }
-          // VCP 설명
-          const vm=vcpMt(d);
-          if(vm.includes('성숙'))lines.push("변동성 수축이 완성된 상태 — 진입 타이밍에 가깝습니다.");
-          else if(vm==='돌파✅')lines.push("이미 돌파가 시작되었습니다. 추격 진입 시 리스크 확인 필수.");
-          else if(vm==='형성중'){
-            const px=vcpPx(d);
-            lines.push(`조용히 에너지를 모으는 중. 돌파 기준선까지 ${Math.abs(px).toFixed(1)}% 남았습니다.`);
-          }
-          // 보조지표
-          if(ind){
-            if(ind.macd.signal==='golden')lines.push("단기 모멘텀 지표(MACD)가 상승 전환했습니다.");
-            if(ind.obv.signal==='accumulation')lines.push("스마트머니(큰손)가 조용히 사들이는 패턴이 보입니다.");
-            if(ind.bb.signal==='squeeze')lines.push("가격 변동폭이 극도로 좁아져 큰 움직임이 임박했습니다.");
-          }
-          return lines.slice(0,2).join(' ');
-        };
-
-        /* ─── ① Threads용 추천 종목 ─── */
-        /* ─── 가격 정보 한 줄 생성기 ─── */
-        const getPriceLine=(d)=>{
-          const cur=d.p||0;
-          const entry=d.q&&d.q[0]?d.q[0]:vcpPv(d)||cur;
-          const stop=d.q&&d.q[1]?d.q[1]:entry*0.93;
-          const t1=d.q&&d.q[2]?d.q[2]:entry*1.15;
-          const t2=d.q&&d.q[3]?d.q[3]:entry*1.30;
-          const fmt=(v)=>d.k?`₩${Math.round(v).toLocaleString()}`:`$${v.toFixed(2)}`;
-          if(!cur)return '';
-          return `현재가 ${fmt(cur)}  |  손절 ${fmt(stop)}  |  1차 ${fmt(t1)}  |  2차 ${fmt(t2)}`;
-        };
-
-        const genRecommend=()=>{
-          const flag=d=>d.k?'🇰🇷':'🇺🇸';
-          let txt='';
-          txt+=`📰 오늘의 주목 종목 | ${dateStr}\n\n`;
-          txt+=`289개 종목을 멀티팩터 엔진으로 분석한 결과,\n오늘 가장 힘 있는 종목들을 추렸습니다.\n\n`;
-
-          if(buyNow.length>0){
-            txt+=`${LINE}\n`;
-            txt+=`🔥 지금 들어가도 되는 종목\n\n`;
-            buyNow.forEach(({d,vd})=>{
-              txt+=`${flag(d)} ${d.n}\n`;
-              const desc=getStockDesc(d,vd);
-              if(desc)txt+=`→ ${desc}\n`;
-              const pl=getPriceLine(d);
-              if(pl)txt+=`   ${pl}\n`;
-              txt+='\n';
-            });
-          }
-
-          if(soonBreak.length>0){
-            txt+=`${LINE}\n`;
-            txt+=`👀 곧 터질 것 같은 종목\n\n`;
-            soonBreak.forEach(({d,vd})=>{
-              const px=vcpPx(d);
-              txt+=`${flag(d)} ${d.n}\n`;
-              txt+=`→ 조용히 에너지를 모으는 중입니다.\n`;
-              txt+=`   돌파 기준선까지 ${Math.abs(px).toFixed(1)}% 남았습니다.\n`;
-              const pl=getPriceLine(d);
-              if(pl)txt+=`   ${pl}\n`;
-              txt+='\n';
-            });
-          }
-
-          if(silent.length>0){
-            txt+=`${LINE}\n`;
-            txt+=`📈 아직 주목받지 못한 강자\n\n`;
-            silent.forEach(({d,vd,dm})=>{
-              txt+=`${flag(d)} ${d.n}\n`;
-              txt+=`→ 상승 추세는 탄탄하지만 아직 시장의 관심이 덜합니다.\n`;
-              if(dm.r3m)txt+=`   최근 3개월 수익률이 시장 평균을 웃돌고 있습니다.\n`;
-              const pl=getPriceLine(d);
-              if(pl)txt+=`   ${pl}\n`;
-              txt+='\n';
-            });
-          }
-
-          if(tripleGreen.length>0){
-            txt+=`${LINE}\n`;
-            txt+=`🎯 모든 보조지표가 초록불인 종목\n\n`;
-            tripleGreen.forEach(({d,vd})=>{
-              txt+=`${flag(d)} ${d.n}\n`;
-              txt+=`→ 가격 수축 + 매수 전환 + 큰손 매집이 동시에 포착됩니다.\n`;
-              const pl=getPriceLine(d);
-              if(pl)txt+=`   ${pl}\n`;
-              txt+='\n';
-            });
-          }
-
-          txt+=`${LINE}\n`;
-          txt+=`💡 이 분석은 참고용입니다.\n`;
-          txt+=`   투자 결정은 반드시 본인 판단으로 하세요.\n\n`;
-          txt+=`#주식 #오늘의추천종목 #주식투자 #한국주식 #미국주식`;
-          return txt;
-        };
-
-        /* ─── ② Threads용 시황 분석 ─── */
-        const genMarket=()=>{
-          // 시장 전반 판단
-          const marketMood=bullRatio>=50?'강세':'약세';
-          const moodEmoji=bullRatio>=60?'🟢':bullRatio>=40?'🟡':'🔴';
-          const moodDesc=bullRatio>=60?'매수 신호 종목이 절반을 넘었습니다. 공격적 접근이 유효한 구간입니다.':
-            bullRatio>=40?'매수와 관망이 혼재하는 중립 구간입니다. 종목 선별이 핵심입니다.':
-            '시장 전반이 약세입니다. 현금 비중을 높이고 강한 종목만 압축 대응하세요.';
-
-          let txt='';
-          txt+=`📰 오늘의 시장 시황 | ${dateStr}\n\n`;
-          txt+=`매일 289개 종목을 분석해 시장의 온도를 측정합니다.\n\n`;
-
-          txt+=`${LINE}\n`;
-          txt+=`${moodEmoji} 지금 시장 온도 — ${marketMood}\n\n`;
-          txt+=`매수 신호 이상 종목 비율: ${bullRatio}%\n`;
-          txt+=`(${gradeDist.최강+gradeDist.매수}개 종목 / 전체 ${all.length}개)\n\n`;
-          txt+=`${moodDesc}\n\n`;
-
-          txt+=`${LINE}\n`;
-          txt+=`🌐 한국 · 미국 비교\n\n`;
-          txt+=`🇰🇷 한국 ${krAll.length}종목 중 매수이상 ${krBull}개 (${Math.round(krBull/krAll.length*100)}%)\n`;
-          txt+=`🇺🇸 미국 ${usAll.length}종목 중 매수이상 ${usBull}개 (${Math.round(usBull/usAll.length*100)}%)\n\n`;
-
-          txt+=`${LINE}\n`;
-          txt+=`💪 지금 가장 강한 섹터\n\n`;
-          topSectors.forEach(({s,avg},i)=>{
-            const rank=['1위','2위','3위'][i];
-            txt+=`${rank}  ${s}\n`;
-          });
-          txt+='\n';
-
-          txt+=`📉 힘을 못 쓰는 섹터\n\n`;
-          botSectors.forEach(({s,avg})=>{
-            txt+=`  ${s}\n`;
-          });
-          txt+='\n';
-
-          if(MKT.loaded){
-            txt+=`${LINE}\n`;
-            txt+=`📊 글로벌 지표\n\n`;
-            const vixDesc=MKT.vix<15?'매우 낮음(안심 구간)':MKT.vix<20?'낮음(정상)':MKT.vix<25?'보통':MKT.vix<30?'높음(주의)':'매우 높음(공포)';
-            txt+=`S&P 500(SPY) 12M: ${MKT.spy12m>0?'+':''}${MKT.spy12m}%\n`;
-            txt+=`공포지수(VIX): ${MKT.vix} → ${vixDesc}\n`;
-            txt+=`시장 모드: ${MKT.health?.mode}\n\n`;
-          }
-
-          txt+=`${LINE}\n`;
-          txt+=`💡 강한 섹터 안에서 종목을 고르는 것이\n`;
-          txt+=`   승률을 높이는 가장 쉬운 방법입니다.\n\n`;
-          txt+=`#주식시황 #오늘의시황 #섹터분석 #주식투자`;
-          return txt;
-        };
-
-        /* ─── Canvas 카드 이미지 생성 ─── */
-        const genCanvas=(type,text,canvasRef)=>{
-          const canvas=canvasRef.current;if(!canvas)return;
-          const ctx=canvas.getContext('2d');
-          const W=600;
-          // 텍스트 줄 수 기반 높이 자동 계산
-          const lines=text.split('\n');
-          const H=Math.min(Math.max(lines.length*19+80,400),860);
-          canvas.width=W;canvas.height=H;
-
-          // 배경 그라디언트
-          const bg=ctx.createLinearGradient(0,0,0,H);
-          bg.addColorStop(0,'#07090f');bg.addColorStop(1,'#0d1525');
-          ctx.fillStyle=bg;ctx.fillRect(0,0,W,H);
-
-          // 좌측 컬러바
-          const barColor=type==='market'?'#58a6ff':'#ff1744';
-          const barGrad=ctx.createLinearGradient(0,0,0,H);
-          barGrad.addColorStop(0,barColor);barGrad.addColorStop(1,barColor+'44');
-          ctx.fillStyle=barGrad;ctx.fillRect(0,0,4,H);
-
-          // 헤더 구분선
-          ctx.fillStyle='#161b22';ctx.fillRect(0,0,W,38);
-          ctx.fillStyle='#21262d';ctx.fillRect(0,38,W,1);
-
-          // 로고
-          ctx.fillStyle='#484f58';ctx.font='bold 10px "Helvetica Neue", sans-serif';
-          ctx.fillText('DUAL ENGINE PRO',14,24);
-          // 날짜 우측 정렬
-          ctx.textAlign='right';ctx.fillText(dateStr,W-14,24);ctx.textAlign='left';
-
-          // 텍스트 렌더링
-          let y=58;
-          lines.forEach(line=>{
-            if(y>H-20)return;
-            if(!line.trim()){y+=9;return;}
-
-            const isSep=line.startsWith('─');
-            const isTitle=line.startsWith('📰');
-            const isSection=line.match(/^[🔥👀📈🎯🌐💪📉📊🟢🟡🔴💡]/u);
-            const isBullet=line.startsWith('→')||line.startsWith('   ');
-            const isTag=line.startsWith('#');
-            const isFlag=line.startsWith('🇰🇷')||line.startsWith('🇺🇸');
-
-            if(isSep){
-              ctx.strokeStyle='#21262d';ctx.lineWidth=1;
-              ctx.beginPath();ctx.moveTo(14,y-4);ctx.lineTo(W-14,y-4);ctx.stroke();
-              y+=10;return;
-            }
-            if(isTitle){
-              ctx.font='bold 16px "Helvetica Neue", sans-serif';
-              ctx.fillStyle='#e6edf3';
-            }else if(isSection){
-              ctx.font='bold 13px "Helvetica Neue", sans-serif';
-              ctx.fillStyle=barColor;
-            }else if(isFlag){
-              ctx.font='bold 12px "Helvetica Neue", sans-serif';
-              ctx.fillStyle='#e6edf3';
-            }else if(isBullet){
-              ctx.font='12px "Helvetica Neue", sans-serif';
-              ctx.fillStyle='#8b949e';
-            }else if(isTag){
-              ctx.font='10px "Helvetica Neue", sans-serif';
-              ctx.fillStyle='#30363d';
-            }else{
-              ctx.font='12px "Helvetica Neue", sans-serif';
-              ctx.fillStyle='#c9d1d9';
-            }
-            const maxW=W-28;
-            // 긴 줄 자동 줄바꿈
-            const words=line;
-            if(ctx.measureText(words).width>maxW){
-              const half=Math.floor(words.length*maxW/ctx.measureText(words).width);
-              ctx.fillText(words.slice(0,half),14,y);y+=17;
-              ctx.fillText(words.slice(half),14,y);
-            }else{
-              ctx.fillText(words,14,y);
-            }
-            y+=isTitle?22:isSection?20:isTag?16:17;
-          });
-        };
-
-        /* ─── ContentTabInner 컴포넌트 ─── */
-        const ContentTabInner=()=>{
-          const [ctype,setCtype]=useState('recommend');
-          const [copied,setCopied]=useState(false);
-          const canvasRef=useRef(null);
-
-          const texts={recommend:genRecommend(),market:genMarket()};
-          const curText=texts[ctype];
-
-          const doCopy=()=>{
-            navigator.clipboard.writeText(curText).then(()=>{setCopied(true);setTimeout(()=>setCopied(false),2500);});
-          };
-
-          useEffect(()=>{setTimeout(()=>{if(canvasRef.current)genCanvas(ctype,curText,canvasRef);},50);},[ctype]);
-
-          const doSaveImage=()=>{
-            if(!canvasRef.current)return;
-            genCanvas(ctype,curText,canvasRef);
-            setTimeout(()=>{
-              const a=document.createElement('a');
-              a.download=`dual_engine_${ctype}_${dateStr.replace(/\./g,'')}.png`;
-              a.href=canvasRef.current.toDataURL('image/png');a.click();
-            },100);
-          };
-
-          const typeConfig={
-            recommend:{icon:'🔥',label:'오늘의 추천 종목',color:'#ff1744',
-              sub:'매수 신호 종목을 뉴스레터 형식으로 정리',
-              count:`${buyNow.length+soonBreak.length+silent.length+tripleGreen.length}개 종목`},
-            market:{icon:'📈',label:'시황 분석',color:'#58a6ff',
-              sub:'시장 온도·섹터 강약·글로벌 지표 요약',
-              count:`${all.length}개 종목 기반`},
-          };
-
-          return <div style={{maxWidth:1800,margin:"0 auto",padding:"6px 20px"}}>
-            <div style={{background:"#0d1117",border:"1px solid #21262d",borderRadius:10,padding:16}}>
-
-              {/* 헤더 */}
-              <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:4}}>
-                <div style={{fontSize:16,fontWeight:800,color:"#bc8cff"}}>📝 Threads 콘텐츠 생성기</div>
-                <div style={{fontSize:10,padding:"2px 8px",borderRadius:10,background:"#bc8cff15",color:"#bc8cff",border:"1px solid #bc8cff33"}}>뉴스레터형</div>
-              </div>
-              <div style={{fontSize:11,color:"#484f58",marginBottom:16}}>분석 데이터를 일반 독자가 읽기 쉬운 뉴스레터 형식으로 자동 변환합니다.</div>
-
-              {/* 타입 선택 카드 */}
-              <div style={{display:"flex",gap:10,marginBottom:18,flexWrap:"wrap"}}>
-                {Object.entries(typeConfig).map(([k,cfg])=>(
-                  <button key={k} onClick={()=>setCtype(k)}
-                    style={{flex:1,minWidth:isMobile?'100%':200,padding:"12px 16px",borderRadius:10,
-                      border:`1.5px solid ${ctype===k?cfg.color:"#21262d"}`,
-                      background:ctype===k?`linear-gradient(135deg,${cfg.color}18,${cfg.color}08)`:"#161b22",
-                      cursor:"pointer",textAlign:"left",transition:"all .2s",outline:"none"}}>
-                    <div style={{fontSize:15,fontWeight:800,color:ctype===k?cfg.color:"#8b949e",marginBottom:3}}>{cfg.icon} {cfg.label}</div>
-                    <div style={{fontSize:10,color:"#484f58",marginBottom:4}}>{cfg.sub}</div>
-                    <div style={{fontSize:10,fontFamily:"'JetBrains Mono'",color:ctype===k?cfg.color+"99":"#333",fontWeight:700}}>{cfg.count}</div>
-                  </button>
-                ))}
-              </div>
-
-              {/* 메인 2컬럼 */}
-              <div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"1fr 1fr",gap:16,alignItems:"start"}}>
-
-                {/* 왼쪽: 텍스트 */}
-                <div>
-                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
-                    <div style={{fontSize:11,fontWeight:700,color:"#8b949e"}}>Threads 포스팅 텍스트</div>
-                    <button onClick={doCopy}
-                      style={{display:"flex",alignItems:"center",gap:5,padding:"6px 14px",borderRadius:6,
-                        border:`1px solid ${copied?"#3fb950":"#58a6ff"}`,
-                        background:copied?"#3fb95018":"#58a6ff15",
-                        color:copied?"#3fb950":"#58a6ff",cursor:"pointer",fontSize:12,fontWeight:700,transition:"all .2s"}}>
-                      {copied?"✅ 복사 완료!":"📋 복사하기"}
-                    </button>
-                  </div>
-                  <div style={{position:"relative"}}>
-                    <pre style={{background:"#0a0d16",border:`1px solid ${typeConfig[ctype].color}22`,borderRadius:10,
-                      padding:"14px 16px",fontSize:12.5,color:"#e6edf3",
-                      fontFamily:'"Pretendard","Apple SD Gothic Neo","Malgun Gothic",sans-serif',
-                      lineHeight:1.8,whiteSpace:"pre-wrap",wordBreak:"break-word",
-                      maxHeight:isMobile?380:520,overflowY:"auto",margin:0}}>
-                      {curText}
-                    </pre>
-                    {/* 글자수 */}
-                    <div style={{position:"absolute",bottom:8,right:10,fontSize:9,color:"#484f58",fontFamily:"'JetBrains Mono'"}}>
-                      {curText.length}자
-                    </div>
-                  </div>
-                  <div style={{marginTop:6,fontSize:10,color:"#484f58"}}>
-                    💡 위 텍스트를 복사해 Threads에 바로 붙여넣기 하세요.
-                  </div>
-                </div>
-
-                {/* 오른쪽: 이미지 카드 */}
-                <div>
-                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
-                    <div style={{fontSize:11,fontWeight:700,color:"#8b949e"}}>카드 이미지 미리보기</div>
-                    <button onClick={doSaveImage}
-                      style={{display:"flex",alignItems:"center",gap:5,padding:"6px 14px",borderRadius:6,
-                        border:"1px solid #bc8cff",background:"#bc8cff15",color:"#bc8cff",
-                        cursor:"pointer",fontSize:12,fontWeight:700}}>
-                      ⬇ PNG 저장
-                    </button>
-                  </div>
-                  <div style={{background:"#0a0d16",border:"1px solid #21262d",borderRadius:10,padding:12,
-                    display:"flex",justifyContent:"center",minHeight:160,overflow:"hidden"}}>
-                    <canvas ref={canvasRef} style={{maxWidth:"100%",borderRadius:8,boxShadow:"0 6px 24px rgba(0,0,0,.6)"}}/>
-                  </div>
-                  <div style={{marginTop:6,fontSize:10,color:"#484f58",textAlign:"center"}}>PNG 이미지로 저장 → SNS 업로드</div>
-                </div>
-              </div>
-
-              {/* 하단: 현황 요약 바 */}
-              <div style={{marginTop:18,background:"#0a0d16",borderRadius:10,padding:"12px 16px",border:"1px solid #21262d"}}>
-                <div style={{fontSize:11,fontWeight:700,color:"#8b949e",marginBottom:10}}>📊 오늘 시장 현황 ({dateStr} 기준)</div>
-                <div style={{display:"grid",gridTemplateColumns:isMobile?"1fr 1fr":"repeat(5,1fr)",gap:8,marginBottom:12}}>
-                  {[
-                    {label:"🔥 최강",val:gradeDist.최강,color:"#ff1744"},
-                    {label:"🟢 매수",val:gradeDist.매수,color:"#3fb950"},
-                    {label:"🔵 관심",val:gradeDist.관심,color:"#448aff"},
-                    {label:"🟡 관망",val:gradeDist.관망,color:"#ffd600"},
-                    {label:"⛔ 위험",val:gradeDist.위험,color:"#78909c"},
-                  ].map(({label,val,color})=>(
-                    <div key={label} style={{textAlign:"center",background:"#161b22",borderRadius:8,padding:"8px 6px",border:`1px solid ${color}22`}}>
-                      <div style={{fontSize:9,color:"#484f58",marginBottom:2}}>{label}</div>
-                      <div style={{fontSize:22,fontWeight:900,color,fontFamily:"'JetBrains Mono'",lineHeight:1}}>{val}</div>
-                      <div style={{fontSize:9,color:"#484f58",marginTop:1}}>{Math.round(val/all.length*100)}%</div>
-                    </div>
-                  ))}
-                </div>
-                {/* 섹터 강도 바 차트 */}
-                <div style={{fontSize:10,fontWeight:700,color:"#8b949e",marginBottom:6}}>섹터별 평균 점수</div>
-                <div style={{display:"grid",gap:5}}>
-                  {sectorAvg.slice(0,8).map(({s,avg})=>{
-                    const color=avg>=65?"#3fb950":avg>=50?"#58a6ff":avg>=35?"#ffd600":"#f85149";
-                    return <div key={s} style={{display:"flex",alignItems:"center",gap:8}}>
-                      <div style={{width:isMobile?72:130,fontSize:10,color:"#8b949e",textAlign:"right",flexShrink:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{s}</div>
-                      <div style={{flex:1,height:14,background:"#161b22",borderRadius:3,overflow:"hidden",position:"relative"}}>
-                        <div style={{height:"100%",width:avg+"%",background:`linear-gradient(90deg,${color}44,${color}88)`,borderRadius:3,transition:"width .4s"}}/>
-                        <div style={{position:"absolute",left:6,top:0,height:"100%",display:"flex",alignItems:"center",fontSize:9,color,fontWeight:700,fontFamily:"'JetBrains Mono'"}}>{avg}</div>
-                      </div>
-                    </div>;
-                  })}
-                </div>
-              </div>
-
+      {/* ============ 가이드 탭 ============ */}
+      {tab==="guide" && (()=>{
+        const Section=({icon,title,color,children})=>(
+          <div style={{background:"#0d1117",border:`1px solid ${color}33`,borderRadius:10,padding:16,marginBottom:12}}>
+            <div style={{fontSize:14,fontWeight:800,color,marginBottom:10}}>{icon} {title}</div>
+            {children}
+          </div>
+        );
+        const Row=({label,val,valColor,sub})=>(
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",padding:"5px 0",borderBottom:"1px solid #21262d22"}}>
+            <div>
+              <span style={{fontSize:12,color:"#8b949e"}}>{label}</span>
+              {sub&&<div style={{fontSize:10,color:"#484f58",marginTop:1}}>{sub}</div>}
             </div>
-          </div>;
-        };
+            <span style={{fontSize:12,fontWeight:700,color:valColor||"#e6edf3",textAlign:"right",maxWidth:"55%"}}>{val}</span>
+          </div>
+        );
+        const Badge=({txt,color})=>(
+          <span style={{display:"inline-block",padding:"2px 8px",borderRadius:4,border:`1px solid ${color}55`,background:color+"15",color,fontSize:11,fontWeight:700,marginRight:4,marginBottom:4}}>{txt}</span>
+        );
 
-        return <ContentTabInner/>;
+        return <div style={{maxWidth:900,margin:"0 auto",padding:isMobile?"12px 14px":"20px 24px"}}>
+          <div style={{fontSize:isMobile?16:20,fontWeight:900,color:"#e6edf3",marginBottom:4}}>📖 듀얼엔진 프로 사용 가이드</div>
+          <div style={{fontSize:11,color:"#484f58",marginBottom:18,fontFamily:"'JetBrains Mono'"}}>{SCHEMA_VERSION} · 289종목 (🇺🇸{stocks.filter(d=>!d.k).length} + 🇰🇷{stocks.filter(d=>d.k).length})</div>
+
+          {/* 1. 주요 기능 */}
+          <Section icon="🗂" title="탭별 주요 기능" color="#58a6ff">
+            {[
+              ["📊 메인","전체 종목 테이블 — 점수순 정렬, 엔진별 뷰 전환, AI 추천 4섹션","실시간 가격·등락 + 일봉 분석 캐시"],
+              ["👁 워치리스트","관심 종목 모아보기 — 등급 업/다운 변화 알림","최근 30일 등급 변화 자동 감지"],
+              ["💼 보유종목","매수 기록·손절선 추적 — 이탈/임박/안전 상태 표시","진입손절 -7% / 트레일링 -9% 자동 계산"],
+              ["🌐 시장필터","🇺🇸 SPY+VIX / 🇰🇷 KOSPI 독립 Risk 상태 조회","Risk On/Neutral/Off/Defensive 4단계"],
+              ["🧮 포지션계산기","손절폭 기반 매수수량 + 시장·점수 배수 적용 권장비중","과도한 집중 방지 자동 계산"],
+              ["✅ 체크리스트","매수 전 4엔진 조건 수동 점검","거래 실행 전 최종 확인용"],
+            ].map(([t,d,s])=><Row key={t} label={t} val={d} sub={s}/>)}
+          </Section>
+
+          {/* 2. 점수 체계 */}
+          <Section icon="🎯" title="점수 배점 (100점 만점)" color="#00e676">
+            <div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"1fr 1fr",gap:8,marginBottom:10}}>
+              {[
+                ["🏆 SEPA","30pt","Minervini 8조건 · 가격>SMA150/200 · MA정렬 · 52주 위치","#ffd600"],
+                ["⚡ 듀얼모멘텀","23pt","절대+상대 모멘텀 · 3M/6M/12M 실시간 SPY 비교","#00e676"],
+                ["📉 VCP","15pt","60일 T1>T2>T3 변동성 수축 · 성숙(T3<8%·3주+) = 돌파 임박","#448aff"],
+                ["🎯 MF 펀더멘털","10pt","FCF·성장성·수익성·재무·밸류에이션·경쟁력 · A/B/C/F등급","#ff922b"],
+                ["📐 CF 현금흐름","5pt","단기·중기·장기 현금흐름 컨플루언스 · 듀얼 확인 시 보너스","#bc8cff"],
+                ["📊 거래량엔진","12pt","52주 위치 + 5일 방향 + 거래량 패턴 · 매집/돌파/매도압력/고점이탈","#4dabf7"],
+              ].map(([nm,pt,desc,c])=>(
+                <div key={nm} style={{background:"#161b22",borderRadius:8,padding:"10px 12px"}}>
+                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:4}}>
+                    <span style={{fontSize:12,fontWeight:700,color:c}}>{nm}</span>
+                    <span style={{fontSize:14,fontWeight:900,color:c,fontFamily:"'JetBrains Mono'"}}>{pt}</span>
+                  </div>
+                  <div style={{fontSize:10,color:"#484f58",lineHeight:1.5,whiteSpace:"pre-line"}}>{desc}</div>
+                </div>
+              ))}
+            </div>
+            <div style={{background:"#161b22",borderRadius:8,padding:"10px 12px"}}>
+              <div style={{fontSize:11,fontWeight:700,color:"#8b949e",marginBottom:6}}>교차검증 ±5pt · 감점 체계</div>
+              <div style={{display:"flex",flexWrap:"wrap",gap:4}}>
+                <Badge txt="교차검증 ±5" color="#58a6ff"/>
+                <Badge txt="Gate G1 실패 -15" color="#f85149"/>
+                <Badge txt="Gate G2 실패 -10" color="#f85149"/>
+                <Badge txt="Gate G3 실패 -8" color="#ff922b"/>
+                <Badge txt="G1+G2 동시 -20" color="#f85149"/>
+                <Badge txt="Risk Penalty 최대 -10" color="#ff922b"/>
+                <Badge txt="MF F등급 → 64점 상한" color="#ffd600"/>
+                <Badge txt="CF 전체약세 → 69점 상한" color="#ffd600"/>
+              </div>
+            </div>
+          </Section>
+
+          {/* 3. 버딕트 티어 */}
+          <Section icon="🏅" title="버딕트 티어 & ExecTag" color="#bc8cff">
+            <div style={{display:"grid",gridTemplateColumns:isMobile?"1fr 1fr":"repeat(5,1fr)",gap:6,marginBottom:12}}>
+              {[
+                ["🔥 최강","85점+","#ff1744"],
+                ["🟢 매수","65~84","#00e676"],
+                ["🔵 관심","50~64","#448aff"],
+                ["🟡 관망","35~49","#ffd600"],
+                ["⛔ 위험","~34","#78909c"],
+              ].map(([v,r,c])=>(
+                <div key={v} style={{textAlign:"center",padding:"8px 4px",background:c+"12",border:`1px solid ${c}44`,borderRadius:8}}>
+                  <div style={{fontSize:13,fontWeight:800,color:c}}>{v}</div>
+                  <div style={{fontSize:11,color:"#484f58",fontFamily:"'JetBrains Mono'"}}>{r}점</div>
+                </div>
+              ))}
+            </div>
+            <div style={{fontSize:11,fontWeight:700,color:"#8b949e",marginBottom:6}}>실행태그 (점수와 독립 계산)</div>
+            <div style={{display:"grid",gridTemplateColumns:isMobile?"1fr 1fr":"repeat(4,1fr)",gap:6}}>
+              {[
+                ["⚡ BUY NOW","지금 매수 가능 · 피봇 근접+거래량 확인","#00e676"],
+                ["📈 BUY ON BREAKOUT","돌파 시 매수 · VCP 성숙·피봇 대기 중","#448aff"],
+                ["👀 WATCH","조건 미달 · 추적 관찰 필요","#ffd600"],
+                ["🚫 AVOID","매수 금지 · Gate 실패·위험 신호","#f85149"],
+              ].map(([t,d,c])=>(
+                <div key={t} style={{padding:"8px 10px",background:c+"10",border:`1px solid ${c}33`,borderRadius:8}}>
+                  <div style={{fontSize:11,fontWeight:700,color:c,marginBottom:3}}>{t}</div>
+                  <div style={{fontSize:10,color:"#484f58",whiteSpace:"pre-line",lineHeight:1.4}}>{d}</div>
+                </div>
+              ))}
+            </div>
+          </Section>
+
+          {/* 4. 종목 선별 기준 */}
+          <Section icon="🔍" title="종목 선별 기준" color="#ff922b">
+            <div style={{marginBottom:10}}>
+              <div style={{fontSize:11,fontWeight:700,color:"#8b949e",marginBottom:6}}>🔥 지금 사세요 (즉시 매수)</div>
+              <div style={{display:"flex",flexWrap:"wrap",gap:3}}>
+                <Badge txt="총점 85+" color="#ff1744"/>
+                <Badge txt="SEPA Stage 2 확인" color="#ffd600"/>
+                <Badge txt="DM 절대+상대 STRONG" color="#00e676"/>
+                <Badge txt="거래량 매집 or 돌파" color="#4dabf7"/>
+                <Badge txt="VCP 성숙 or 돌파확인" color="#448aff"/>
+              </div>
+            </div>
+            <div style={{marginBottom:10}}>
+              <div style={{fontSize:11,fontWeight:700,color:"#8b949e",marginBottom:6}}>👀 곧 터질 (피봇 대기)</div>
+              <div style={{display:"flex",flexWrap:"wrap",gap:3}}>
+                <Badge txt="총점 60~84" color="#448aff"/>
+                <Badge txt="VCP 성숙 (T3<8%)" color="#448aff"/>
+                <Badge txt="피봇가 -10%~+3% 이내" color="#ffd600"/>
+                <Badge txt="거래량 Dry-up 확인" color="#4dabf7"/>
+              </div>
+            </div>
+            <div style={{marginBottom:10}}>
+              <div style={{fontSize:11,fontWeight:700,color:"#8b949e",marginBottom:6}}>📈 조용한 강자</div>
+              <div style={{display:"flex",flexWrap:"wrap",gap:3}}>
+                <Badge txt="SEPA 7/8 이상" color="#ffd600"/>
+                <Badge txt="DM 신호 7+ 이상" color="#00e676"/>
+                <Badge txt="총점 55~84" color="#448aff"/>
+                <Badge txt="거래량 적정 (매집증가)" color="#4dabf7"/>
+              </div>
+            </div>
+            <div style={{background:"#161b22",borderRadius:8,padding:"10px 12px",marginTop:6}}>
+              <div style={{fontSize:11,fontWeight:700,color:"#f85149",marginBottom:6}}>🚫 제외 조건 (하나라도 해당 시 진입 금지)</div>
+              {[
+                "Gate G1 실패 — 가격이 SMA150·SMA200 아래",
+                "Gate G2 실패 — 200일선 하락 추세 진행 중",
+                "DM SELL — 절대·상대 모멘텀 모두 음수",
+                "거래량 고점이탈 — 고가권 폭발 거래량 출현",
+                "거래량 매도압력 — 상위권에서 대량 매도 신호",
+                "시장필터 Defensive — KOSPI/SPY 200일선 하락 중",
+              ].map((t,i)=><div key={i} style={{fontSize:11,color:"#8b949e",padding:"3px 0",borderBottom:"1px solid #21262d22"}}>✕ {t}</div>)}
+            </div>
+          </Section>
+
+          {/* 5. 손절·포지션 규칙 */}
+          <Section icon="🛡" title="손절 & 포지션 관리" color="#3fb950">
+            <div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"1fr 1fr",gap:8,marginBottom:10}}>
+              <div style={{background:"#161b22",borderRadius:8,padding:"10px 12px"}}>
+                <div style={{fontSize:11,fontWeight:700,color:"#ff922b",marginBottom:6}}>① 진입 손절 (고정)</div>
+                <div style={{fontSize:20,fontWeight:900,color:"#ff922b",fontFamily:"'JetBrains Mono'",marginBottom:4}}>매수가 × 0.93</div>
+                <div style={{fontSize:10,color:"#484f58"}}>매수 직후부터 적용. -7% 하락 시 무조건 손절</div>
+              </div>
+              <div style={{background:"#161b22",borderRadius:8,padding:"10px 12px"}}>
+                <div style={{fontSize:11,fontWeight:700,color:"#3fb950",marginBottom:6}}>② 트레일링 손절 (동적)</div>
+                <div style={{fontSize:20,fontWeight:900,color:"#3fb950",fontFamily:"'JetBrains Mono'",marginBottom:4}}>최고가 × 0.91</div>
+                <div style={{fontSize:10,color:"#484f58"}}>상승할수록 손절선 따라 올라감. 둘 중 높은 쪽 적용</div>
+              </div>
+            </div>
+            <div style={{fontSize:11,fontWeight:700,color:"#8b949e",marginBottom:6}}>시장 Risk 상태별 권장 포지션 비중</div>
+            {[
+              ["🟢 Risk On","최대 100%","적극 매수 가능","#00e676"],
+              ["🔵 Neutral","최대 50%","신중하게 진입","#58a6ff"],
+              ["🟡 Risk Off","최대 25%","소규모만 허용","#ffd600"],
+              ["🔴 Defensive","신규 매수 금지","현금 보유 유지","#f85149"],
+            ].map(([s,p,d,c])=>(
+              <div key={s} style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"6px 10px",borderRadius:6,marginBottom:4,background:c+"10",border:`1px solid ${c}22`}}>
+                <span style={{fontSize:12,fontWeight:700,color:c}}>{s}</span>
+                <span style={{fontSize:12,fontWeight:900,color:c,fontFamily:"'JetBrains Mono'"}}>{p}</span>
+                <span style={{fontSize:10,color:"#484f58"}}>{d}</span>
+              </div>
+            ))}
+          </Section>
+
+          {/* 6. 일일 루틴 */}
+          <Section icon="📅" title="일일 사용 루틴" color="#4dabf7">
+            {[
+              ["① 시장필터 실행","🌐 탭 → '시장필터 조회' → US Risk / KR Risk 확인","매일 장 시작 전"],
+              ["② 종목 분석 실행","📊 탭 → '종목 분석 실행' → 전체 분석 (~2분)","하루 1회 실행, 결과 캐시 저장"],
+              ["③ 가격 업데이트","분석 후 자동 5초 갱신 시작","실시간 반영"],
+              ["④ AI 추천 확인","🔥지금 사세요 / 👀곧 터질 섹션 체크","상위 4~5종목 집중"],
+              ["⑤ 관심 종목 등록","⭐ 클릭 → 워치리스트 추가","등급 변화 자동 알림"],
+              ["⑥ 매수 실행 전","✅ 체크리스트 탭 → 4엔진 조건 확인","🧮 포지션 계산 필수"],
+            ].map(([s,d,t])=><Row key={s} label={s} val={d} sub={t}/>)}
+          </Section>
+
+        </div>;
       })()}
 
       {/* 상세분석 모달 */}
