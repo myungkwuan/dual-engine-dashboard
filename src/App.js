@@ -1279,16 +1279,24 @@ export default function Dashboard(){
   const[pfAddSearch,setPfAddSearch]=useState('');
   const[pfAddOpen,setPfAddOpen]=useState(false);
   const[pfAddSelected,setPfAddSelected]=useState(null); // 선택된 종목 객체
-  /* 자산관리 — calcData: 계산+저장 통합 state. input은 비제어(defaultValue)로 리렌더에서 자유로움 */
+  /* 자산관리
+     calcData : 숫자값 → 계산/표시 전용 (localStorage 동기화)
+     draftVals: 문자열값 → input 표시 전용 (onChange만 반영, blur시 calcData에 반영)
+     분리 이유: onChange→calcData시 리렌더→포커스 날아감(모바일 키보드 닫힘) 방지 */
   const ADEF={cashKRW:0,cashUSD:0,fundKRW:0,fundUSD:0,otherKRW:0,otherUSD:0,fxRate:1380,memo:''};
   const _assetInit=()=>{try{const s=localStorage.getItem('asset_data');return s?{...ADEF,...JSON.parse(s)}:ADEF;}catch(e){return ADEF;}};
-  /* calcData: 실시간 계산 전용. input은 비제어(defaultValue)로 React 리렌더에서 자유로움 */
+  const _draftInit=()=>{const d=_assetInit();return{cashKRW:d.cashKRW?String(d.cashKRW):'',cashUSD:d.cashUSD?String(d.cashUSD):'',fundKRW:d.fundKRW?String(d.fundKRW):'',fundUSD:d.fundUSD?String(d.fundUSD):'',otherKRW:d.otherKRW?String(d.otherKRW):'',otherUSD:d.otherUSD?String(d.otherUSD):'',fxRate:String(d.fxRate||1380),memo:d.memo||''};};
   const[calcData,setCalcData]=useState(_assetInit);
+  const[draftVals,setDraftVals]=useState(_draftInit);
   const aRefs=useRef({});
-  const saveAsset=useCallback((key,val)=>{
-    const num=(key==='memo')?val:(Number(val)||0);
-    setCalcData(p=>{const n={...p,[key]:num};try{localStorage.setItem('asset_data',JSON.stringify(n));}catch(e){}return n;});
+  /* onDraftChange: 입력중 표시만 바꿈 (리렌더 최소화) */
+  const onDraftChange=useCallback((k,v)=>setDraftVals(p=>({...p,[k]:v})),[]);
+  /* onDraftBlur: blur시 숫자 파싱→calcData+localStorage 저장 */
+  const onDraftBlur=useCallback((k,v)=>{
+    const num=(k==='memo')?v:(Number(String(v).replace(/[^0-9.]/g,''))||0);
+    setCalcData(p=>{const n={...p,[k]:num};try{localStorage.setItem('asset_data',JSON.stringify(n));}catch(e){}return n;});
   },[]);
+  const saveAsset=onDraftBlur; /* 하위 호환 */
   // v2: 거래 로그
   const[tradeLog,setTradeLog]=useState(()=>{
     try{const s=localStorage.getItem('trade_log');return s?JSON.parse(s):[];}catch(e){return[];}
@@ -1467,7 +1475,17 @@ export default function Dashboard(){
       if(json.tl){setTradeLog(json.tl);try{localStorage.setItem('trade_log',JSON.stringify(json.tl));}catch(e){}}
       if(json.ad){
         setCalcData(p=>({...p,...json.ad}));
-        Object.entries(json.ad).forEach(([k,v])=>{if(aRefs.current[k])aRefs.current[k].value=String(v||'');});
+        /* draftVals도 동기화 → input에 즉시 반영 */
+        setDraftVals({
+          cashKRW:json.ad.cashKRW?String(json.ad.cashKRW):'',
+          cashUSD:json.ad.cashUSD?String(json.ad.cashUSD):'',
+          fundKRW:json.ad.fundKRW?String(json.ad.fundKRW):'',
+          fundUSD:json.ad.fundUSD?String(json.ad.fundUSD):'',
+          otherKRW:json.ad.otherKRW?String(json.ad.otherKRW):'',
+          otherUSD:json.ad.otherUSD?String(json.ad.otherUSD):'',
+          fxRate:String(json.ad.fxRate||1380),
+          memo:json.ad.memo||''
+        });
         try{localStorage.setItem('asset_data',JSON.stringify(json.ad));}catch(e){}
       }
       const parts=[`워치${(json.w||[]).length}개`,`보유${(json.p||[]).length}개`];
@@ -3787,10 +3805,11 @@ export default function Dashboard(){
                 <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",flexWrap:"wrap",gap:6}}>
                   <span style={{fontSize:12,fontWeight:700,color:"#ffd43b"}}>💱 환율 (원/달러)</span>
                   <div style={{display:"flex",alignItems:"center",gap:6}}>
-                    <input ref={el=>{if(el&&aRefs.current.fxRate===undefined)el.value=String(calcData.fxRate||1380);aRefs.current.fxRate=el;}}
+                    <input
                       type="text" inputMode="numeric"
-                      onChange={e=>{const n=Number(e.target.value.replace(/[^0-9.]/g,''))||1380;setCalcData(p=>({...p,fxRate:n}));}}
-                      onBlur={e=>{const n=Number(e.target.value.replace(/[^0-9.]/g,''))||1380;setCalcData(p=>{const nx={...p,fxRate:n};try{localStorage.setItem('asset_data',JSON.stringify(nx));}catch(er){}return nx;});}}
+                      value={draftVals.fxRate}
+                      onChange={e=>onDraftChange('fxRate',e.target.value)}
+                      onBlur={e=>onDraftBlur('fxRate',e.target.value)}
                       placeholder="1380"
                       style={{padding:"5px 10px",borderRadius:5,border:"1px solid #ffd43b55",background:"#0d1117",color:"#ffd43b",fontSize:14,fontWeight:700,fontFamily:"'JetBrains Mono'",width:100,outline:"none",textAlign:"right"}}/>
                     <span style={{fontSize:11,color:"#484f58"}}>원</span>
@@ -3804,15 +3823,19 @@ export default function Dashboard(){
                 <div style={{display:"flex",gap:6,flexWrap:"wrap",alignItems:"flex-end"}}>
                   <div style={{display:"flex",flexDirection:"column",gap:2,flex:1,minWidth:110}}>
                     <span style={{fontSize:10,color:"#484f58"}}>원화 (₩)</span>
-                    <input ref={el=>{if(el&&aRefs.current.cashKRW===undefined)el.value=String(calcData.cashKRW||'');aRefs.current.cashKRW=el;}}
-                      type="text" inputMode="numeric" placeholder="0"
-                      onChange={onChg('cashKRW')} onBlur={onBl('cashKRW')} style={iSt}/>
+                    <input type="text" inputMode="numeric" placeholder="0"
+                      value={draftVals.cashKRW}
+                      onChange={e=>onDraftChange('cashKRW',e.target.value)}
+                      onBlur={e=>onDraftBlur('cashKRW',e.target.value)}
+                      style={iSt}/>
                   </div>
                   <div style={{display:"flex",flexDirection:"column",gap:2,flex:1,minWidth:110}}>
                     <span style={{fontSize:10,color:"#484f58"}}>달러 ($)</span>
-                    <input ref={el=>{if(el&&aRefs.current.cashUSD===undefined)el.value=String(calcData.cashUSD||'');aRefs.current.cashUSD=el;}}
-                      type="text" inputMode="numeric" placeholder="0"
-                      onChange={onChg('cashUSD')} onBlur={onBl('cashUSD')} style={iSt}/>
+                    <input type="text" inputMode="numeric" placeholder="0"
+                      value={draftVals.cashUSD}
+                      onChange={e=>onDraftChange('cashUSD',e.target.value)}
+                      onBlur={e=>onDraftBlur('cashUSD',e.target.value)}
+                      style={iSt}/>
                   </div>
                   <div style={{display:"flex",flexDirection:"column",gap:2,minWidth:90}}>
                     <span style={{fontSize:10,color:"#3fb950"}}>원화 환산</span>
@@ -3826,15 +3849,19 @@ export default function Dashboard(){
                 <div style={{display:"flex",gap:6,flexWrap:"wrap",alignItems:"flex-end"}}>
                   <div style={{display:"flex",flexDirection:"column",gap:2,flex:1,minWidth:110}}>
                     <span style={{fontSize:10,color:"#484f58"}}>원화 (₩)</span>
-                    <input ref={el=>{if(el&&aRefs.current.fundKRW===undefined)el.value=String(calcData.fundKRW||'');aRefs.current.fundKRW=el;}}
-                      type="text" inputMode="numeric" placeholder="0"
-                      onChange={onChg('fundKRW')} onBlur={onBl('fundKRW')} style={iSt}/>
+                    <input type="text" inputMode="numeric" placeholder="0"
+                      value={draftVals.fundKRW}
+                      onChange={e=>onDraftChange('fundKRW',e.target.value)}
+                      onBlur={e=>onDraftBlur('fundKRW',e.target.value)}
+                      style={iSt}/>
                   </div>
                   <div style={{display:"flex",flexDirection:"column",gap:2,flex:1,minWidth:110}}>
                     <span style={{fontSize:10,color:"#484f58"}}>달러 ($)</span>
-                    <input ref={el=>{if(el&&aRefs.current.fundUSD===undefined)el.value=String(calcData.fundUSD||'');aRefs.current.fundUSD=el;}}
-                      type="text" inputMode="numeric" placeholder="0"
-                      onChange={onChg('fundUSD')} onBlur={onBl('fundUSD')} style={iSt}/>
+                    <input type="text" inputMode="numeric" placeholder="0"
+                      value={draftVals.fundUSD}
+                      onChange={e=>onDraftChange('fundUSD',e.target.value)}
+                      onBlur={e=>onDraftBlur('fundUSD',e.target.value)}
+                      style={iSt}/>
                   </div>
                   <div style={{display:"flex",flexDirection:"column",gap:2,minWidth:90}}>
                     <span style={{fontSize:10,color:"#3fb950"}}>원화 환산</span>
@@ -3848,15 +3875,19 @@ export default function Dashboard(){
                 <div style={{display:"flex",gap:6,flexWrap:"wrap",alignItems:"flex-end"}}>
                   <div style={{display:"flex",flexDirection:"column",gap:2,flex:1,minWidth:110}}>
                     <span style={{fontSize:10,color:"#484f58"}}>원화 (₩)</span>
-                    <input ref={el=>{if(el&&aRefs.current.otherKRW===undefined)el.value=String(calcData.otherKRW||'');aRefs.current.otherKRW=el;}}
-                      type="text" inputMode="numeric" placeholder="0"
-                      onChange={onChg('otherKRW')} onBlur={onBl('otherKRW')} style={iSt}/>
+                    <input type="text" inputMode="numeric" placeholder="0"
+                      value={draftVals.otherKRW}
+                      onChange={e=>onDraftChange('otherKRW',e.target.value)}
+                      onBlur={e=>onDraftBlur('otherKRW',e.target.value)}
+                      style={iSt}/>
                   </div>
                   <div style={{display:"flex",flexDirection:"column",gap:2,flex:1,minWidth:110}}>
                     <span style={{fontSize:10,color:"#484f58"}}>달러 ($)</span>
-                    <input ref={el=>{if(el&&aRefs.current.otherUSD===undefined)el.value=String(calcData.otherUSD||'');aRefs.current.otherUSD=el;}}
-                      type="text" inputMode="numeric" placeholder="0"
-                      onChange={onChg('otherUSD')} onBlur={onBl('otherUSD')} style={iSt}/>
+                    <input type="text" inputMode="numeric" placeholder="0"
+                      value={draftVals.otherUSD}
+                      onChange={e=>onDraftChange('otherUSD',e.target.value)}
+                      onBlur={e=>onDraftBlur('otherUSD',e.target.value)}
+                      style={iSt}/>
                   </div>
                   <div style={{display:"flex",flexDirection:"column",gap:2,minWidth:90}}>
                     <span style={{fontSize:10,color:"#3fb950"}}>원화 환산</span>
@@ -3866,9 +3897,10 @@ export default function Dashboard(){
               </div>
               <div style={{background:"#161b22",borderRadius:8,padding:"10px 12px",marginBottom:6}}>
                 <div style={{fontSize:11,fontWeight:700,color:"#8b949e",marginBottom:4}}>📝 메모</div>
-                <textarea ref={el=>{if(el&&aRefs.current.memo===undefined)el.value=calcData.memo||'';aRefs.current.memo=el;}}
-                  onChange={e=>{const v=e.target.value;setCalcData(p=>({...p,memo:v}));}}
-                  onBlur={e=>{const v=e.target.value;setCalcData(p=>{const nx={...p,memo:v};try{localStorage.setItem('asset_data',JSON.stringify(nx));}catch(er){}return nx;});}}
+                <textarea
+                  value={draftVals.memo}
+                  onChange={e=>onDraftChange('memo',e.target.value)}
+                  onBlur={e=>onDraftBlur('memo',e.target.value)}
                   placeholder="자산 메모..." rows={2}
                   style={{width:"100%",padding:"6px 10px",borderRadius:5,border:"1px solid #30363d",background:"#0d1117",color:"#8b949e",fontSize:12,resize:"vertical",outline:"none",boxSizing:"border-box"}}/>
               </div>
