@@ -1279,11 +1279,35 @@ export default function Dashboard(){
   const[pfAddSearch,setPfAddSearch]=useState('');
   const[pfAddOpen,setPfAddOpen]=useState(false);
   const[pfAddSelected,setPfAddSelected]=useState(null); // 선택된 종목 객체
+  /* 자산관리 — calcData: 계산+저장 통합 state. input은 비제어(defaultValue)로 리렌더에서 자유로움 */
+  const ADEF={cashKRW:0,cashUSD:0,fundKRW:0,fundUSD:0,otherKRW:0,otherUSD:0,fxRate:1380,memo:''};
+  const _assetInit=()=>{try{const s=localStorage.getItem('asset_data');return s?{...ADEF,...JSON.parse(s)}:ADEF;}catch(e){return ADEF;}};
+  /* calcData: 실시간 계산 전용. input은 비제어(defaultValue)로 React 리렌더에서 자유로움 */
+  const[calcData,setCalcData]=useState(_assetInit);
+  const aRefs=useRef({});
+  const saveAsset=useCallback((key,val)=>{
+    const num=(key==='memo')?val:(Number(val)||0);
+    setCalcData(p=>{const n={...p,[key]:num};try{localStorage.setItem('asset_data',JSON.stringify(n));}catch(e){}return n;});
+  },[]);
   // v2: 거래 로그
   const[tradeLog,setTradeLog]=useState(()=>{
     try{const s=localStorage.getItem('trade_log');return s?JSON.parse(s):[];}catch(e){return[];}
   });
   const[sellModal,setSellModal]=useState(null); // {portIdx, stock, buyPrice, qty, name, ticker, isKR, score, execTag}
+  // 등급 변화 히스토리
+  const[gradeHistory,setGradeHistory]=useState(()=>{
+    try{const s=localStorage.getItem('grade_history');return s?JSON.parse(s):{} }catch(e){return{};}
+  });
+  // 분석 상태
+  const[anaRt,setAnaRt]=useState("idle");
+  const[anaProg,setAnaProg]=useState(0);
+  const[anaTime,setAnaTime]=useState(()=>{
+    try{return localStorage.getItem('ana_time')||'-';}catch(e){return'-';}
+  });
+  const[isV1Cache,setIsV1Cache]=useState(false); // 구버전 캐시 감지
+  const anaBusy=useRef(false);
+  const busy=useRef(false);
+  const autoRef=useRef(null);
   /* 듀얼모멘텀 필터 */
   const[dmFilter,setDmFilter]=useState("all");
   /* 시장필터 실시간 데이터 */
@@ -1292,10 +1316,8 @@ export default function Dashboard(){
       const c=localStorage.getItem('mkt_data');
       if(c){
         const parsed=JSON.parse(c);
-        // v2: 캐시된 SPY 수익률로 벤치마크 즉시 복원
         if(parsed.spy3m!=null) _SPY_BENCH.b3=parsed.spy3m;
         if(parsed.spy6m!=null) _SPY_BENCH.b6=parsed.spy6m;
-        // v2: KR 필드 없는 구버전 캐시 보완
         if(parsed.krRiskState==null) parsed.krRiskState="unknown";
         if(parsed.krRiskColor==null) parsed.krRiskColor="#484f58";
         if(parsed.krRiskLabel==null) parsed.krRiskLabel="⏳ 재조회 필요";
@@ -1323,48 +1345,24 @@ export default function Dashboard(){
     try{const c=localStorage.getItem('sector_trend');return c?JSON.parse(c):{loaded:false};}catch(e){return{loaded:false};}
   });
   const[trendRt,setTrendRt]=useState("idle");
-  const[trendTime,setTrendTime]=useState(()=>{
-    try{return localStorage.getItem('sector_trend_time')||'-';}catch(e){return'-';}
-  });
-  const[trendMarket,setTrendMarket]=useState("kr");
-
-  /* 등급 전환 이력 */
-  const[gradeHistory,setGradeHistory]=useState(()=>{
-    try{return JSON.parse(localStorage.getItem('grade_history')||'{}');}catch(e){return{};}
-  });
-  /* 분석 갱신 상태 */
-  const[anaRt,setAnaRt]=useState("idle");
-  const[anaProg,setAnaProg]=useState(0);
-  const[anaTime,setAnaTime]=useState(()=>{
-    try{const s=localStorage.getItem('ana_time');return s||'-';}catch(e){return'-';}
-  });
-  const[isV1Cache,setIsV1Cache]=useState(false); // v1.5: 구버전 캐시 감지
-  const autoRef=useRef(null);
-  const busy=useRef(false);
-  const anaBusy=useRef(false);
-
   /* localStorage에서 마지막 분석 결과 로드 */
   useEffect(()=>{
     try{
       const cached=localStorage.getItem('ana_data');
       if(cached){
         const parsed=JSON.parse(cached);
-
         // ── 버전 태그 검사 ──
         const savedVer = localStorage.getItem('ana_schema_ver');
         const savedTs  = localStorage.getItem('ana_time') || '-';
         if(savedVer && savedVer !== SCHEMA_VERSION){
-          // 버전 불일치 → 캐시 무효화, 재분석 배너 표시
           setIsV1Cache(true);
           log(`⚠️ 캐시 버전 불일치 (저장: ${savedVer} → 현재: ${SCHEMA_VERSION}) — 재분석 필요`,"er");
-          return; // 구버전 데이터 적용 안 함
+          return;
         }
-
         // ── 구버전 gate 필드 없는 캐시 감지 (fallback) ──
         const sampleKeys=Object.keys(parsed).slice(0,3);
         const isOldCache=sampleKeys.length>0 && !parsed[sampleKeys[0]]?.gate;
         if(isOldCache){ setIsV1Cache(true); return; }
-
         setStocks(prev=>prev.map(d=>{
           const a=parsed[d.t];
           if(!a)return d;
@@ -1946,7 +1944,7 @@ export default function Dashboard(){
       {/* Tab Nav */}
       <div className="tab-nav" style={{maxWidth:1800,margin:"6px auto",padding:"0 20px"}}>
         <div style={{display:"flex",gap:4,overflowX:"auto",WebkitOverflowScrolling:"touch",paddingBottom:2,scrollbarWidth:"none"}}>
-          {[["main",isMobile?"📊":"📊 메인"],["watch",isMobile?("👁"+watchlist.length):("👁 워치("+watchlist.length+")")],["port",isMobile?"💼":"💼 보유종목"],["filter",isMobile?"🌐":"🌐 시장필터"],["calc",isMobile?"🧮":"🧮 포지션"],["check",isMobile?"✅":"✅ 체크리스트"],["guide",isMobile?"📖":"📖 가이드"]].map(([k,l])=>
+          {[["main",isMobile?"📊":"📊 메인"],["watch",isMobile?("👁"+watchlist.length):("👁 워치("+watchlist.length+")")],["port",isMobile?"💼":"💼 보유종목"],["asset",isMobile?"💰":"💰 자산관리"],["filter",isMobile?"🌐":"🌐 시장필터"],["calc",isMobile?"🧮":"🧮 포지션"],["check",isMobile?"✅":"✅ 체크리스트"],["guide",isMobile?"📖":"📖 가이드"]].map(([k,l])=>
             <Tb key={k} label={l} active={tab===k} onClick={()=>setTab(k)}/>
           )}
         </div>
@@ -3368,12 +3366,13 @@ export default function Dashboard(){
         const krs=MKT.krRiskState||"unknown";
         const krc=MKT.krRiskColor||"#484f58";
         const krl=MKT.krRiskLabel||"";
+        const krMissing = !krl || krl==="⏳" || krl.includes("재조회") || krs==="unknown";
         const usWarning=(rs==="risk_off"||rs==="defensive");
         const krWarning=(krs==="risk_off"||krs==="defensive");
         const usPct=MKT.maxPositionPct??100;
         const krPct=MKT.krMaxPositionPct??100;
         const usMsg=rs==="defensive"?"🚫 신규매수 금지":rs==="risk_off"?"⛔ 신규매수 자제 (최대"+usPct+"%)":rs==="neutral"?"⚠️ 선별매수 (최대"+usPct+"%)":"✅ 정상매매 (최대"+usPct+"%)";
-        const krMsg=krs==="defensive"?"🚫 신규매수 금지":krs==="risk_off"?"⛔ 신규매수 자제 (최대"+krPct+"%)":krs==="neutral"?"⚠️ 선별매수 (최대"+krPct+"%)":"✅ 정상매매 (최대"+krPct+"%)";
+        const krMsg=krMissing?"조회 필요":krs==="defensive"?"🚫 신규매수 금지":krs==="risk_off"?"⛔ 신규매수 자제 (최대"+krPct+"%)":krs==="neutral"?"⚠️ 선별매수 (최대"+krPct+"%)":"✅ 정상매매 (최대"+krPct+"%)";
         return <div style={{maxWidth:1800,margin:"0 auto",padding:"0 20px 6px"}}>
           {/* KR / US 분리 배너 */}
           <div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"1fr 1fr",gap:6}}>
@@ -3391,15 +3390,22 @@ export default function Dashboard(){
               </div>}
             </div>
             {/* 🇰🇷 KR 배너 */}
-            <div style={{padding:"8px 12px",background:krc+"14",border:`1px solid ${krc}44`,borderRadius:8}}>
+            <div style={{padding:"8px 12px",background:krMissing?"#21262d":krc+"14",border:`1px solid ${krMissing?"#30363d":krc+"44"}`,borderRadius:8}}>
               <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap",gap:6}}>
                 <div style={{display:"flex",alignItems:"center",gap:8}}>
                   <span style={{fontSize:13,color:"#484f58"}}>🇰🇷</span>
-                  <span style={{fontSize:13,fontWeight:900,color:krc}}>{krl}</span>
+                  <span style={{fontSize:13,fontWeight:900,color:krMissing?"#8b949e":krc}}>
+                    {krMissing?"⏳ KR 데이터 없음":krl}
+                  </span>
                 </div>
-                <span style={{fontSize:10,color:"#8b949e"}}>{krMsg}</span>
+                {krMissing
+                  ? <button onClick={doMarketFilter} disabled={mktRt==="fetching"} style={{padding:"4px 10px",borderRadius:5,border:"1px solid #58a6ff",background:"#58a6ff18",color:"#58a6ff",cursor:"pointer",fontSize:11,fontWeight:700}}>
+                      {mktRt==="fetching"?"조회중...":"🔄 지금 조회"}
+                    </button>
+                  : <span style={{fontSize:10,color:"#8b949e"}}>{krMsg}</span>
+                }
               </div>
-              {krWarning && <div style={{marginTop:4,fontSize:10,color:"#ff8a80"}}>
+              {!krMissing && krWarning && <div style={{marginTop:4,fontSize:10,color:"#ff8a80"}}>
                 <b>지금 한국주식 매수 비추.</b> {krs==="defensive"?"KOSPI 200일선 아래 — 장기 하락":"KOSPI 50일선 아래 or 글로벌 VIX≥30"}
               </div>}
             </div>
@@ -3718,6 +3724,208 @@ export default function Dashboard(){
         </table>
         {sorted.length===0 && <div style={{textAlign:"center",padding:30,color:"#484f58",fontSize:14}}>결과 없음</div>}
       </div>}
+
+      {/* ============ 자산관리 탭 ============ */}
+      {tab==="asset" && (()=>{
+        /* calcData 기반 계산 — onChange에서 즉시 업데이트되므로 타이핑과 동시에 반영 */
+        const D=calcData;
+        const fx=D.fxRate||1380;
+        /* 보유종목 KR/US 평가금액 자동 계산 */
+        let portKRW=0,portUSD=0;
+        portfolio.forEach(p=>{
+          const s=stocks.find(d=>d.t===p.ticker);
+          if(s&&s.p){if(s.k)portKRW+=s.p*p.qty;else portUSD+=s.p*p.qty;}
+        });
+        /* 자산 항목 */
+        const items=[
+          {label:"🇺🇸 미국주식",krw:portUSD*fx,      usd:portUSD,       color:"#4dabf7",auto:true},
+          {label:"🇰🇷 한국주식",krw:portKRW,          usd:portKRW/fx,    color:"#ff922b",auto:true},
+          {label:"📦 펀드/연금", krw:D.fundKRW+D.fundUSD*fx,  usd:D.fundUSD+D.fundKRW/fx,  color:"#bc8cff",auto:false},
+          {label:"💵 현금(예비군)",krw:D.cashKRW+D.cashUSD*fx,usd:D.cashUSD+D.cashKRW/fx,  color:"#ffd43b",auto:false},
+          {label:"🏠 기타자산",  krw:D.otherKRW+D.otherUSD*fx,usd:D.otherUSD+D.otherKRW/fx,color:"#8b949e",auto:false},
+        ];
+        const totalKRW=items.reduce((a,i)=>a+i.krw,0);
+        /* 투자 여력 */
+        const cashKRW=D.cashKRW+D.cashUSD*fx;
+        const usCapacity=Math.max(0,cashKRW*(MKT.maxPositionPct??100)/100-portUSD*fx);
+        const krCapacity=Math.max(0,cashKRW*(MKT.krMaxPositionPct??100)/100-portKRW);
+        /* 섹터 분산 */
+        const secMap={};
+        portfolio.forEach(p=>{
+          const s=stocks.find(d=>d.t===p.ticker);
+          if(!s||!s.p)return;
+          const v=s.k?s.p*p.qty:s.p*p.qty*fx;
+          secMap[s.s]=(secMap[s.s]||0)+v;
+        });
+        const secTotal=Object.values(secMap).reduce((a,b)=>a+b,0);
+        const secList=Object.entries(secMap).sort((a,b)=>b[1]-a[1]);
+        const SC=["#4dabf7","#3fb950","#ffd43b","#ff922b","#bc8cff","#58a6ff","#f85149","#8b949e","#ff6b81","#00e676"];
+        /* 비제어(uncontrolled) input — React가 DOM value를 절대 건드리지 않음
+           → 연속 타이핑/삭제/모바일 키보드 모두 정상 동작
+           onChange: calcData만 업데이트(계산 즉시 반영), onBlur: localStorage 저장 */
+        const NI=({label,k})=>(
+          <div style={{display:"flex",flexDirection:"column",gap:2,flex:1,minWidth:110}}>
+            <span style={{fontSize:10,color:"#484f58"}}>{label}</span>
+            <input
+              type="text"
+              inputMode="numeric"
+              defaultValue={calcData[k]||''}
+              key={"ni_"+k}
+              onChange={e=>{
+                const n=Number(e.target.value.replace(/[^0-9.]/g,''))||0;
+                setCalcData(p=>({...p,[k]:n}));
+              }}
+              onBlur={e=>{
+                const n=Number(e.target.value.replace(/[^0-9.]/g,''))||0;
+                setCalcData(p=>{const nx={...p,[k]:n};try{localStorage.setItem('asset_data',JSON.stringify(nx));}catch(er){}return nx;});
+              }}
+              placeholder="0"
+              style={{padding:"6px 10px",borderRadius:5,border:"1px solid #30363d",background:"#0d1117",color:"#e6edf3",fontSize:13,fontFamily:"'JetBrains Mono'",outline:"none",width:"100%",boxSizing:"border-box"}}/>
+          </div>
+        );
+        const ARow=({label,krwKey,usdKey})=>(
+          <div style={{background:"#161b22",borderRadius:8,padding:"10px 12px",marginBottom:6}}>
+            <div style={{fontSize:11,fontWeight:700,color:"#8b949e",marginBottom:6}}>{label}</div>
+            <div style={{display:"flex",gap:6,flexWrap:"wrap",alignItems:"flex-end"}}>
+              <NI label="원화 (₩)" k={krwKey}/>
+              <NI label="달러 ($)" k={usdKey}/>
+              <div style={{display:"flex",flexDirection:"column",gap:2,minWidth:90}}>
+                <span style={{fontSize:10,color:"#3fb950"}}>원화 환산</span>
+                <span style={{padding:"6px 6px",fontSize:12,fontWeight:700,color:"#3fb950",fontFamily:"'JetBrains Mono'"}}>
+                  ₩{Math.round((calcData[krwKey]||0)+(calcData[usdKey]||0)*fx).toLocaleString()}
+                </span>
+              </div>
+            </div>
+          </div>
+        );
+        return <div style={{maxWidth:960,margin:"0 auto",padding:isMobile?"10px 14px":"16px 24px"}}>
+          <div style={{fontSize:isMobile?16:20,fontWeight:900,color:"#e6edf3",marginBottom:4}}>💰 자산관리</div>
+          <div style={{fontSize:11,color:"#484f58",marginBottom:14}}>보유종목 자동 연계 · 시장필터 Risk 상태 반영</div>
+          <div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"1fr 1fr",gap:12}}>
+            {/* 왼쪽: 입력 */}
+            <div>
+              <div style={{background:"#161b22",borderRadius:8,padding:"10px 12px",marginBottom:8,border:"1px solid #30363d"}}>
+                <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",flexWrap:"wrap",gap:6}}>
+                  <span style={{fontSize:12,fontWeight:700,color:"#ffd43b"}}>💱 환율 (원/달러)</span>
+                  <div style={{display:"flex",alignItems:"center",gap:6}}>
+                    <input
+                      type="text" inputMode="numeric"
+                      defaultValue={calcData.fxRate||1380}
+                      key="ni_fxRate"
+                      onChange={e=>{const n=Number(e.target.value.replace(/[^0-9.]/g,''))||1380;setCalcData(p=>({...p,fxRate:n}));}}
+                      onBlur={e=>{const n=Number(e.target.value.replace(/[^0-9.]/g,''))||1380;setCalcData(p=>{const nx={...p,fxRate:n};try{localStorage.setItem('asset_data',JSON.stringify(nx));}catch(er){}return nx;});}}
+                      style={{padding:"5px 10px",borderRadius:5,border:"1px solid #ffd43b55",background:"#0d1117",color:"#ffd43b",fontSize:14,fontWeight:700,fontFamily:"'JetBrains Mono'",width:100,outline:"none",textAlign:"right"}}/>
+                    <span style={{fontSize:11,color:"#484f58"}}>원</span>
+                  </div>
+                </div>
+                <div style={{fontSize:10,color:"#484f58",marginTop:4}}>달러 자산 ↔ 원화 자동 환산에 사용</div>
+              </div>
+              <ARow label="💵 현금 (예비군)" krwKey="cashKRW" usdKey="cashUSD"/>
+              <ARow label="📦 펀드 / 연금"   krwKey="fundKRW"  usdKey="fundUSD"/>
+              <ARow label="🏠 기타 자산"      krwKey="otherKRW" usdKey="otherUSD"/>
+              <div style={{background:"#161b22",borderRadius:8,padding:"10px 12px",marginBottom:6}}>
+                <div style={{fontSize:11,fontWeight:700,color:"#8b949e",marginBottom:4}}>📝 메모</div>
+                <textarea defaultValue={calcData.memo||''}
+                  key="ni_memo"
+                  onChange={e=>{const v=e.target.value;setCalcData(p=>({...p,memo:v}));}}
+                  onBlur={e=>{const v=e.target.value;setCalcData(p=>{const nx={...p,memo:v};try{localStorage.setItem('asset_data',JSON.stringify(nx));}catch(er){}return nx;});}}
+                  placeholder="자산 메모..." rows={2}
+                  style={{width:"100%",padding:"6px 10px",borderRadius:5,border:"1px solid #30363d",background:"#0d1117",color:"#8b949e",fontSize:12,resize:"vertical",outline:"none",boxSizing:"border-box"}}/>
+              </div>
+              <div style={{fontSize:10,color:"#484f58"}}>🟢 미국/한국주식은 보유종목 탭에서 자동 계산</div>
+            </div>
+            {/* 오른쪽: 현황 */}
+            <div>
+              {/* 자산 현황 테이블 */}
+              <div style={{background:"#0d1117",border:"1px solid #21262d",borderRadius:10,padding:12,marginBottom:10}}>
+                <div style={{fontSize:13,fontWeight:800,color:"#e6edf3",marginBottom:10}}>📊 전체 자산 현황</div>
+                <table style={{width:"100%",borderCollapse:"collapse",fontSize:isMobile?10:12}}>
+                  <thead><tr style={{borderBottom:"2px solid #21262d"}}>
+                    {["자산 구분","원화 환산","달러 환산","비중","그래프"].map(h=>
+                      <th key={h} style={{textAlign:h==="자산 구분"?"left":"right",padding:"4px 5px",color:"#484f58",fontWeight:600,whiteSpace:"nowrap"}}>{h}</th>
+                    )}
+                  </tr></thead>
+                  <tbody>
+                    {items.map((item,i)=>{
+                      const pct=totalKRW>0?(item.krw/totalKRW*100):0;
+                      return <tr key={i} style={{borderBottom:"1px solid #21262d22"}}>
+                        <td style={{padding:"5px 5px",color:item.color,fontWeight:600,whiteSpace:"nowrap"}}>
+                          {item.label}{item.auto&&<span style={{fontSize:9,color:"#484f58",marginLeft:2}}>auto</span>}
+                        </td>
+                        <td style={{padding:"5px 5px",textAlign:"right",fontFamily:"'JetBrains Mono'",color:item.krw>0?"#e6edf3":"#484f58",fontSize:11}}>
+                          {item.krw>0?`₩${Math.round(item.krw).toLocaleString()}`:"₩0"}
+                        </td>
+                        <td style={{padding:"5px 5px",textAlign:"right",fontFamily:"'JetBrains Mono'",color:"#8b949e",fontSize:10}}>
+                          ${item.usd>0?Math.round(item.usd).toLocaleString():"0"}
+                        </td>
+                        <td style={{padding:"5px 5px",textAlign:"right",fontFamily:"'JetBrains Mono'",color:"#8b949e",fontSize:10}}>{pct.toFixed(1)}%</td>
+                        <td style={{padding:"4px 5px",minWidth:60}}>
+                          <div style={{height:10,background:"#161b22",borderRadius:3,overflow:"hidden"}}>
+                            <div style={{height:"100%",width:pct+"%",background:item.color,borderRadius:3}}/>
+                          </div>
+                        </td>
+                      </tr>;
+                    })}
+                  </tbody>
+                  <tfoot><tr style={{borderTop:"2px solid #21262d"}}>
+                    <td style={{padding:"7px 5px",fontWeight:800,color:"#e6edf3"}}>총 합계</td>
+                    <td style={{padding:"7px 5px",textAlign:"right",fontFamily:"'JetBrains Mono'",fontWeight:900,color:"#3fb950",fontSize:13}}>₩{Math.round(totalKRW).toLocaleString()}</td>
+                    <td style={{padding:"7px 5px",textAlign:"right",fontFamily:"'JetBrains Mono'",color:"#3fb950",fontSize:11}}>${Math.round(totalKRW/fx).toLocaleString()}</td>
+                    <td style={{padding:"7px 5px",textAlign:"right",color:"#484f58",fontSize:10}}>100%</td>
+                    <td/>
+                  </tr></tfoot>
+                </table>
+              </div>
+              {/* 투자 여력 */}
+              <div style={{background:"#0d1117",border:"1px solid #21262d",borderRadius:10,padding:12,marginBottom:10}}>
+                <div style={{fontSize:13,fontWeight:800,color:"#e6edf3",marginBottom:6}}>⚡ 투자 여력</div>
+                <div style={{fontSize:10,color:"#484f58",marginBottom:8}}>현금 ₩{Math.round(cashKRW).toLocaleString()} 기준</div>
+                {[
+                  {flag:"🇺🇸",label:"미국주식",rl:MKT.riskLabel||"조회전",rc:MKT.riskColor||"#484f58",pct:MKT.maxPositionPct??100,invested:portUSD*fx,capacity:usCapacity},
+                  {flag:"🇰🇷",label:"한국주식",rl:MKT.krRiskLabel||"조회전",rc:MKT.krRiskColor||"#484f58",pct:MKT.krMaxPositionPct??100,invested:portKRW,capacity:krCapacity},
+                ].map(({flag,label,rl,rc,pct,invested,capacity})=>(
+                  <div key={flag} style={{background:"#161b22",borderRadius:8,padding:"10px 12px",marginBottom:6}}>
+                    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}>
+                      <span style={{fontSize:12,fontWeight:700,color:"#e6edf3"}}>{flag} {label}</span>
+                      <span style={{fontSize:10,fontWeight:700,color:rc,padding:"2px 7px",borderRadius:4,background:rc+"18",border:`1px solid ${rc}44`}}>{rl} · 최대{pct}%</span>
+                    </div>
+                    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:4}}>
+                      <div><div style={{fontSize:9,color:"#484f58"}}>현재 투자중</div>
+                        <div style={{fontSize:12,fontWeight:700,color:"#8b949e",fontFamily:"'JetBrains Mono'"}}>₩{Math.round(invested).toLocaleString()}</div></div>
+                      <div><div style={{fontSize:9,color:"#484f58"}}>추가 매수여력</div>
+                        <div style={{fontSize:13,fontWeight:900,color:capacity>0?"#3fb950":"#f85149",fontFamily:"'JetBrains Mono'"}}>
+                          {capacity>0?`₩${Math.round(capacity).toLocaleString()}`:"여력 없음"}</div></div>
+                    </div>
+                    {cashKRW>0&&<div style={{marginTop:6,height:5,background:"#21262d",borderRadius:3,overflow:"hidden"}}>
+                      <div style={{height:"100%",width:Math.min(100,invested/cashKRW*100)+"%",background:rc,borderRadius:3}}/>
+                    </div>}
+                  </div>
+                ))}
+              </div>
+              {/* 섹터 분산 */}
+              <div style={{background:"#0d1117",border:"1px solid #21262d",borderRadius:10,padding:12}}>
+                <div style={{fontSize:13,fontWeight:800,color:"#e6edf3",marginBottom:8}}>🗂 섹터 분산 (보유종목 기준)</div>
+                {secList.length===0
+                  ? <div style={{fontSize:11,color:"#484f58",textAlign:"center",padding:"12px 0"}}>보유종목을 추가하면 표시됩니다</div>
+                  : secList.map(([sec,val],i)=>{
+                      const pct=secTotal>0?(val/secTotal*100):0;
+                      return <div key={sec} style={{display:"flex",alignItems:"center",gap:6,marginBottom:5}}>
+                        <div style={{width:isMobile?66:100,fontSize:10,color:"#8b949e",textAlign:"right",flexShrink:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{sec}</div>
+                        <div style={{flex:1,height:14,background:"#161b22",borderRadius:3,overflow:"hidden",position:"relative"}}>
+                          <div style={{height:"100%",width:pct+"%",background:SC[i%SC.length]+"88",borderRadius:3}}/>
+                          <div style={{position:"absolute",left:5,top:0,height:"100%",display:"flex",alignItems:"center",fontSize:9,color:SC[i%SC.length],fontWeight:700,fontFamily:"'JetBrains Mono'"}}>{pct.toFixed(1)}%</div>
+                        </div>
+                        <div style={{fontSize:10,color:"#484f58",fontFamily:"'JetBrains Mono'",flexShrink:0,width:60,textAlign:"right"}}>₩{(val/1e6).toFixed(0)}M</div>
+                      </div>;
+                    })
+                }
+                {secList.length>0&&secList[0][1]/secTotal>0.5&&
+                  <div style={{marginTop:6,fontSize:10,color:"#ff922b"}}>⚠️ <b>{secList[0][0]}</b> 섹터 50% 초과 집중</div>}
+              </div>
+            </div>
+          </div>
+        </div>;
+      })()}
 
       {/* ============ 가이드 탭 ============ */}
       {tab==="guide" && (()=>{
