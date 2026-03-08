@@ -1345,6 +1345,8 @@ export default function Dashboard(){
     try{const c=localStorage.getItem('sector_trend');return c?JSON.parse(c):{loaded:false};}catch(e){return{loaded:false};}
   });
   const[trendRt,setTrendRt]=useState("idle");
+  const[trendTime,setTrendTime]=useState(()=>{try{return localStorage.getItem('sector_trend_time')||'-';}catch(e){return'-';}});
+  const[trendMarket,setTrendMarket]=useState("us"); /* 섹터추세 KR/US 탭 */
   /* localStorage에서 마지막 분석 결과 로드 */
   useEffect(()=>{
     try{
@@ -1448,14 +1450,13 @@ export default function Dashboard(){
   const[showSync,setShowSync]=useState(false);
 
   const doExport=useCallback(()=>{
-    const data=JSON.stringify({w:watchlist,p:portfolio,gh:gradeHistory,ts:Date.now()});
+    const data=JSON.stringify({w:watchlist,p:portfolio,gh:gradeHistory,tl:tradeLog,ad:calcData,ts:Date.now()});
     const code=btoa(unescape(encodeURIComponent(data)));
-    navigator.clipboard.writeText(code).then(()=>setSyncMsg('✅ 코드 복사 완료! 다른 기기에서 가져오기 하세요.')).catch(()=>{
-      /* 클립보드 실패 시 직접 표시 */
+    navigator.clipboard.writeText(code).then(()=>setSyncMsg('✅ 코드 복사 완료! (워치+보유+자산+거래로그 포함)')).catch(()=>{
       setSyncInput(code);setSyncMsg('📋 아래 코드를 복사하세요:');
     });
-    setTimeout(()=>setSyncMsg(''),4000);
-  },[watchlist,portfolio,gradeHistory]);
+    setTimeout(()=>setSyncMsg(''),5000);
+  },[watchlist,portfolio,gradeHistory,tradeLog,calcData]);
 
   const doImport=useCallback(()=>{
     try{
@@ -1463,11 +1464,20 @@ export default function Dashboard(){
       if(json.w)setWatchlist(json.w);
       if(json.p)setPortfolio(json.p);
       if(json.gh){setGradeHistory(json.gh);try{localStorage.setItem('grade_history',JSON.stringify(json.gh));}catch(e){}}
-      setSyncMsg(`✅ 가져오기 완료! 워치${(json.w||[]).length}개 + 보유${(json.p||[]).length}개`);
+      if(json.tl){setTradeLog(json.tl);try{localStorage.setItem('trade_log',JSON.stringify(json.tl));}catch(e){}}
+      if(json.ad){
+        setCalcData(p=>({...p,...json.ad}));
+        Object.entries(json.ad).forEach(([k,v])=>{if(aRefs.current[k])aRefs.current[k].value=String(v||'');});
+        try{localStorage.setItem('asset_data',JSON.stringify(json.ad));}catch(e){}
+      }
+      const parts=[`워치${(json.w||[]).length}개`,`보유${(json.p||[]).length}개`];
+      if(json.ad)parts.push('자산금액');
+      if(json.tl)parts.push(`거래로그${json.tl.length}건`);
+      setSyncMsg('✅ 가져오기 완료! '+parts.join(' + '));
       setSyncInput('');
     }catch(e){setSyncMsg('❌ 잘못된 코드입니다.');}
-    setTimeout(()=>setSyncMsg(''),4000);
-  },[syncInput]);
+    setTimeout(()=>setSyncMsg(''),5000);
+  },[syncInput,aRefs]);
 
   /* ESC로 모달 닫기 + 타이틀/폰트 설정 */
   useEffect(()=>{
@@ -3760,44 +3770,13 @@ export default function Dashboard(){
         const secTotal=Object.values(secMap).reduce((a,b)=>a+b,0);
         const secList=Object.entries(secMap).sort((a,b)=>b[1]-a[1]);
         const SC=["#4dabf7","#3fb950","#ffd43b","#ff922b","#bc8cff","#58a6ff","#f85149","#8b949e","#ff6b81","#00e676"];
-        /* 비제어(uncontrolled) input — React가 DOM value를 절대 건드리지 않음
-           → 연속 타이핑/삭제/모바일 키보드 모두 정상 동작
-           onChange: calcData만 업데이트(계산 즉시 반영), onBlur: localStorage 저장 */
-        const NI=({label,k})=>(
-          <div style={{display:"flex",flexDirection:"column",gap:2,flex:1,minWidth:110}}>
-            <span style={{fontSize:10,color:"#484f58"}}>{label}</span>
-            <input
-              type="text"
-              inputMode="numeric"
-              defaultValue={calcData[k]||''}
-              key={"ni_"+k}
-              onChange={e=>{
-                const n=Number(e.target.value.replace(/[^0-9.]/g,''))||0;
-                setCalcData(p=>({...p,[k]:n}));
-              }}
-              onBlur={e=>{
-                const n=Number(e.target.value.replace(/[^0-9.]/g,''))||0;
-                setCalcData(p=>{const nx={...p,[k]:n};try{localStorage.setItem('asset_data',JSON.stringify(nx));}catch(er){}return nx;});
-              }}
-              placeholder="0"
-              style={{padding:"6px 10px",borderRadius:5,border:"1px solid #30363d",background:"#0d1117",color:"#e6edf3",fontSize:13,fontFamily:"'JetBrains Mono'",outline:"none",width:"100%",boxSizing:"border-box"}}/>
-          </div>
-        );
-        const ARow=({label,krwKey,usdKey})=>(
-          <div style={{background:"#161b22",borderRadius:8,padding:"10px 12px",marginBottom:6}}>
-            <div style={{fontSize:11,fontWeight:700,color:"#8b949e",marginBottom:6}}>{label}</div>
-            <div style={{display:"flex",gap:6,flexWrap:"wrap",alignItems:"flex-end"}}>
-              <NI label="원화 (₩)" k={krwKey}/>
-              <NI label="달러 ($)" k={usdKey}/>
-              <div style={{display:"flex",flexDirection:"column",gap:2,minWidth:90}}>
-                <span style={{fontSize:10,color:"#3fb950"}}>원화 환산</span>
-                <span style={{padding:"6px 6px",fontSize:12,fontWeight:700,color:"#3fb950",fontFamily:"'JetBrains Mono'"}}>
-                  ₩{Math.round((calcData[krwKey]||0)+(calcData[usdKey]||0)*fx).toLocaleString()}
-                </span>
-              </div>
-            </div>
-          </div>
-        );
+        /* ─ 입력 헬퍼: 컴포넌트 함수 사용 금지 ─
+           NI/ARow를 컴포넌트로 정의하면 렌더마다 새 함수 참조 →
+           React가 언마운트/리마운트 → 포커스 날아감 → 모바일 키보드 닫힘
+           해결: 인라인 JSX + useRef로 DOM 직접 관리 */
+        const iSt={padding:"6px 10px",borderRadius:5,border:"1px solid #30363d",background:"#0d1117",color:"#e6edf3",fontSize:13,fontFamily:"'JetBrains Mono'",outline:"none",width:"100%",boxSizing:"border-box"};
+        const onChg=(k)=>(e)=>{const n=Number(e.target.value.replace(/[^0-9.]/g,''))||0;setCalcData(p=>({...p,[k]:n}));};
+        const onBl=(k)=>(e)=>{const n=Number(e.target.value.replace(/[^0-9.]/g,''))||0;setCalcData(p=>{const nx={...p,[k]:n};try{localStorage.setItem('asset_data',JSON.stringify(nx));}catch(er){}return nx;});};
         return <div style={{maxWidth:960,margin:"0 auto",padding:isMobile?"10px 14px":"16px 24px"}}>
           <div style={{fontSize:isMobile?16:20,fontWeight:900,color:"#e6edf3",marginBottom:4}}>💰 자산관리</div>
           <div style={{fontSize:11,color:"#484f58",marginBottom:14}}>보유종목 자동 연계 · 시장필터 Risk 상태 반영</div>
@@ -3808,25 +3787,86 @@ export default function Dashboard(){
                 <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",flexWrap:"wrap",gap:6}}>
                   <span style={{fontSize:12,fontWeight:700,color:"#ffd43b"}}>💱 환율 (원/달러)</span>
                   <div style={{display:"flex",alignItems:"center",gap:6}}>
-                    <input
+                    <input ref={el=>{if(el&&aRefs.current.fxRate===undefined)el.value=String(calcData.fxRate||1380);aRefs.current.fxRate=el;}}
                       type="text" inputMode="numeric"
-                      defaultValue={calcData.fxRate||1380}
-                      key="ni_fxRate"
                       onChange={e=>{const n=Number(e.target.value.replace(/[^0-9.]/g,''))||1380;setCalcData(p=>({...p,fxRate:n}));}}
                       onBlur={e=>{const n=Number(e.target.value.replace(/[^0-9.]/g,''))||1380;setCalcData(p=>{const nx={...p,fxRate:n};try{localStorage.setItem('asset_data',JSON.stringify(nx));}catch(er){}return nx;});}}
+                      placeholder="1380"
                       style={{padding:"5px 10px",borderRadius:5,border:"1px solid #ffd43b55",background:"#0d1117",color:"#ffd43b",fontSize:14,fontWeight:700,fontFamily:"'JetBrains Mono'",width:100,outline:"none",textAlign:"right"}}/>
                     <span style={{fontSize:11,color:"#484f58"}}>원</span>
                   </div>
                 </div>
                 <div style={{fontSize:10,color:"#484f58",marginTop:4}}>달러 자산 ↔ 원화 자동 환산에 사용</div>
               </div>
-              <ARow label="💵 현금 (예비군)" krwKey="cashKRW" usdKey="cashUSD"/>
-              <ARow label="📦 펀드 / 연금"   krwKey="fundKRW"  usdKey="fundUSD"/>
-              <ARow label="🏠 기타 자산"      krwKey="otherKRW" usdKey="otherUSD"/>
+              {/* 💵 현금 */}
+              <div style={{background:"#161b22",borderRadius:8,padding:"10px 12px",marginBottom:6}}>
+                <div style={{fontSize:11,fontWeight:700,color:"#8b949e",marginBottom:6}}>💵 현금 (예비군)</div>
+                <div style={{display:"flex",gap:6,flexWrap:"wrap",alignItems:"flex-end"}}>
+                  <div style={{display:"flex",flexDirection:"column",gap:2,flex:1,minWidth:110}}>
+                    <span style={{fontSize:10,color:"#484f58"}}>원화 (₩)</span>
+                    <input ref={el=>{if(el&&aRefs.current.cashKRW===undefined)el.value=String(calcData.cashKRW||'');aRefs.current.cashKRW=el;}}
+                      type="text" inputMode="numeric" placeholder="0"
+                      onChange={onChg('cashKRW')} onBlur={onBl('cashKRW')} style={iSt}/>
+                  </div>
+                  <div style={{display:"flex",flexDirection:"column",gap:2,flex:1,minWidth:110}}>
+                    <span style={{fontSize:10,color:"#484f58"}}>달러 ($)</span>
+                    <input ref={el=>{if(el&&aRefs.current.cashUSD===undefined)el.value=String(calcData.cashUSD||'');aRefs.current.cashUSD=el;}}
+                      type="text" inputMode="numeric" placeholder="0"
+                      onChange={onChg('cashUSD')} onBlur={onBl('cashUSD')} style={iSt}/>
+                  </div>
+                  <div style={{display:"flex",flexDirection:"column",gap:2,minWidth:90}}>
+                    <span style={{fontSize:10,color:"#3fb950"}}>원화 환산</span>
+                    <span style={{padding:"6px 6px",fontSize:12,fontWeight:700,color:"#3fb950",fontFamily:"'JetBrains Mono'"}}>₩{Math.round((D.cashKRW||0)+(D.cashUSD||0)*fx).toLocaleString()}</span>
+                  </div>
+                </div>
+              </div>
+              {/* 📦 펀드/연금 */}
+              <div style={{background:"#161b22",borderRadius:8,padding:"10px 12px",marginBottom:6}}>
+                <div style={{fontSize:11,fontWeight:700,color:"#8b949e",marginBottom:6}}>📦 펀드 / 연금</div>
+                <div style={{display:"flex",gap:6,flexWrap:"wrap",alignItems:"flex-end"}}>
+                  <div style={{display:"flex",flexDirection:"column",gap:2,flex:1,minWidth:110}}>
+                    <span style={{fontSize:10,color:"#484f58"}}>원화 (₩)</span>
+                    <input ref={el=>{if(el&&aRefs.current.fundKRW===undefined)el.value=String(calcData.fundKRW||'');aRefs.current.fundKRW=el;}}
+                      type="text" inputMode="numeric" placeholder="0"
+                      onChange={onChg('fundKRW')} onBlur={onBl('fundKRW')} style={iSt}/>
+                  </div>
+                  <div style={{display:"flex",flexDirection:"column",gap:2,flex:1,minWidth:110}}>
+                    <span style={{fontSize:10,color:"#484f58"}}>달러 ($)</span>
+                    <input ref={el=>{if(el&&aRefs.current.fundUSD===undefined)el.value=String(calcData.fundUSD||'');aRefs.current.fundUSD=el;}}
+                      type="text" inputMode="numeric" placeholder="0"
+                      onChange={onChg('fundUSD')} onBlur={onBl('fundUSD')} style={iSt}/>
+                  </div>
+                  <div style={{display:"flex",flexDirection:"column",gap:2,minWidth:90}}>
+                    <span style={{fontSize:10,color:"#3fb950"}}>원화 환산</span>
+                    <span style={{padding:"6px 6px",fontSize:12,fontWeight:700,color:"#3fb950",fontFamily:"'JetBrains Mono'"}}>₩{Math.round((D.fundKRW||0)+(D.fundUSD||0)*fx).toLocaleString()}</span>
+                  </div>
+                </div>
+              </div>
+              {/* 🏠 기타 자산 */}
+              <div style={{background:"#161b22",borderRadius:8,padding:"10px 12px",marginBottom:6}}>
+                <div style={{fontSize:11,fontWeight:700,color:"#8b949e",marginBottom:6}}>🏠 기타 자산</div>
+                <div style={{display:"flex",gap:6,flexWrap:"wrap",alignItems:"flex-end"}}>
+                  <div style={{display:"flex",flexDirection:"column",gap:2,flex:1,minWidth:110}}>
+                    <span style={{fontSize:10,color:"#484f58"}}>원화 (₩)</span>
+                    <input ref={el=>{if(el&&aRefs.current.otherKRW===undefined)el.value=String(calcData.otherKRW||'');aRefs.current.otherKRW=el;}}
+                      type="text" inputMode="numeric" placeholder="0"
+                      onChange={onChg('otherKRW')} onBlur={onBl('otherKRW')} style={iSt}/>
+                  </div>
+                  <div style={{display:"flex",flexDirection:"column",gap:2,flex:1,minWidth:110}}>
+                    <span style={{fontSize:10,color:"#484f58"}}>달러 ($)</span>
+                    <input ref={el=>{if(el&&aRefs.current.otherUSD===undefined)el.value=String(calcData.otherUSD||'');aRefs.current.otherUSD=el;}}
+                      type="text" inputMode="numeric" placeholder="0"
+                      onChange={onChg('otherUSD')} onBlur={onBl('otherUSD')} style={iSt}/>
+                  </div>
+                  <div style={{display:"flex",flexDirection:"column",gap:2,minWidth:90}}>
+                    <span style={{fontSize:10,color:"#3fb950"}}>원화 환산</span>
+                    <span style={{padding:"6px 6px",fontSize:12,fontWeight:700,color:"#3fb950",fontFamily:"'JetBrains Mono'"}}>₩{Math.round((D.otherKRW||0)+(D.otherUSD||0)*fx).toLocaleString()}</span>
+                  </div>
+                </div>
+              </div>
               <div style={{background:"#161b22",borderRadius:8,padding:"10px 12px",marginBottom:6}}>
                 <div style={{fontSize:11,fontWeight:700,color:"#8b949e",marginBottom:4}}>📝 메모</div>
-                <textarea defaultValue={calcData.memo||''}
-                  key="ni_memo"
+                <textarea ref={el=>{if(el&&aRefs.current.memo===undefined)el.value=calcData.memo||'';aRefs.current.memo=el;}}
                   onChange={e=>{const v=e.target.value;setCalcData(p=>({...p,memo:v}));}}
                   onBlur={e=>{const v=e.target.value;setCalcData(p=>{const nx={...p,memo:v};try{localStorage.setItem('asset_data',JSON.stringify(nx));}catch(er){}return nx;});}}
                   placeholder="자산 메모..." rows={2}
