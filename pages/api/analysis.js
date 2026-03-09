@@ -26,36 +26,82 @@ export default async function handler(req, res) {
 function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 
 /* ===== Yahoo Finance v8 chart API ===== */
-async function fetchChart(ticker, isKR, range = "1y") {
-  const symbol = isKR ? `${ticker}.KS` : ticker;
-  const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?range=${range}&interval=1d&includePrePost=false`;
+/* ===== 한국: 네이버금융 차트 API / 미국: Yahoo Finance ===== */
+/* Yahoo Finance가 Vercel 서버 IP를 차단하므로 KR은 네이버 사용  */
+
+async function fetchKRChart(ticker) {
+  // ✅ 네이버 fchart API — 형식 완전 검증됨
+  // 응답: <item data="20241231|시가|고가|저가|종가|거래량" />
+  // count=320 → 약 15개월치 (SEPA 200일봉 충분히 확보)
+  const url = `https://fchart.stock.naver.com/sise.nhn?symbol=${ticker}&timeframe=day&count=320&requestType=0`;
   const resp = await fetch(url, {
-    headers: { "User-Agent": "Mozilla/5.0" },
+    headers: {
+      "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+      "Referer": "https://finance.naver.com/",
+    },
+    signal: AbortSignal.timeout(15000)
+  });
+  if (!resp.ok) throw new Error(`Naver fchart ${resp.status}`);
+  const text = await resp.text();
+
+  // XML 파싱: <item data="YYYYMMDD|open|high|low|close|volume" />
+  const bars = [];
+  const regex = /data="([^"]+)"/g;
+  let m;
+  while ((m = regex.exec(text)) !== null) {
+    const parts = m[1].split("|");
+    if (parts.length < 6) continue;
+    const [dateStr, open, high, low, close, volume] = parts;
+    const c = parseFloat(close);
+    const h = parseFloat(high);
+    const l = parseFloat(low);
+    if (!c || !h || !l) continue;
+    // YYYYMMDD → Date
+    const y = dateStr.slice(0,4), mo = dateStr.slice(4,6), d = dateStr.slice(6,8);
+    bars.push({
+      date:   new Date(`${y}-${mo}-${d}`),
+      open:   parseFloat(open)  || c,
+      high:   h,
+      low:    l,
+      close:  c,
+      volume: parseFloat(volume) || 0
+    });
+  }
+  if (bars.length === 0) throw new Error("fchart: no bars parsed");
+
+  // fchart는 오래된→최신 순(오름차순) 반환 — 그대로 사용
+  return bars;
+}
+
+async function fetchUSChart(symbol, range = "1y") {
+  const url = `https://query2.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?range=${range}&interval=1d&includePrePost=false`;
+  const resp = await fetch(url, {
+    headers: { "User-Agent": "Mozilla/5.0", "Cache-Control": "no-cache" },
     signal: AbortSignal.timeout(15000)
   });
   if (!resp.ok) throw new Error(`Yahoo ${resp.status}`);
   const json = await resp.json();
   const result = json.chart?.result?.[0];
   if (!result?.timestamp) throw new Error("No data");
-  
   const ts = result.timestamp;
   const q = result.indicators.quote[0];
   const adj = result.indicators.adjclose?.[0]?.adjclose;
-  
   const bars = [];
   for (let i = 0; i < ts.length; i++) {
     if (q.close[i] != null && q.high[i] != null && q.low[i] != null && q.volume[i] != null) {
       bars.push({
         date: new Date(ts[i] * 1000),
-        open: q.open[i],
-        high: q.high[i],
-        low: q.low[i],
-        close: adj?.[i] || q.close[i],
-        volume: q.volume[i]
+        open: q.open[i], high: q.high[i], low: q.low[i],
+        close: adj?.[i] || q.close[i], volume: q.volume[i]
       });
     }
   }
   return bars;
+}
+
+async function fetchChart(ticker, isKR, range = "1y") {
+  if (isKR) return fetchKRChart(ticker);
+  return fetchUSChart(ticker, range);
 }
 
 /* ===== SMA 계산 ===== */
@@ -508,75 +554,6 @@ function calcVolume(bars) {
   };
 }
 
-/* ===== v1.5: Gate 검증 ===== */
-function calcGates(sepa, mom) {
-  // G1: 가격 > 150일선 AND 가격 > 200일선
-  const G1 = sepa.sma150 > 0 && sepa.sma200 > 0
-    && sepa.curPrice > sepa.sma150
-    && sepa.curPrice > sepa.sma200;
-
-  // G2: 200일선 상승 추세 (conditions[2] = s200 > s200_30일전)
-  const G2 = !!(sepa.conditions && sepa.conditions[2]);
-
-  // G3: 6M 또는 12M 수익률 양수 (절대모멘텀 최소 하나)
-  const G3 = mom.r6m > 0 || mom.r12m > 0;
-
-  return { G1, G2, G3, passed: G1 && G2 && G3 };
-}
-
-/* ===== v1.5: Risk Penalty (최대 -10pt) ===== */
-function calcRiskPenalty(sepa, mom, vcp) {
-  let penalty = 0;
-  const reasons = [];
-
-  // 1. Pivot 위 +15% 이상 = 추격매수 위험
-  if (vcp.pivot > 0 && sepa.curPrice > vcp.pivot * 1.15) {
-    penalty += 2; reasons.push('피봇과열+2');
-  }
-  // 2. 가격 < SMA50 = 단기 추세 이탈
-  if (sepa.sma50 > 0 && sepa.curPrice < sepa.sma50) {
-    penalty += 2; reasons.push('SMA50이탈+2');
-  }
-  // 3. 3M AND 6M 동시 음수 = 모멘텀 쌍악화
-  if (mom.r3m < 0 && mom.r6m < 0) {
-    penalty += 2; reasons.push('모멘텀쌍악화+2');
-  }
-  // 4. 52주 고점 -3% 이내 AND SMA50 대비 +20% 초과 = 단기 과열
-  if (sepa.high52 > 0 && sepa.curPrice > sepa.high52 * 0.97 && sepa.sma50 > 0 && sepa.curPrice > sepa.sma50 * 1.20) {
-    penalty += 2; reasons.push('단기과열+2');
-  }
-  // 5. 12M 수익률 -30% 이하 = 장기 하락종목
-  if (mom.r12m < -30) {
-    penalty += 2; reasons.push('장기하락+2');
-  }
-
-  return { penalty: Math.min(penalty, 10), reasons };
-}
-
-/* ===== v1.5: Execution Tag ===== */
-function calcExecTag(vcp, vol) {
-  // 거래량 매도신호 최우선
-  if (vol && vol.signalType === 'sell') return 'AVOID';
-
-  const prox = vcp.proximity;  // 양수 = 피봇 아래, 음수 = 피봇 위 (돌파)
-  const mature = vcp.maturity || '';
-
-  // BUY NOW: 피봇 0~3% 아래, 성숙 또는 성숙🔥
-  if (prox >= 0 && prox <= 3 && (mature.includes('성숙') || mature.includes('돌파'))) return 'BUY NOW';
-  // BUY NOW: 피봇 0~5% 아래, 성숙🔥 (거래량 수축 동반)
-  if (prox >= 0 && prox <= 5 && mature === '성숙🔥') return 'BUY NOW';
-  // BUY ON BREAKOUT: 피봇 5~10% 아래, 형성 진행 중
-  if (prox >= 3 && prox <= 10 && (mature.includes('성숙') || mature.includes('형성'))) return 'BUY ON BREAKOUT';
-  // BUY ON BREAKOUT: 막 돌파 (피봇 위 0~5%)
-  if (prox < 0 && prox >= -5 && mature.includes('돌파')) return 'BUY ON BREAKOUT';
-  // WATCH: 이미 5~15% 위 (돌파 후 추격 위험)
-  if (prox < -5 && prox >= -15) return 'WATCH';
-  // AVOID: 15% 이상 이탈
-  if (prox < -15) return 'AVOID';
-
-  return 'WATCH';
-}
-
 /* ===== 종목 분석 메인 ===== */
 let spyCache = null;
 async function getSpyBars() {
@@ -609,11 +586,6 @@ async function analyzeStock(stock) {
   
   // 보조지표 (볼린저/MACD/OBV)
   const indicators = calcIndicators(bars);
-
-  // v1.5: Gate / Risk Penalty / Execution Tag
-  const gate = calcGates(sepa, mom);
-  const risk = calcRiskPenalty(sepa, mom, vcp);
-  const execTag = calcExecTag(vcp, vol);
   
   // e 배열: [판정, 스테이지, 템플릿수, RS]
   const rs = mom.relM3 && mom.relM6 ? 3 : mom.relM3 || mom.relM6 ? 2 : 1;
@@ -628,10 +600,6 @@ async function analyzeStock(stock) {
   return {
     ticker,
     e, v, r,
-    gate,          // v1.5: { G1, G2, G3, passed }
-    riskPenalty: risk.penalty,    // v1.5: 0~10
-    riskReasons: risk.reasons,    // v1.5: ['피봇과열+2', ...]
-    execTag,       // v1.5: 'BUY NOW' | 'BUY ON BREAKOUT' | 'WATCH' | 'AVOID'
     sepaDetail: {
       count: sepa.count,
       stage: sepa.stage,
