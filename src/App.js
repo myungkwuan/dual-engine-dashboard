@@ -1734,6 +1734,50 @@ export default function Dashboard(){
     setStats({ok:totalOk,fail:totalFail,time:new Date().toLocaleTimeString("ko"),ms:elapsed+"s"});
     setRt(totalFail===0?"live":"error");setProg(100);
     log(`🏁 완료: ${totalOk}성공 ${totalFail}실패 (${elapsed}s)`,"ok");
+    /* ── 지수 가격 경량 갱신 (Yahoo Finance) ── */
+    try{
+      const idxTickers=[
+        {t:"%5EDJI",k:false},{t:"%5EGSPC",k:false},{t:"%5EIXIC",k:false}
+      ];
+      const idxRes=await fetch("/api/quotes",{method:"POST",headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({tickers:idxTickers})});
+      if(idxRes.ok){
+        const idxData=await idxRes.json();
+        const d2=idxData.data||{};
+        const g=(sym)=>d2[sym]||d2[sym.replace("%5E","^")];
+        const dji=g("%5EDJI");const gspc=g("%5EGSPC");const ixic=g("%5EIXIC");
+        if(dji||gspc||ixic){
+          setMKT(prev=>({...prev,
+            usIndices:{
+              dji:{price:dji?.price||prev.usIndices?.dji?.price,chg:+(dji?.change_pct||prev.usIndices?.dji?.chg||0)},
+              gspc:{price:gspc?.price||prev.usIndices?.gspc?.price,chg:+(gspc?.change_pct||prev.usIndices?.gspc?.chg||0)},
+              ixic:{price:ixic?.price||prev.usIndices?.ixic?.price,chg:+(ixic?.change_pct||prev.usIndices?.ixic?.chg||0)},
+            }
+          }));
+        }
+      }
+    }catch(e){}
+    /* ── KOSPI/KOSDAQ 경량 갱신 (Naver) ── */
+    try{
+      const fetchKospiIdx=async(sym)=>{
+        const ts=Date.now();
+        const r=await fetch(`https://fchart.stock.naver.com/sise.nhn?symbol=${sym}&timeframe=day&count=3&requestType=0&_=${ts}`,
+          {headers:{"User-Agent":"Mozilla/5.0","Referer":"https://finance.naver.com/"}});
+        if(!r.ok)return null;
+        const xml=await r.text();
+        const items=xml.match(/data="([^"]+)"/g)||[];
+        const closes=items.map(m=>parseFloat(m.split("|")[4])).filter(v=>!isNaN(v));
+        if(closes.length<2)return null;
+        const cur=closes[closes.length-1];const prev2=closes[closes.length-2];
+        return{price:+cur.toFixed(2),chg:prev2?+((cur-prev2)/prev2*100).toFixed(2):0};
+      };
+      const [kpi,kqi]=await Promise.all([fetchKospiIdx("KOSPI"),fetchKospiIdx("KOSDAQ")]);
+      setMKT(prev=>({...prev,
+        kospiPrice:kpi?.price||prev.kospiPrice,
+        kosdaqPrice:kqi?.price||prev.kosdaqPrice,
+        kosdaqChg:kqi?.chg??prev.kosdaqChg,
+      }));
+    }catch(e){}
     busy.current=false;
   },[stocks,log]);
 
@@ -1880,6 +1924,9 @@ export default function Dashboard(){
         sec:(d.sectors||[]).map(s=>[s.sym,s.r3m,s.r1m||0]),
         krSectors:(d.krSectors||[]),
         health:d.health||MKT_DEFAULT.health,
+        usIndices:d.usIndices||null,
+        kosdaqPrice:d.kosdaq?.price||null,
+        kosdaqChg:d.kosdaq?.chg||0,
         loaded:true
       };
       setMKT(newMKT);
@@ -2158,34 +2205,72 @@ export default function Dashboard(){
       {/* US/KR 분리 시장 배너 */}
       {MKT.loaded && (tab==="main"||tab==="filter") && <div style={{maxWidth:1800,margin:"0 auto",padding:"0 20px 4px"}}>
         <div style={{display:"grid",gridTemplateColumns:isMobile?"1fr 1fr":"repeat(4,1fr)",gap:6}}>
-          {/* US Risk State */}
-          <div style={{background:MKT.health?.modeColor+"12",border:"1px solid "+(MKT.health?.modeColor)+"44",borderRadius:8,padding:"8px 12px",display:"flex",alignItems:"center",gap:8}}>
-            <span style={{fontSize:20}}>{MKT.health?.modeIcon}</span>
-            <div>
-              <div style={{fontSize:9,color:"#484f58",fontWeight:700}}>🇺🇸 미국 시장</div>
-              <div style={{fontSize:13,fontWeight:800,color:MKT.health?.modeColor}}>{MKT.health?.mode} 모드</div>
-              <div style={{fontSize:9,color:"#484f58"}}>허용 {MKT.maxPositionPct}%</div>
+          {/* US Risk State + 3대 지수 */}
+          <div style={{background:MKT.health?.modeColor+"12",border:"1px solid "+(MKT.health?.modeColor)+"44",borderRadius:8,padding:"8px 12px"}}>
+            <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:6}}>
+              <span style={{fontSize:18}}>{MKT.health?.modeIcon}</span>
+              <div>
+                <div style={{fontSize:9,color:"#484f58",fontWeight:700}}>🇺🇸 미국 시장</div>
+                <div style={{fontSize:12,fontWeight:800,color:MKT.health?.modeColor}}>{MKT.health?.mode} 모드 · 허용 {MKT.maxPositionPct}%</div>
+              </div>
+            </div>
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:4}}>
+              {[
+                {label:"다우",val:MKT.usIndices?.dji?.price,chg:MKT.usIndices?.dji?.chg},
+                {label:"S&P500",val:MKT.usIndices?.gspc?.price,chg:MKT.usIndices?.gspc?.chg},
+                {label:"나스닥",val:MKT.usIndices?.ixic?.price,chg:MKT.usIndices?.ixic?.chg},
+              ].map(idx=>(
+                <div key={idx.label} style={{background:"#0d111788",borderRadius:5,padding:"3px 5px"}}>
+                  <div style={{fontSize:8,color:"#484f58",fontWeight:700}}>{idx.label}</div>
+                  <div style={{fontSize:10,fontWeight:800,color:"#e6edf3",fontFamily:"'JetBrains Mono'"}}>{idx.val?idx.val.toLocaleString():"-"}</div>
+                  <div style={{fontSize:8,color:idx.chg>0?"#3fb950":idx.chg<0?"#f85149":"#8b949e"}}>{idx.chg!=null?(idx.chg>0?"+":"")+idx.chg+"%":"-"}</div>
+                </div>
+              ))}
             </div>
           </div>
-          {/* SPY */}
+          {/* SPY + VIX */}
           <div style={{background:"#161b22",border:"1px solid #21262d",borderRadius:8,padding:"8px 12px"}}>
-            <div style={{fontSize:9,color:"#484f58",fontWeight:700}}>🇺🇸 SPY</div>
-            <div style={{fontSize:13,fontWeight:800,color:"#e6edf3",fontFamily:"'JetBrains Mono'"}}>${MKT.spyPrice||"-"}</div>
-            <div style={{fontSize:9,color:MKT.spy200==="위"?"#3fb950":"#f85149"}}>200MA {MKT.spy200} · 12M {MKT.spy12m>0?"+":""}{MKT.spy12m}%</div>
-          </div>
-          {/* KR Risk State */}
-          <div style={{background:(MKT.krHealth?.modeColor||"#484f58")+"12",border:"1px solid "+((MKT.krHealth?.modeColor)||"#484f58")+"44",borderRadius:8,padding:"8px 12px",display:"flex",alignItems:"center",gap:8}}>
-            <span style={{fontSize:20}}>{MKT.krHealth?.modeIcon||"⏳"}</span>
-            <div>
-              <div style={{fontSize:9,color:"#484f58",fontWeight:700}}>🇰🇷 한국 시장</div>
-              <div style={{fontSize:13,fontWeight:800,color:MKT.krHealth?.modeColor||"#484f58"}}>{MKT.krHealth?.mode||"조회전"} 모드</div>
-              <div style={{fontSize:9,color:"#484f58"}}>허용 {MKT.krMaxPositionPct||100}%</div>
+            <div style={{fontSize:9,color:"#484f58",fontWeight:700,marginBottom:4}}>🇺🇸 SPY · VIX</div>
+            <div style={{display:"flex",gap:10,alignItems:"flex-end"}}>
+              <div>
+                <div style={{fontSize:9,color:"#484f58"}}>SPY</div>
+                <div style={{fontSize:13,fontWeight:800,color:"#e6edf3",fontFamily:"'JetBrains Mono'"}}>${MKT.spyPrice||"-"}</div>
+                <div style={{fontSize:8,color:MKT.spy200==="위"?"#3fb950":"#f85149"}}>200MA {MKT.spy200} · 12M {MKT.spy12m>0?"+":""}{MKT.spy12m}%</div>
+              </div>
+              <div style={{borderLeft:"1px solid #21262d",paddingLeft:10}}>
+                <div style={{fontSize:9,color:"#484f58"}}>VIX</div>
+                <div style={{fontSize:13,fontWeight:800,color:MKT.vix<20?"#3fb950":MKT.vix<25?"#ffd600":MKT.vix<30?"#ff922b":"#f85149",fontFamily:"'JetBrains Mono'"}}>{MKT.vix||"-"}</div>
+                <div style={{fontSize:8,color:"#8b949e"}}>{MKT.vixLevel}</div>
+              </div>
             </div>
           </div>
-          {/* VIX */}
+          {/* KR Risk State + KOSPI/KOSDAQ */}
+          <div style={{background:(MKT.krHealth?.modeColor||"#484f58")+"12",border:"1px solid "+((MKT.krHealth?.modeColor)||"#484f58")+"44",borderRadius:8,padding:"8px 12px"}}>
+            <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:6}}>
+              <span style={{fontSize:18}}>{MKT.krHealth?.modeIcon||"⏳"}</span>
+              <div>
+                <div style={{fontSize:9,color:"#484f58",fontWeight:700}}>🇰🇷 한국 시장</div>
+                <div style={{fontSize:12,fontWeight:800,color:MKT.krHealth?.modeColor||"#484f58"}}>{MKT.krHealth?.mode||"조회전"} 모드 · 허용 {MKT.krMaxPositionPct||100}%</div>
+              </div>
+            </div>
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:4}}>
+              {[
+                {label:"KOSPI",val:MKT.kospiPrice,chg:MKT.kospi12m},
+                {label:"KOSDAQ",val:MKT.kosdaqPrice,chg:MKT.kosdaqChg},
+              ].map(idx=>(
+                <div key={idx.label} style={{background:"#0d111788",borderRadius:5,padding:"3px 6px"}}>
+                  <div style={{fontSize:8,color:"#484f58",fontWeight:700}}>{idx.label}</div>
+                  <div style={{fontSize:11,fontWeight:800,color:"#e6edf3",fontFamily:"'JetBrains Mono'"}}>{idx.val?idx.val.toLocaleString():"-"}</div>
+                  <div style={{fontSize:8,color:idx.chg>0?"#3fb950":idx.chg<0?"#f85149":"#8b949e"}}>{idx.chg!=null?(idx.chg>0?"+":"")+idx.chg+"%":"-"}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+          {/* 심리/공포 */}
           <div style={{background:"#161b22",border:"1px solid #21262d",borderRadius:8,padding:"8px 12px"}}>
-            <div style={{fontSize:9,color:"#484f58",fontWeight:700}}>📊 VIX 공포지수</div>
-            <div style={{fontSize:13,fontWeight:800,color:MKT.vix<20?"#3fb950":MKT.vix<25?"#ffd600":MKT.vix<30?"#ff922b":"#f85149",fontFamily:"'JetBrains Mono'"}}>{MKT.vix||"-"}</div>
+            <div style={{fontSize:9,color:"#484f58",fontWeight:700,marginBottom:4}}>📊 공포지수</div>
+            <div style={{fontSize:9,color:"#484f58",marginBottom:2}}>VIX</div>
+            <div style={{fontSize:18,fontWeight:900,color:MKT.vix<20?"#3fb950":MKT.vix<25?"#ffd600":MKT.vix<30?"#ff922b":"#f85149",fontFamily:"'JetBrains Mono'"}}>{MKT.vix||"-"}</div>
             <div style={{fontSize:9,color:"#8b949e"}}>{MKT.vixLevel}</div>
           </div>
         </div>

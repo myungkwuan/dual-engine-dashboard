@@ -129,7 +129,57 @@ export default async function handler(req, res) {
 
     await sleep(500);
 
-    /* ── 4. 섹터 ETF 상대강도 (3M 수익률 기준) ── */
+    /* ── 4. 미국 3대 지수 현재가 ── */
+    try {
+      const [djiBars, gspcBars, ixicBars] = await Promise.all([
+        fetchChart("%5EDJI"),
+        fetchChart("%5EGSPC"),
+        fetchChart("%5EIXIC"),
+      ]);
+      const fmtIdx = (bars) => {
+        const cur = bars[bars.length-1].close;
+        const prev = bars[bars.length-2]?.close;
+        const chg = prev ? +((cur-prev)/prev*100).toFixed(2) : 0;
+        return { price: +cur.toFixed(2), chg };
+      };
+      results.usIndices = {
+        dji:  fmtIdx(djiBars),
+        gspc: fmtIdx(gspcBars),
+        ixic: fmtIdx(ixicBars),
+      };
+    } catch(e) {
+      results.usIndices = null;
+    }
+
+    await sleep(500);
+
+    /* ── 5. KOSDAQ — Naver fchart ── */
+    try {
+      const kosdaqTs = Date.now();
+      const kosdaqRes = await fetch(
+        `https://fchart.stock.naver.com/sise.nhn?symbol=KOSDAQ&timeframe=day&count=5&requestType=0&_=${kosdaqTs}`,
+        { headers: {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+            "Referer": "https://finance.naver.com/",
+            "Cache-Control": "no-cache"
+          }
+        }
+      );
+      if (!kosdaqRes.ok) throw new Error("KOSDAQ " + kosdaqRes.status);
+      const xml2 = await kosdaqRes.text();
+      const items2 = xml2.match(/data="([^"]+)"/g) || [];
+      const closes2 = items2.map(m => parseFloat(m.split("|")[4])).filter(v => !isNaN(v));
+      if (closes2.length < 2) throw new Error("KOSDAQ insufficient");
+      const cur2 = closes2[closes2.length-1];
+      const prev2 = closes2[closes2.length-2];
+      results.kosdaq = { price: +cur2.toFixed(2), chg: prev2 ? +((cur2-prev2)/prev2*100).toFixed(2) : 0 };
+    } catch(e) {
+      results.kosdaq = null;
+    }
+
+    await sleep(500);
+
+    /* ── 6. 섹터 ETF 상대강도 (3M 수익률 기준) ── */
     const sectorETFs = ["XLK","XLC","XLI","XLY","XLV","XLU","XLE","XLF","XLB","XLP","XLRE"];
     const sectorResults = [];
     
