@@ -1149,7 +1149,7 @@ function StockDetailModal({ stock, onClose, isWatched, onToggleWatch, gradeHisto
             
             {/* 막대그래프 시각화 */}
             {(()=>{
-              const {sepaPt,dmPt,vcpPt,mfPt,cfPt,volPt,crossPt}=verdict.details;
+              const {sepaPt,dmPt,vcpPt,mfPt,cfPt,volPt,crossPt,gatePenalty,riskPenalty}=verdict.details;
               const isETF = stock.s === 'ETF';
               const bars=[
                 {name:'추세',sub:'SEPA',pt:sepaPt,max:30,color:'#58a6ff',
@@ -1297,6 +1297,7 @@ export default function Dashboard(){
   },[]);
   /* 보유종목 검색 */
   const[pfSearch,setPfSearch]=useState('');
+  const[pfAddSearch,setPfAddSearch]=useState('');
   /* 듀얼모멘텀 필터 */
   const[dmFilter,setDmFilter]=useState("all");
   /* 시장필터 실시간 데이터 */
@@ -1434,10 +1435,15 @@ export default function Dashboard(){
   const[showSync,setShowSync]=useState(false);
 
   const doExport=useCallback(()=>{
-    const data=JSON.stringify({w:watchlist,p:portfolio,gh:gradeHistory,a:calcData,tl:tradeLog,ts:Date.now()});
-    const code=btoa(unescape(encodeURIComponent(data)));
+    /* 압축 내보내기: gradeHistory 종목별 최근3건, tradeLog 최근30건, portfolio 필수필드만 */
+    const ghMin={};
+    Object.entries(gradeHistory||{}).forEach(([t,arr])=>{
+      if(arr&&arr.length) ghMin[t]=arr.slice(-3).map(x=>({d:x.date,f:{g:x.from?.grade,p:x.from?.pt},o:{g:x.to?.grade,p:x.to?.pt},pr:x.price}));
+    });
+    const pMin=(portfolio||[]).map(x=>({t:x.ticker,b:x.buyPrice,q:x.qty,h:x.highPrice||0}));
+    const tlMin=(tradeLog||[]).slice(0,30).map(x=>({t:x.ticker,b:x.buyPrice,s:x.sellPrice,q:x.qty,d:x.date,r:x.reason}));
+    const code=btoa(unescape(encodeURIComponent(JSON.stringify({w:watchlist,p:pMin,gh:ghMin,a:calcData,tl:tlMin,v:2}))));
     navigator.clipboard.writeText(code).then(()=>setSyncMsg('✅ 코드 복사 완료! 다른 기기에서 가져오기 하세요.')).catch(()=>{
-      /* 클립보드 실패 시 직접 표시 */
       setSyncInput(code);setSyncMsg('📋 아래 코드를 복사하세요:');
     });
     setTimeout(()=>setSyncMsg(''),4000);
@@ -1447,11 +1453,26 @@ export default function Dashboard(){
     try{
       const json=JSON.parse(decodeURIComponent(escape(atob(syncInput.trim()))));
       if(json.w)setWatchlist(json.w);
-      if(json.p)setPortfolio(json.p);
-      if(json.gh){setGradeHistory(json.gh);try{localStorage.setItem('grade_history',JSON.stringify(json.gh));}catch(e){}}
+      if(json.p){
+        const pR=json.v===2?json.p.map(x=>({ticker:x.t,buyPrice:x.b,qty:x.q,highPrice:x.h||0,stopLoss:0})):json.p;
+        setPortfolio(pR);try{localStorage.setItem('dual_portfolio',JSON.stringify(pR));}catch(e){}
+      }
+      if(json.gh){
+        let ghR=json.gh;
+        const s0=Object.values(json.gh||{})[0];
+        if(json.v===2&&s0&&s0[0]&&s0[0].d){
+          ghR={};Object.entries(json.gh).forEach(([t,arr])=>{
+            ghR[t]=arr.map(x=>({date:x.d,from:{grade:x.f?.g,pt:x.f?.p},to:{grade:x.o?.g,pt:x.o?.p},price:x.pr}));
+          });
+        }
+        setGradeHistory(ghR);try{localStorage.setItem('grade_history',JSON.stringify(ghR));}catch(e){}
+      }
       if(json.a){setCalcData({...ADEF,...json.a});setAssetDraft({...ADEF,...json.a});try{localStorage.setItem('asset_data',JSON.stringify(json.a));}catch(e){}}
-      if(json.tl){setTradeLog(json.tl);try{localStorage.setItem('trade_log',JSON.stringify(json.tl));}catch(e){}}
-      setSyncMsg(`✅ 가져오기 완료! 워치${(json.w||[]).length}개 + 보유${(json.p||[]).length}개 + 거래로그${(json.tl||[]).length}개`);
+      if(json.tl){
+        const tlR=json.v===2?json.tl.map(x=>({ticker:x.t,buyPrice:x.b,sellPrice:x.s,qty:x.q,date:x.d,reason:x.r})):json.tl;
+        setTradeLog(tlR);try{localStorage.setItem('trade_log',JSON.stringify(tlR));}catch(e){}
+      }
+      setSyncMsg('✅ 가져오기 완료! 워치'+(json.w||[]).length+'개 + 보유'+(json.p||[]).length+'개 + 거래로그'+(json.tl||[]).length+'개');
       setSyncInput('');
     }catch(e){setSyncMsg('❌ 잘못된 코드입니다.');}
     setTimeout(()=>setSyncMsg(''),4000);
@@ -2776,21 +2797,27 @@ export default function Dashboard(){
           {/* 종목 추가 폼 */}
           <div style={{display:"flex",gap:6,marginBottom:14,flexWrap:"wrap",alignItems:"center",padding:10,background:"#161b22",borderRadius:8,border:"1px solid #21262d"}}>
             <span style={{fontSize:12,color:"#8b949e",fontWeight:600}}>➕ 추가:</span>
-            <select value={pfForm.ticker} onChange={e=>setPfForm(p=>({...p,ticker:e.target.value}))}
-              style={{padding:"5px 8px",borderRadius:5,border:"1px solid #21262d",background:"#0d1117",color:"#e6edf3",fontSize:12,minWidth:140}}>
-              <option value="">종목 선택</option>
-              <optgroup label="🇺🇸 미국">
-                {stocks.filter(d=>!d.k).map(d=><option key={d.t} value={d.t}>{d.n} ({d.t})</option>)}
-              </optgroup>
-              <optgroup label="🇰🇷 한국">
-                {stocks.filter(d=>d.k).map(d=><option key={d.t} value={d.t}>{d.n} ({d.t})</option>)}
-              </optgroup>
-            </select>
+            <div style={{position:"relative",minWidth:180}}>
+              <input type="text" placeholder="🔍 종목명/티커 검색" value={pfAddSearch}
+                onChange={e=>{setPfAddSearch(e.target.value);if(!e.target.value)setPfForm(p=>({...p,ticker:''}));}}
+                style={{padding:"5px 8px",borderRadius:pfAddSearch?"5px 5px 0 0":"5px",border:"1px solid #21262d",background:"#0d1117",color:"#e6edf3",fontSize:12,width:"100%",outline:"none"}}/>
+              {pfAddSearch&&<div style={{position:"absolute",top:"100%",left:0,right:0,maxHeight:200,overflowY:"auto",background:"#161b22",border:"1px solid #21262d",borderTop:"none",borderRadius:"0 0 5px 5px",zIndex:999}}>
+                {stocks.filter(d=>{const q=pfAddSearch.toLowerCase();return d.n.toLowerCase().includes(q)||d.t.toLowerCase().includes(q);}).slice(0,12).map(d=>(
+                  <div key={d.t} onClick={()=>{setPfForm(p=>({...p,ticker:d.t}));setPfAddSearch(d.n+" ("+d.t+")");}}
+                    style={{padding:"5px 8px",cursor:"pointer",fontSize:12,display:"flex",justifyContent:"space-between"}}
+                    onMouseOver={e=>e.currentTarget.style.background="#21262d"} onMouseOut={e=>e.currentTarget.style.background="transparent"}>
+                    <span style={{color:"#e6edf3"}}>{d.k?"🇰🇷":"🇺🇸"} {d.n}</span>
+                    <span style={{color:"#484f58",fontSize:10}}>{d.t}</span>
+                  </div>
+                ))}
+                {stocks.filter(d=>{const q=pfAddSearch.toLowerCase();return d.n.toLowerCase().includes(q)||d.t.toLowerCase().includes(q);}).length===0&&<div style={{padding:"6px 8px",fontSize:11,color:"#484f58"}}>검색 결과 없음</div>}
+              </div>}
+            </div>
             <input type="number" placeholder="매수가" value={pfForm.buyPrice||''} onChange={e=>setPfForm(p=>({...p,buyPrice:e.target.value}))}
               style={{padding:"5px 8px",borderRadius:5,border:"1px solid #21262d",background:"#0d1117",color:"#e6edf3",fontSize:12,width:100,fontFamily:"'JetBrains Mono'"}}/>
             <input type="number" placeholder="수량" value={pfForm.qty||''} onChange={e=>setPfForm(p=>({...p,qty:e.target.value}))}
               style={{padding:"5px 8px",borderRadius:5,border:"1px solid #21262d",background:"#0d1117",color:"#e6edf3",fontSize:12,width:70,fontFamily:"'JetBrains Mono'"}}/>
-            <button onClick={()=>{addPortfolio(pfForm.ticker,pfForm.buyPrice,pfForm.qty,0);setPfForm({ticker:'',buyPrice:0,qty:0,stopLoss:0});}}
+            <button onClick={()=>{addPortfolio(pfForm.ticker,pfForm.buyPrice,pfForm.qty,0);setPfForm({ticker:'',buyPrice:0,qty:0,stopLoss:0});setPfAddSearch('');}}
               style={{padding:"5px 14px",borderRadius:5,border:"1px solid #bc8cff",background:"#bc8cff18",color:"#bc8cff",cursor:"pointer",fontSize:12,fontWeight:700}}>추가</button>
             <span style={{fontSize:10,color:"#484f58"}}>손절가 자동계산 (진입-7% / 트레일링-9%)</span>
           </div>
