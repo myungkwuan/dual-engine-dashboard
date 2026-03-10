@@ -555,6 +555,52 @@ function calcVolume(bars) {
 }
 
 /* ===== 종목 분석 메인 ===== */
+/* ===== v1.5: Gate 검증 ===== */
+function calcGates(sepa, mom) {
+  const G1 = sepa.sma150 > 0 && sepa.sma200 > 0
+    && sepa.curPrice > sepa.sma150
+    && sepa.curPrice > sepa.sma200;
+  const G2 = !!(sepa.conditions && sepa.conditions[2]);
+  const G3 = mom.r6m > 0 || mom.r12m > 0;
+  return { G1, G2, G3, passed: G1 && G2 && G3 };
+}
+
+/* ===== v1.5: Risk Penalty (최대 -10pt) ===== */
+function calcRiskPenalty(sepa, mom, vcp) {
+  let penalty = 0;
+  const reasons = [];
+  if (vcp.pivot > 0 && sepa.curPrice > vcp.pivot * 1.15) {
+    penalty += 2; reasons.push('피봇과열+2');
+  }
+  if (sepa.sma50 > 0 && sepa.curPrice < sepa.sma50) {
+    penalty += 2; reasons.push('SMA50이탈+2');
+  }
+  if (mom.r3m < 0 && mom.r6m < 0) {
+    penalty += 2; reasons.push('모멘텀쌍악화+2');
+  }
+  if (sepa.high52 > 0 && sepa.curPrice > sepa.high52 * 0.97 && sepa.sma50 > 0 && sepa.curPrice > sepa.sma50 * 1.20) {
+    penalty += 2; reasons.push('단기과열+2');
+  }
+  if (mom.r12m < -30) {
+    penalty += 2; reasons.push('장기하락+2');
+  }
+  return { penalty: Math.min(penalty, 10), reasons };
+}
+
+/* ===== v1.5: Execution Tag ===== */
+function calcExecTag(vcp, vol) {
+  if (vol && vol.signalType === 'sell') return 'AVOID';
+  const prox = vcp.proximity;
+  const mature = vcp.maturity || '';
+  if (prox >= 0 && prox <= 3 && (mature.includes('성숙') || mature.includes('돌파'))) return 'BUY NOW';
+  if (prox >= 0 && prox <= 5 && mature === '성숙🔥') return 'BUY NOW';
+  if (prox >= 3 && prox <= 10 && (mature.includes('성숙') || mature.includes('형성'))) return 'BUY ON BREAKOUT';
+  if (prox < 0 && prox >= -5 && mature.includes('돌파')) return 'BUY ON BREAKOUT';
+  if (prox < -5 && prox >= -15) return 'WATCH';
+  if (prox < -15) return 'AVOID';
+  return 'WATCH';
+}
+
 let spyCache = null;
 async function getSpyBars() {
   if (spyCache && Date.now() - spyCache.time < 3600000) return spyCache.bars;
@@ -586,7 +632,12 @@ async function analyzeStock(stock) {
   
   // 보조지표 (볼린저/MACD/OBV)
   const indicators = calcIndicators(bars);
-  
+
+  // v1.5: Gate / Risk Penalty / Execution Tag
+  const gate = calcGates(sepa, mom);
+  const risk = calcRiskPenalty(sepa, mom, vcp);
+  const execTag = calcExecTag(vcp, vol);
+
   // e 배열: [판정, 스테이지, 템플릿수, RS]
   const rs = mom.relM3 && mom.relM6 ? 3 : mom.relM3 || mom.relM6 ? 2 : 1;
   const e = [sepa.verdict, sepa.stage, sepa.count, rs];
@@ -600,6 +651,10 @@ async function analyzeStock(stock) {
   return {
     ticker,
     e, v, r,
+    gate,
+    riskPenalty: risk.penalty,
+    riskReasons: risk.reasons,
+    execTag,
     sepaDetail: {
       count: sepa.count,
       stage: sepa.stage,
