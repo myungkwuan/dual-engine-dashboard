@@ -2617,6 +2617,7 @@ export default function Dashboard(){
             <input value={syncInput} onChange={e=>setSyncInput(e.target.value)} placeholder="코드를 여기에 붙여넣기" style={{flex:1,padding:"6px 10px",borderRadius:5,border:"1px solid #21262d",background:"#0d1117",color:"#e6edf3",fontSize:11,fontFamily:"'JetBrains Mono'",outline:"none"}}/>
             <button onClick={doImport} style={{padding:"5px 14px",borderRadius:5,border:"1px solid #3fb950",background:"#3fb95015",color:"#3fb950",cursor:"pointer",fontSize:11,fontWeight:700}}>적용</button>
           </div>}
+          {syncMsg&&syncMsg.startsWith('✅ 가져오기')&&<div style={{padding:"6px 10px",background:"#ffd60015",border:"1px solid #ffd60044",borderRadius:6,marginBottom:8,fontSize:11,color:"#ffd600"}}>⚠️ 점수 정확도를 위해 이 기기에서도 <b>🔬 분석실행</b>을 한 번 눌러주세요. (분석결과는 기기별 별도 저장)</div>}
           {watchlist.length===0 ? <div style={{color:"#484f58",fontSize:13,padding:20,textAlign:"center"}}>워치리스트가 비어있습니다.<br/>종목 상세보기에서 ☆ 버튼으로 추가하세요.</div> : <>
             {/* 최강 임박 알림 */}
             {(()=>{
