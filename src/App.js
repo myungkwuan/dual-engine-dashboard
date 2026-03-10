@@ -1608,8 +1608,7 @@ export default function Dashboard(){
     });
     const pMin=(portfolio||[]).map(x=>({t:x.ticker,b:x.buyPrice,q:x.qty,h:x.highPrice||0}));
     const tlMin=(tradeLog||[]).slice(0,30).map(x=>({t:x.ticker,b:x.buyPrice,s:x.sellPrice,q:x.qty,d:x.date,r:x.reason}));
-    let anMin=null;try{const raw=localStorage.getItem('ana_data');if(raw)anMin=JSON.parse(raw);}catch(e){}
-    const json=JSON.stringify({w:watchlist,p:pMin,gh:ghMin,a:calcData,tl:tlMin,an:anMin,v:2});
+    const json=JSON.stringify({w:watchlist,p:pMin,gh:ghMin,a:calcData,tl:tlMin,v:2});
     let code;
     try{
       const bytes=new TextEncoder().encode(json);
@@ -3160,7 +3159,7 @@ export default function Dashboard(){
           <h3 style={{color:"#ffd43b",fontSize:16,marginBottom:12,marginTop:0}}>👁 워치리스트 ({watchlist.length}종목)</h3>
           {/* 동기화 버튼 — 시각 무게 낮춤 */}
           <div style={{display:"flex",gap:6,marginBottom:10,flexWrap:"wrap",alignItems:"center"}}>
-            <button onClick={doExport} style={{padding:"3px 9px",borderRadius:4,border:"1px solid #30363d",background:"transparent",color:"#8b949e",cursor:"pointer",fontSize:10}}>📤 내보내기</button>
+            <button onClick={doExport} style={{padding:"3px 9px",borderRadius:4,border:"1px solid #30363d",background:"transparent",color:"#8b949e",cursor:"pointer",fontSize:10}}>📤 내보내기 (데이터만)</button>
             <button onClick={()=>setShowSync(!showSync)} style={{padding:"3px 9px",borderRadius:4,border:"1px solid #30363d",background:"transparent",color:"#8b949e",cursor:"pointer",fontSize:10}}>📥 가져오기</button>
             {syncMsg && <span style={{fontSize:10,color:syncMsg.startsWith('✅')?'#3fb950':syncMsg.startsWith('❌')?'#f85149':'#58a6ff'}}>{syncMsg}</span>}
           </div>
