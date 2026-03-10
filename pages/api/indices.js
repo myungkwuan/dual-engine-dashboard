@@ -26,8 +26,12 @@ export default async function handler(req, res) {
         const json = await res.json();
         const meta = json.chart?.result?.[0]?.meta;
         if (!meta?.regularMarketPrice) continue;
-        const prev = meta.previousClose || meta.chartPreviousClose || meta.regularMarketPreviousClose;
-        const chg = prev ? +((meta.regularMarketPrice - prev) / prev * 100).toFixed(2) : 0;
+        const chg = meta.regularMarketChangePercent
+          ? +meta.regularMarketChangePercent.toFixed(2)
+          : (() => {
+              const prev = meta.previousClose || meta.chartPreviousClose || meta.regularMarketPreviousClose;
+              return prev ? +((meta.regularMarketPrice - prev) / prev * 100).toFixed(2) : 0;
+            })();
         return { price: +meta.regularMarketPrice.toFixed(2), chg };
       } catch(e) {
         clearTimeout(timer);

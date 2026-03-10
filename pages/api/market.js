@@ -112,8 +112,11 @@ export default async function handler(req, res) {
         ? closes.slice(-220,-20).reduce((a,b)=>a+b,0)/200 : null;
       const retK = n => closes.length > n
         ? +((kospiCur / closes[closes.length-1-n] - 1)*100).toFixed(2) : null;
+      const kospiPrev = closes.length >= 2 ? closes[closes.length-2] : null;
+      const kospiDayChg = kospiPrev ? +((kospiCur-kospiPrev)/kospiPrev*100).toFixed(2) : 0;
       results.kospi = {
         price:    +kospiCur.toFixed(2),
+        dayChg:   kospiDayChg,
         sma200:   kospi200 ? +kospi200.toFixed(2) : null,
         sma50:    kospi50  ? +kospi50.toFixed(2)  : null,
         above200: kospi200 ? kospiCur > kospi200 : null,
@@ -136,16 +139,29 @@ export default async function handler(req, res) {
         fetchChart("%5EGSPC"),
         fetchChart("%5EIXIC"),
       ]);
-      const fmtIdx = (bars) => {
-        const cur = bars[bars.length-1].close;
-        const prev = bars[bars.length-2]?.close;
-        const chg = prev ? +((cur-prev)/prev*100).toFixed(2) : 0;
-        return { price: +cur.toFixed(2), chg };
+      /* 지수 현재가+등락률 — fetchChart는 bars만 반환하므로 별도 meta 호출 */
+      const fetchIdxMeta = async (sym) => {
+        const url = `https://query1.finance.yahoo.com/v8/finance/chart/${sym}?interval=1d&range=5d&_=${Date.now()}`;
+        const r = await fetch(url, { headers: { "User-Agent": "Mozilla/5.0" } });
+        if (!r.ok) return null;
+        const j = await r.json();
+        const meta = j.chart?.result?.[0]?.meta;
+        if (!meta?.regularMarketPrice) return null;
+        const chg = meta.regularMarketChangePercent
+          ? +meta.regularMarketChangePercent.toFixed(2)
+          : (() => {
+              const prev = meta.previousClose || meta.chartPreviousClose || meta.regularMarketPreviousClose;
+              return prev ? +((meta.regularMarketPrice - prev) / prev * 100).toFixed(2) : 0;
+            })();
+        return { price: +meta.regularMarketPrice.toFixed(2), chg };
       };
+      const [djiMeta, gspcMeta, ixicMeta] = await Promise.all([
+        fetchIdxMeta("%5EDJI"), fetchIdxMeta("%5EGSPC"), fetchIdxMeta("%5EIXIC")
+      ]);
       results.usIndices = {
-        dji:  fmtIdx(djiBars),
-        gspc: fmtIdx(gspcBars),
-        ixic: fmtIdx(ixicBars),
+        dji:  djiMeta  || { price: djiBars[djiBars.length-1].close,   chg: 0 },
+        gspc: gspcMeta || { price: gspcBars[gspcBars.length-1].close, chg: 0 },
+        ixic: ixicMeta || { price: ixicBars[ixicBars.length-1].close, chg: 0 },
       };
     } catch(e) {
       results.usIndices = null;

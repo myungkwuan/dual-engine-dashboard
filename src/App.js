@@ -1909,6 +1909,7 @@ export default function Dashboard(){
         kospi3m:d.kospi?.r3m||0,
         kospi6m:d.kospi?.r6m||0,
         kospiPrice:d.kospi?.price,
+        kospiDayChg:d.kospi?.dayChg??0,
         krHealth:d.krHealth||MKT_DEFAULT.krHealth,
         maxPositionPct:d.maxPositionPct??100,
         krMaxPositionPct:d.krMaxPositionPct??100,
@@ -2249,7 +2250,7 @@ export default function Dashboard(){
             </div>
             <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:4}}>
               {[
-                {label:"KOSPI",val:MKT.kospiPrice,chg:MKT.kospi12m},
+                {label:"KOSPI",val:MKT.kospiPrice,chg:MKT.kospiDayChg??0},
                 {label:"KOSDAQ",val:MKT.kosdaqPrice,chg:MKT.kosdaqChg},
               ].map(idx=>(
                 <div key={idx.label} style={{background:"#0d111788",borderRadius:5,padding:"3px 6px"}}>
