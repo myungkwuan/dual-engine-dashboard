@@ -158,199 +158,331 @@ function calcSEPA(bars) {
 
 /* ===== 듀얼 모멘텀 ===== */
 function calcMomentum(bars, spyBars) {
-  if (bars.length < 130) return { r3m: 0, r6m: 0, r12m: 0, absM3: false, absM6: false, relM3: false, relM6: false };
+  if (bars.length < 130) return { r3m: 0, r6m: 0, r12m: 0, absM3: false, absM6: false, relM3: false, relM6: false, relM12: false, benchmarkFallbackUsed: true };
   
   const cur = bars[bars.length - 1].close;
-  const m3 = bars.length >= 63 ? bars[bars.length - 63].close : bars[0].close;
-  const m6 = bars.length >= 126 ? bars[bars.length - 126].close : bars[0].close;
+  const m3  = bars.length >= 63  ? bars[bars.length - 63].close  : bars[0].close;
+  const m6  = bars.length >= 126 ? bars[bars.length - 126].close : bars[0].close;
   const m12 = bars.length >= 252 ? bars[bars.length - 252].close : bars[0].close;
   
-  const r3m = +((cur / m3 - 1) * 100).toFixed(1);
-  const r6m = +((cur / m6 - 1) * 100).toFixed(1);
+  const r3m  = +((cur / m3  - 1) * 100).toFixed(1);
+  const r6m  = +((cur / m6  - 1) * 100).toFixed(1);
   const r12m = +((cur / m12 - 1) * 100).toFixed(1);
-  
-  // SPY 수익률
-  let spyR3 = 4.2, spyR6 = 8.7;
+
+  // 가속도: 최근 3M 수익이 6M의 절반 이상이면 가속 중
+  const accelerating = r3m > r6m * 0.5;
+
+  // 벤치마크 수익률 (SPY or KOSPI/Q)
+  let spyR3 = 4.2, spyR6 = 8.7, spyR12 = 18.0;
+  let benchmarkFallbackUsed = true;
+
   if (spyBars && spyBars.length >= 126) {
-    const sc = spyBars[spyBars.length - 1].close;
-    const sm3 = spyBars.length >= 63 ? spyBars[spyBars.length - 63].close : spyBars[0].close;
+    const sc  = spyBars[spyBars.length - 1].close;
+    const sm3 = spyBars.length >= 63  ? spyBars[spyBars.length - 63].close  : spyBars[0].close;
     const sm6 = spyBars.length >= 126 ? spyBars[spyBars.length - 126].close : spyBars[0].close;
     spyR3 = +((sc / sm3 - 1) * 100).toFixed(1);
     spyR6 = +((sc / sm6 - 1) * 100).toFixed(1);
+    if (spyBars.length >= 252) {
+      const sm12 = spyBars[spyBars.length - 252].close;
+      spyR12 = +((sc / sm12 - 1) * 100).toFixed(1);
+    }
+    benchmarkFallbackUsed = false;
   }
   
   return {
     r3m, r6m, r12m,
-    absM3: r3m > 0, absM6: r6m > 0,
-    relM3: r3m > spyR3, relM6: r6m > spyR6,
-    spyR3, spyR6
+    absM3: r3m > 0, absM6: r6m > 0, absM12: r12m > 0,
+    relM3: r3m > spyR3, relM6: r6m > spyR6, relM12: r12m > spyR12,
+    spyR3, spyR6, spyR12,
+    accelerating,
+    benchmarkFallbackUsed
   };
 }
 
 /* ===== 🔥 VCP 자동 감지 (v5 — lookback3 + rolling peak + 앵커개선) ===== */
 function calcVCP(bars) {
-  if (bars.length < 60) return { t1: 0, t2: 0, t3: 0, baseWeeks: 0, pivot: 0, proximity: 99, maturity: "미형성" };
-  
+  const INVALID = { t1:0, t2:0, t3:0, baseWeeks:0, pivot:0, proximity:99, maturity:"미형성",
+    volDrying:false, contractions:0, anchorPrice:0, anchorIdx:0,
+    earlyPivot:0, macroPivot:0, priceTight:false };
+  if (bars.length < 60) return INVALID;
+
+  const n = bars.length;
   const closes = bars.map(b => b.close);
-  const highs = bars.map(b => b.high);
-  const lows = bars.map(b => b.low);
-  const volumes = bars.map(b => b.volume);
-  const n = closes.length;
+  const highs  = bars.map(b => b.high);
+  const lows   = bars.map(b => b.low);
+  const vols   = bars.map(b => b.volume);
   const curPrice = closes[n - 1];
-  
-  // ─── Step 1: 스윙 포인트 감지 (v4 — 2단계) ───
-  const swingHighs = [];
-  const swingLows = [];
-  
-  // lookback=3으로 완화 (강한 상승종목에서도 최근 고점 감지)
-  for (let i = 2; i < n - 2; i++) {
-    let isHigh = true, isLow = true;
-    for (let j = 1; j <= 2; j++) {
-      if (highs[i] <= highs[i - j] || highs[i] <= highs[i + j]) isHigh = false;
-      if (lows[i] >= lows[i - j] || lows[i] >= lows[i + j]) isLow = false;
+  const cur = bars[n - 1];
+
+  // ── 보조 통계 ──
+  const atr20 = (()=>{
+    let s = 0, cnt = 0;
+    for (let i = Math.max(1, n-20); i < n; i++) {
+      s += Math.max(highs[i]-lows[i], Math.abs(highs[i]-closes[i-1]), Math.abs(lows[i]-closes[i-1]));
+      cnt++;
     }
-    if (isHigh) swingHighs.push({ idx: i, price: highs[i] });
-    if (isLow) swingLows.push({ idx: i, price: lows[i] });
+    return cnt ? s/cnt : curPrice*0.02;
+  })();
+  const atrPct = atr20 / curPrice * 100;
+  const minSwingPct = Math.max(2.5, atrPct * 1.2); // 유의미 진폭 기준
+
+  const avgVol10 = vols.slice(-10).reduce((a,b)=>a+b,0)/10;
+  const avgVol20 = vols.slice(-20).reduce((a,b)=>a+b,0)/20;
+  const avgVol50 = vols.slice(-Math.min(50,n)).reduce((a,b)=>a+b,0)/Math.min(50,n);
+  const volDrying       = avgVol10 < avgVol50 * 0.70;
+  const strongVolDrying = avgVol10 < avgVol50 * 0.60;
+  const range10 = (()=>{
+    const sl = bars.slice(-10);
+    return (Math.max(...sl.map(b=>b.high)) - Math.min(...sl.map(b=>b.low))) / curPrice * 100;
+  })();
+  const priceTight       = range10 <= 8;
+  const strongPriceTight = range10 <= 5;
+
+  // ── Step 1: Raw 스윙 감지 (좌우 2봉) ──
+  const rawHighs = [], rawLows = [];
+  for (let i = 2; i < n-2; i++) {
+    let isH = highs[i] > highs[i-1] && highs[i] > highs[i-2] && highs[i] > highs[i+1] && highs[i] > highs[i+2];
+    let isL = lows[i]  < lows[i-1]  && lows[i]  < lows[i-2]  && lows[i]  < lows[i+1]  && lows[i]  < lows[i+2];
+    if (isH) rawHighs.push({ idx:i, price:highs[i] });
+    if (isL) rawLows.push({ idx:i, price:lows[i] });
   }
-  
-  // 폴백: 최근 90일에 스윙하이가 2개 미만이면 10일 window peak 추가
-  if (swingHighs.filter(sh => sh.idx >= n - 90).length < 2) {
-    for (let center = Math.max(5, n - 85); center < n - 5; center += 8) {
-      let peakIdx = center, peakP = highs[center];
-      for (let j = Math.max(0, center - 5); j <= Math.min(n - 1, center + 5); j++) {
-        if (highs[j] > peakP) { peakP = highs[j]; peakIdx = j; }
-      }
-      if (!swingHighs.some(sh => Math.abs(sh.idx - peakIdx) < 5)) {
-        swingHighs.push({ idx: peakIdx, price: peakP });
+
+  // ── Step 2: 스윙 정제 ──
+  function cleanSwings(raws, isHigh) {
+    // (a) 최소 진폭 + 최소 간격 필터
+    const filtered = [];
+    for (const s of raws) {
+      if (filtered.length === 0) { filtered.push(s); continue; }
+      const prev = filtered[filtered.length-1];
+      const gap = s.idx - prev.idx;
+      const amp = Math.abs(s.price - prev.price) / prev.price * 100;
+      if (gap < 3) {
+        // 간격 짧음 — 더 극단적인 값으로 교체
+        if (isHigh ? s.price > prev.price : s.price < prev.price) filtered[filtered.length-1] = s;
+      } else if (amp < 2.0) {
+        // 진폭 너무 작음 — 더 극단적인 값 유지
+        if (isHigh ? s.price > prev.price : s.price < prev.price) filtered[filtered.length-1] = s;
+      } else {
+        filtered.push(s);
       }
     }
-    swingHighs.sort((a, b) => a.idx - b.idx);
-  }
-  if (swingLows.filter(sl => sl.idx >= n - 90).length < 2) {
-    for (let center = Math.max(5, n - 85); center < n - 5; center += 8) {
-      let valIdx = center, valP = lows[center];
-      for (let j = Math.max(0, center - 5); j <= Math.min(n - 1, center + 5); j++) {
-        if (lows[j] < valP) { valP = lows[j]; valIdx = j; }
-      }
-      if (!swingLows.some(sl => Math.abs(sl.idx - valIdx) < 5)) {
-        swingLows.push({ idx: valIdx, price: valP });
-      }
+    // (b) 같은 방향 연속 제거: 고점이면 더 높은 것, 저점이면 더 낮은 것만 남김
+    const cleaned = [];
+    for (const s of filtered) {
+      if (!cleaned.length) { cleaned.push(s); continue; }
+      const prev = cleaned[cleaned.length-1];
+      if (isHigh ? s.price > prev.price : s.price < prev.price) cleaned[cleaned.length-1] = s;
+      else cleaned.push(s);
     }
-    swingLows.sort((a, b) => a.idx - b.idx);
+    return cleaned;
   }
-  
-  if (swingHighs.length < 1 || swingLows.length < 1) {
-    return { t1: 0, t2: 0, t3: 0, baseWeeks: 0, pivot: 0, proximity: 99, maturity: "미형성" };
+
+  // 폴백: 최근 90일 스윙이 부족하면 윈도우 피크 보완
+  function ensureSwings(rawList, isHigh, minCount) {
+    let cleaned = cleanSwings(rawList, isHigh);
+    if (cleaned.filter(s=>s.idx >= n-90).length < minCount) {
+      const extra = [];
+      for (let c = Math.max(5, n-85); c < n-5; c += 8) {
+        let best = c;
+        for (let j = Math.max(0,c-5); j <= Math.min(n-1,c+5); j++) {
+          if (isHigh ? highs[j]>highs[best] : lows[j]<lows[best]) best = j;
+        }
+        const p = isHigh ? highs[best] : lows[best];
+        if (!cleaned.some(s=>Math.abs(s.idx-best)<5)) extra.push({idx:best, price:p});
+      }
+      cleaned = [...cleaned, ...extra].sort((a,b)=>a.idx-b.idx);
+    }
+    return cleaned;
   }
-  
-  // ─── Step 2: 앵커 찾기 (v5 — 20%초과 스킵) ───
-  let anchor = null;
-  const sortedByRecent = [...swingHighs].sort((a, b) => b.idx - a.idx);
-  
-  // 방법A: 최근 스윙하이부터 역순, -3% 이상 조정
+
+  const swingHighs = ensureSwings(rawHighs, true, 2);
+  const swingLows  = ensureSwings(rawLows, false, 2);
+  if (swingHighs.length < 1 || swingLows.length < 1) return INVALID;
+
+  // ── Step 3: 앵커 선택 (점수 기반) ──
+  const sortedByRecent = [...swingHighs].sort((a,b)=>b.idx-a.idx);
+  let bestAnchor = null, bestScore = -1;
+
   for (const sh of sortedByRecent) {
-    if (sh.price < curPrice * 0.50) continue; // 현재가의 50% 미만 스킵
-    if (sh.idx < n - 180) continue; // 180일 이전 스킵
-    if (curPrice > sh.price * 1.20) continue; // ★v5: 현재가가 20%↑ = 이미 지나간 베이스, 스킵
-    const lowsAfter = swingLows.filter(sl => sl.idx > sh.idx);
-    if (lowsAfter.length === 0) continue;
-    const minLow = Math.min(...lowsAfter.map(sl => sl.price));
+    if (sh.price < curPrice * 0.50) continue;
+    if (sh.idx < n - 180) continue;
+    if (curPrice > sh.price * 1.20) continue;
+    if (n - 1 - sh.idx < 10) continue; // 너무 최근 고점
+
+    const lowsAfter = swingLows.filter(sl=>sl.idx > sh.idx);
+    if (!lowsAfter.length) continue;
+    const minLow = Math.min(...lowsAfter.map(sl=>sl.price));
     const drawdown = (sh.price - minLow) / sh.price;
-    if (drawdown >= 0.03) { anchor = sh; break; }
-  }
-  
-  // 방법B 폴백: 최근 90일 일간 최고가 → 앵커
-  if (!anchor) {
-    let maxP = 0, maxI = n - 1;
-    for (let i = Math.max(0, n - 90); i < n; i++) {
-      if (highs[i] > maxP) { maxP = highs[i]; maxI = i; }
+    if (drawdown < 0.04) continue;
+
+    // 앵커 점수
+    let sc = 0;
+    if (sh.idx >= n-90) sc += 2;
+    const dist = (sh.price - curPrice) / sh.price;
+    if (dist >= 0 && dist <= 0.15) sc += 2;
+    if (drawdown >= 0.06 && drawdown <= 0.25) sc += 2;
+    const baseDaysHere = (n-1-sh.idx);
+    if (baseDaysHere >= 15) sc += 2;
+    if (baseDaysHere >= 20) sc += 2;
+    // 저점이 점진적으로 높아지는지
+    if (lowsAfter.length >= 2) {
+      let rising = true;
+      for (let k=1; k<lowsAfter.length; k++) if (lowsAfter[k].price < lowsAfter[k-1].price) { rising=false; break; }
+      if (rising) sc += 2;
     }
-    anchor = { idx: maxI, price: maxP };
+    if (sc > bestScore) { bestScore = sc; bestAnchor = sh; }
   }
-  
-  // ─── Step 3: 앵커 이후 수축 구간 감지 ───
-  const lowsAfterAnchor = swingLows.filter(sl => sl.idx > anchor.idx).sort((a, b) => a.idx - b.idx);
-  // 앵커보다 약간 높은 고점도 허용 (5% 이내 반등 = 베이스 안 반등으로 인정)
-  const highsAfterAnchor = swingHighs.filter(sh => sh.idx > anchor.idx && sh.price <= anchor.price * 1.05).sort((a, b) => a.idx - b.idx);
-  
-  const contractions = [];
-  
-  // T1: 앵커 고점 → 첫 저점
-  if (lowsAfterAnchor.length >= 1) {
-    const t1Low = lowsAfterAnchor[0];
-    const t1Pct = +((1 - t1Low.price / anchor.price) * 100).toFixed(1);
-    contractions.push({ pct: t1Pct, highIdx: anchor.idx, lowIdx: t1Low.idx, highPrice: anchor.price, lowPrice: t1Low.price });
-    
-    // T2: 첫 반등고점 → 두번째 저점
-    const h2Candidates = highsAfterAnchor.filter(sh => sh.idx > t1Low.idx);
-    if (h2Candidates.length >= 1 && lowsAfterAnchor.length >= 2) {
-      const h2 = h2Candidates[0];
-      const l2Candidates = lowsAfterAnchor.filter(sl => sl.idx > h2.idx);
-      if (l2Candidates.length >= 1) {
-        const t2Low = l2Candidates[0];
-        const t2Pct = +((1 - t2Low.price / h2.price) * 100).toFixed(1);
-        contractions.push({ pct: t2Pct, highIdx: h2.idx, lowIdx: t2Low.idx, highPrice: h2.price, lowPrice: t2Low.price });
-        
-        // T3: 두번째 반등고점 → 세번째 저점
-        const h3Candidates = highsAfterAnchor.filter(sh => sh.idx > t2Low.idx);
-        if (h3Candidates.length >= 1) {
-          const h3 = h3Candidates[0];
-          const l3Candidates = lowsAfterAnchor.filter(sl => sl.idx > h3.idx);
-          if (l3Candidates.length >= 1) {
-            const t3Low = l3Candidates[0];
-            const t3Pct = +((1 - t3Low.price / h3.price) * 100).toFixed(1);
-            contractions.push({ pct: t3Pct, highIdx: h3.idx, lowIdx: t3Low.idx, highPrice: h3.price, lowPrice: t3Low.price });
+
+  // 폴백: 최근 90일 최고가
+  if (!bestAnchor) {
+    let maxP=0, maxI=n-1;
+    for (let i=Math.max(0,n-90); i<n; i++) if (highs[i]>maxP) { maxP=highs[i]; maxI=i; }
+    const lowsAfter = swingLows.filter(sl=>sl.idx>maxI);
+    if (!lowsAfter.length) return INVALID;
+    bestAnchor = { idx:maxI, price:maxP };
+  }
+
+  const anchor = bestAnchor;
+
+  // ── Step 4: 수축 구간 추출 ──
+  const lowsA  = swingLows.filter(sl=>sl.idx > anchor.idx).sort((a,b)=>a.idx-b.idx);
+  const highsA = swingHighs.filter(sh=>sh.idx > anchor.idx && sh.price <= anchor.price*1.05).sort((a,b)=>a.idx-b.idx);
+
+  const contrList = [];
+  let H = { idx:anchor.idx, price:anchor.price };
+
+  if (lowsA.length >= 1) {
+    const L1 = lowsA[0];
+    const t1Pct = +((1 - L1.price/H.price)*100).toFixed(1);
+    if (t1Pct >= 2.5) {
+      contrList.push({ pct:t1Pct, H, L:L1 });
+
+      const h2Cands = highsA.filter(sh=>sh.idx > L1.idx);
+      if (h2Cands.length && lowsA.length >= 2) {
+        const H1 = h2Cands[0];
+        const l2Cands = lowsA.filter(sl=>sl.idx > H1.idx);
+        if (l2Cands.length) {
+          const L2 = l2Cands[0];
+          const t2Pct = +((1 - L2.price/H1.price)*100).toFixed(1);
+          // 잡음 병합: T2가 T1의 40% 미만이고 간격이 짧으면 제외
+          const gap2 = L2.idx - H1.idx;
+          if (t2Pct >= 2.5 && !(t2Pct < t1Pct*0.40 && gap2 < 5)) {
+            contrList.push({ pct:t2Pct, H:H1, L:L2 });
+
+            const h3Cands = highsA.filter(sh=>sh.idx > L2.idx);
+            if (h3Cands.length) {
+              const H2 = h3Cands[0];
+              const l3Cands = lowsA.filter(sl=>sl.idx > H2.idx);
+              if (l3Cands.length) {
+                const L3 = l3Cands[0];
+                const t3Pct = +((1 - L3.price/H2.price)*100).toFixed(1);
+                const gap3 = L3.idx - H2.idx;
+                if (t3Pct >= 2.5 && !(t3Pct < t2Pct*0.40 && gap3 < 5)) {
+                  contrList.push({ pct:t3Pct, H:H2, L:L3 });
+                }
+              }
+            }
           }
         }
       }
     }
   }
-  
-  const t1 = contractions[0]?.pct || 0;
-  const t2 = contractions[1]?.pct || 0;
-  const t3 = contractions[2]?.pct || 0;
-  
-  // ─── Step 4: 피봇 = 앵커 가격 (v2 수정) ───
-  // 피봇 = 베이스의 좌측 고점 = 돌파해야 할 저항선
-  const pivot = anchor.price;
-  // 양수 = 피봇 아래 (미돌파), 음수 = 피봇 위 (돌파완료)
-  const proximity = +((1 - curPrice / pivot) * 100).toFixed(1);
-  
-  // ─── Step 5: 베이스 기간 ───
-  const baseStartIdx = anchor.idx;
-  const baseDays = n - 1 - baseStartIdx;
+
+  const t1 = contrList[0]?.pct || 0;
+  const t2 = contrList[1]?.pct || 0;
+  const t3 = contrList[2]?.pct || 0;
+
+  // ── Step 5: 이중 피봇 ──
+  const macroPivot = anchor.price;
+  // earlyPivot = 베이스 안 가장 최근 반등 고점 (H1 or H2)
+  const earlyPivotCand = highsA.slice().sort((a,b)=>b.idx-a.idx)[0];
+  const earlyPivot = earlyPivotCand
+    ? +earlyPivotCand.price.toFixed(2)
+    : +macroPivot.toFixed(2);
+
+  // 실용 pivot: macro/early 차이 3% 이내면 macro, 아니면 early (더 가까운 저항)
+  const macroEarlyDiff = (macroPivot - earlyPivot) / macroPivot * 100;
+  const pivot = (macroEarlyDiff <= 3 || earlyPivot <= 0) ? macroPivot : earlyPivot;
+  const proximity = +((1 - curPrice/pivot)*100).toFixed(1);
+
+  // ── Step 6: 베이스 기간 ──
+  const baseDays = n - 1 - anchor.idx;
   const baseWeeks = Math.round(baseDays / 5);
-  
-  // ─── Step 6: 거래량 수축 확인 ───
-  const vol10 = volumes.slice(-10).reduce((a, b) => a + b, 0) / 10;
-  const vol50 = volumes.slice(-50).reduce((a, b) => a + b, 0) / Math.min(50, volumes.length);
-  const volDrying = vol10 < vol50 * 0.7;
-  
-  // ─── Step 7: 성숙도 판정 (v2 — 돌파 상태 추가) ───
+
+  // ── 추가 맥락 ──
+  const price10ago = closes[n-11] || closes[0];
+  const recentRunup10d = (curPrice/price10ago - 1)*100;
+  const overextended       = proximity <= -7;
+  const extremeOverextended = proximity <= -12;
+
+  // 당일 봉 구조
+  const hiLo = Math.max(cur.high - cur.low, 0.0001);
+  const closePos        = (cur.close - cur.low) / hiLo;
+  const upperWickRatio  = (cur.high - Math.max(cur.open||cur.close, cur.close)) / hiLo;
+  const todayVolRatio   = vols[n-1] / Math.max(avgVol20, 1);
+
+  // ── Step 7: 성숙도 판정 ──
   let maturity = "미형성";
   const alreadyBroken = curPrice > pivot * 1.02;
-  
-  if (alreadyBroken) {
-    // 이미 피봇을 돌파한 종목
-    if (contractions.length >= 2 && t1 > t2 && (t3 === 0 || t2 > t3)) maturity = "돌파✅"; // T3 역전 없어야 ✅
-    else if (contractions.length >= 1) maturity = "돌파";
-  } else if (contractions.length >= 3 && t1 > t2 && t2 > t3 && t3 > 0 && t3 <= 15 && baseWeeks >= 3) {
-    maturity = volDrying ? "성숙🔥" : "성숙";
-  } else if (contractions.length >= 2 && t1 > t2 && t2 > 0 && baseWeeks >= 2) {
-    if (t2 <= 15 && Math.abs(proximity) <= 10) {
-      maturity = "성숙";
+
+  if (t1 > 50) {
+    maturity = "미형성"; // 폭락 베이스
+  } else if (alreadyBroken) {
+    // 돌파 판정
+    const goodBreakout = t1 > t2 && closePos >= 0.70 && upperWickRatio < 0.30 && todayVolRatio >= 1.3;
+    if (contrList.length >= 2 && t1 > t2 && (t3 === 0 || t2 > t3) && goodBreakout) {
+      maturity = "돌파✅";
     } else {
-      maturity = "형성중";
+      maturity = "돌파";
     }
-  } else if (contractions.length >= 2 && t1 > t2 && t2 > 0) {
-    maturity = "형성중";   // 2단계 수축 시작, 기간 짧아도 형성중
-  } else if (contractions.length >= 1 && t1 > 0 && t1 <= 40 && baseWeeks >= 1) {
-    maturity = "형성중";   // 1단계 수축, 1주 이상이면 형성중 (이전: t1<=35, 2주)
+  } else if (
+    contrList.length >= 3 && t1 > t2 && t2 > t3 && t3 > 0 && t3 <= 8 &&
+    baseWeeks >= 4 && volDrying && priceTight &&
+    proximity >= 0 && proximity <= 8 && !overextended
+  ) {
+    maturity = "성숙🔥"; // 가장 엄격한 조건
+  } else if (
+    (contrList.length >= 3 && t1 > t2 && t2 > t3 && t3 > 0 && t3 <= 12 && baseWeeks >= 3 && proximity <= 10) ||
+    (contrList.length >= 2 && t1 > t2 && t2 <= 15 && baseWeeks >= 3 && (volDrying || priceTight) && proximity <= 10)
+  ) {
+    maturity = "성숙";
+  } else if (
+    contrList.length >= 2 && t1 > t2 && t2 > 0 && baseWeeks >= 2 &&
+    t1 <= 35 && recentRunup10d > -8 // 급락 없음
+  ) {
+    maturity = "형성중";
+  } else if (
+    contrList.length >= 1 && t1 > 0 && t1 <= 35 && baseWeeks >= 2
+  ) {
+    maturity = "형성중";
   }
-  
-  // 추가 필터: 수축률이 너무 크면 VCP가 아님 (폭락)
-  if (t1 > 50) maturity = "미형성";
-  
+
+  // 과열 추격 무효화
+  if (extremeOverextended) maturity = "미형성";
+
+  // ── VCP 점수 (0~15) ──
+  let score = 0;
+  // 구조 (0~7)
+  if (t1 > 0) score += 2;
+  if (t1 > t2 && t2 > 0) score += 2;
+  if (t1 > t2 && t2 > t3 && t3 > 0) score += 3;
+  // 품질 (0~4)
+  if (baseWeeks >= 3) score += 1;
+  if (baseWeeks >= 4) score += 1;
+  if (t3 > 0 && t3 <= 12) score += 1;
+  if (t3 > 0 && t3 <= 8)  score += 1;
+  // 수급/타이트 (0~2)
+  if (volDrying)   score += 1;
+  if (priceTight)  score += 1;
+  // 피봇 근접 (0~2)
+  if (proximity >= 0 && proximity <= 10) score += 1;
+  if (proximity >= 0 && proximity <= 5)  score += 1;
+  // 감점
+  if (overextended)        score -= 2;
+  if (extremeOverextended) score -= 2; // 추가 -2 (총 -4)
+  if (t1 > 35)             score -= 3;
+  score = Math.max(0, Math.min(15, score));
+
   return {
     t1, t2, t3,
     baseWeeks,
@@ -358,9 +490,15 @@ function calcVCP(bars) {
     proximity,
     maturity,
     volDrying,
-    contractions: contractions.length,
-    anchorPrice: anchor.price,
-    anchorIdx: anchor.idx
+    contractions: contrList.length,
+    anchorPrice: +anchor.price.toFixed(2),
+    anchorIdx: anchor.idx,
+    // v2 추가 필드
+    macroPivot: +macroPivot.toFixed(2),
+    earlyPivot: +earlyPivot.toFixed(2),
+    priceTight,
+    score,
+    recentRunup10d: +recentRunup10d.toFixed(1)
   };
 }
 
@@ -495,7 +633,7 @@ function calcIndicators(bars) {
 }
 
 /* ===== 거래량 분석 엔진 ===== */
-function calcVolume(bars) {
+function calcVolume(bars, pivot) {
   if (bars.length < 50) return null;
   
   const n = bars.length;
@@ -523,34 +661,85 @@ function calcVolume(bars) {
   const surgeDay = bars.slice(-5).some(b => b.volume > avgVol50 * 2);
   
   // 거래량 추세
-  const vol20 = Math.round(bars.slice(-20).reduce((s, b) => s + b.volume, 0) / 20);
   const volTrend = volRatio > 1.5 ? "급증" : volRatio > 1.1 ? "증가" : volRatio < 0.5 ? "고갈" : volRatio < 0.8 ? "감소" : "보통";
-  
-  // ── 컨텍스트 시그널 ──
+
+  // ── 보완 3요소 ──
+  // 1) 피봇 거리 (pivot이 없으면 positionPct 기반 추정)
+  const pivotRef = pivot && pivot > 0 ? pivot : h52 * 0.97; // 없으면 52주 고점 -3%로 대체
+  const pivotDistancePct = +((cur.close / pivotRef - 1) * 100).toFixed(1);
+  const isNearPivot   = pivotDistancePct >= -3 && pivotDistancePct <= 3;
+  const isOverextended = pivotDistancePct >= 7;
+
+  // 2) 당일 봉 구조
+  const hiLoRange = Math.max(cur.high - cur.low, 0.0001);
+  const closePos = +((cur.close - cur.low) / hiLoRange).toFixed(2);          // 1=완전 고가마감, 0=완전 저가마감
+  const upperWickRatio = +((cur.high - Math.max(cur.open || cur.close, cur.close)) / hiLoRange).toFixed(2);
+  const strongClose  = closePos >= 0.65;   // 고가권 마감
+  const weakClose    = closePos <= 0.40;   // 저가권 마감 (밀린 봉)
+  const upperWick    = upperWickRatio >= 0.35; // 윗꼬리 분배 의심
+
+  // 3) 직전 맥락
+  const price10ago = bars[n - 11]?.close || cur.close;
+  const recentRunup10d = +((cur.close / price10ago - 1) * 100).toFixed(1);   // 최근 10일 상승률
+  const isOverheated = recentRunup10d >= 12;                                  // 단기 과열
+  // 분배일: 고위치에서 하락 + 거래량 증가
+  const distDays20 = bars.slice(-20).filter(b => {
+    const pos = (b.close - l52) / Math.max(h52 - l52, 0.01) * 100;
+    return pos >= 60 && b.close < (b.open || b.close) && b.volume > avgVol50 * 1.2;
+  }).length;
+
+  // ── 시그널 판정 (기존 구조 유지 + 보완 조건으로 정교화) ──
   let signalType = "neutral";
   let signal = volTrend;
-  
+
+  // 바닥매집: 위치 낮음 + 상승 + 거래량 증가
   if (positionPct <= 30 && priceChg5d > 0 && volRatio > 1.3) {
     signalType = "buy"; signal = "바닥매집🟢";
+
+  // 반등시작: 위치 낮음 + 단기 급등 + 강한 봉
   } else if (positionPct <= 40 && priceChg5d > 2 && surgeDay) {
     signalType = "buy"; signal = "반등시작🟢";
+
+  // 매도고갈: 위치 중하 + 거래량 고갈 → 매도 힘 소진
   } else if (positionPct <= 50 && volDryup && priceChg5d >= -2) {
     signalType = "buy"; signal = "매도고갈💧";
-  } else if (positionPct >= 80 && priceChg5d < -2 && volRatio > 1.3) {
+
+  // 고점이탈: 위치 고점 + 피봇 과이탈 + 하락 + 약한 봉 or 윗꼬리
+  } else if (positionPct >= 70 && priceChg5d < -2 && volRatio > 1.3
+             && (isOverextended || isOverheated)
+             && (weakClose || upperWick)) {
     signalType = "sell"; signal = "고점이탈🔴";
-  } else if (positionPct >= 70 && priceChg5d < 0 && surgeDay) {
+
+  // 분배경고: 위치 고점 + 분배일 누적 + 당일 하락 + 거래량 급증
+  } else if (positionPct >= 70 && priceChg5d < 0 && surgeDay
+             && (distDays20 >= 3 || weakClose)) {
     signalType = "sell"; signal = "분배경고🔴";
+
+  // 급락주의: 위치 중고점 + 급락 + 거래량 폭발
   } else if (positionPct >= 60 && priceChg5d < -3 && volRatio > 1.5) {
     signalType = "sell"; signal = "급락주의🔴";
+
+  // 돌파시도: 피봇 근처 + 상승 + 강한 봉 + 거래량 증가 + 과열 아님
+  } else if (positionPct >= 50 && isNearPivot && priceChg5d > 0
+             && volRatio > 1.2 && strongClose && !isOverheated) {
+    signalType = "buy"; signal = "돌파시도🟢";
+
+  // 변곡점: 거래량 급증 + 방향 불명
   } else if (volRatio > 1.5 && Math.abs(priceChg5d) < 1) {
     signalType = "caution"; signal = "변곡점⚠️";
+
+  // 기존 돌파시도 fallback (피봇 없거나 조건 완화)
   } else if (positionPct >= 50 && priceChg5d > 0 && volRatio > 1.2) {
     signalType = "buy"; signal = "돌파시도🟢";
   }
   
   return {
     avgVol50, avgVol5, volRatio, positionPct, priceChg5d,
-    volDryup, surgeDay, volTrend, signalType, signal
+    volDryup, surgeDay, volTrend, signalType, signal,
+    // 보완 데이터 (모달 상세 표시용)
+    pivotDistancePct, isNearPivot, isOverextended,
+    closePos, upperWick, strongClose, weakClose,
+    recentRunup10d, isOverheated, distDays20
   };
 }
 
@@ -601,6 +790,42 @@ function calcExecTag(vcp, vol) {
   return 'WATCH';
 }
 
+// ── KOSDAQ 종목 집합 (벤치마크 분리용) ──
+const KOSDAQ_SET = new Set([
+  "042700","058470","403870","240810","036930","039030","067310","036540",
+  "489790","189300","099320","211270","450190","058610","277810","454910",
+  "098460","108490","022100","196170","253840","237690","247540","066970",
+  "278470","214450","257720","192820","214150","041190","112040","094480",
+  "063170","067160","229640","083650","105840","039790","007660","102120",
+  "087010","018290","241710","089030","095340","166090","033100","071970",
+  "009420","141080","229200","251340"
+]);
+
+// ── 지수 bars 캐시 (Vercel 서버리스: 동일 인스턴스 내 재사용) ──
+async function fetchIndexBars(symbol) {
+  const url = `https://fchart.stock.naver.com/sise.nhn?symbol=${symbol}&timeframe=day&count=320&requestType=0`;
+  const resp = await fetch(url, {
+    headers: {
+      "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+      "Referer": "https://finance.naver.com/",
+    },
+    signal: AbortSignal.timeout(15000)
+  });
+  if (!resp.ok) throw new Error(`${symbol} fchart ${resp.status}`);
+  const text = await resp.text();
+  const bars = [];
+  const regex = /data="([^"]+)"/g;
+  let m;
+  while ((m = regex.exec(text)) !== null) {
+    const parts = m[1].split("|");
+    if (parts.length < 6) continue;
+    const c = parseFloat(parts[4]);
+    if (!c) continue;
+    bars.push({ close: c });
+  }
+  return bars;
+}
+
 let spyCache = null;
 async function getSpyBars() {
   if (spyCache && Date.now() - spyCache.time < 3600000) return spyCache.bars;
@@ -611,24 +836,50 @@ async function getSpyBars() {
   } catch { return null; }
 }
 
+let kospiCache = null;
+async function getKospiBars() {
+  if (kospiCache && Date.now() - kospiCache.time < 3600000) return kospiCache.bars;
+  try {
+    const bars = await fetchIndexBars("KOSPI");
+    kospiCache = { bars, time: Date.now() };
+    return bars;
+  } catch { return null; }
+}
+
+let kosdaqCache = null;
+async function getKosdaqBars() {
+  if (kosdaqCache && Date.now() - kosdaqCache.time < 3600000) return kosdaqCache.bars;
+  try {
+    const bars = await fetchIndexBars("KOSDAQ");
+    kosdaqCache = { bars, time: Date.now() };
+    return bars;
+  } catch { return null; }
+}
+
 async function analyzeStock(stock) {
   const { t: ticker, k: isKR } = stock;
   const bars = await fetchChart(ticker, isKR, "1y");
   if (bars.length < 50) throw new Error("Insufficient data");
-  
-  const spyBars = await getSpyBars();
-  
+
+  // 벤치마크: KR주식→KOSPI/KOSDAQ, 미국→SPY
+  let benchBars = null;
+  if (isKR) {
+    benchBars = KOSDAQ_SET.has(ticker) ? await getKosdaqBars() : await getKospiBars();
+  } else {
+    benchBars = await getSpyBars();
+  }
+
   // SEPA
   const sepa = calcSEPA(bars);
-  
+
   // 모멘텀
-  const mom = calcMomentum(bars, spyBars);
+  const mom = calcMomentum(bars, benchBars);
   
   // VCP (v2 자동감지)
   const vcp = calcVCP(bars);
   
   // 거래량
-  const vol = calcVolume(bars);
+  const vol = calcVolume(bars, vcp.pivot);
   
   // 보조지표 (볼린저/MACD/OBV)
   const indicators = calcIndicators(bars);

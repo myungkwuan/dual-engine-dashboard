@@ -155,6 +155,39 @@ export default async function handler(req, res) {
     sectorResults.sort((a, b) => b.r3m - a.r3m);
     results.sectors = sectorResults;
 
+    await sleep(800);
+
+    /* ── 4-B. 한국 섹터 ETF 상대강도 ── */
+    const krSectorETFs = [
+      { sym: "091160.KS", name: "반도체" },
+      { sym: "140710.KS", name: "금융" },
+      { sym: "261270.KS", name: "헬스케어" },
+      { sym: "266420.KS", name: "철강소재" },
+      { sym: "117690.KS", name: "건설" },
+      { sym: "117700.KS", name: "소비재" },
+      { sym: "091230.KS", name: "산업기계" },
+      { sym: "227540.KS", name: "에너지화학" },
+      { sym: "305720.KS", name: "2차전지" },
+    ];
+    const krSectorResults = [];
+    for (let i = 0; i < krSectorETFs.length; i += 4) {
+      const batch = krSectorETFs.slice(i, i + 4);
+      const batchR = await Promise.all(batch.map(async ({ sym, name }) => {
+        try {
+          const bars = await fetchChart(sym, "6mo");
+          const r3m = returnPct(bars, 63);
+          const r1m = returnPct(bars, 21);
+          return { sym: name, r3m: r3m || 0, r1m: r1m || 0 };
+        } catch {
+          return { sym: name, r3m: null, r1m: null };
+        }
+      }));
+      krSectorResults.push(...batchR.filter(s => s.r3m !== null));
+      if (i + 4 < krSectorETFs.length) await sleep(800);
+    }
+    krSectorResults.sort((a, b) => b.r3m - a.r3m);
+    results.krSectors = krSectorResults;
+
     /* ── 5. 시장 건강도 판정 ── */
     const vixVal = results.vix?.value || 20;
     
@@ -224,8 +257,8 @@ export default async function handler(req, res) {
     else if (kospi12m > -10) krScore += 10;
     if (kospi3m > 0)   krScore += 20;
     // VIX 페널티
-    if (vixVal >= 30)      krScore -= 30;
-    else if (vixVal >= 25) krScore -= 20;
+    if (vixVal >= 30)      krScore -= 45;
+    else if (vixVal >= 25) krScore -= 35;
     krScore = Math.max(0, krScore);
     let krMode, krColor, krIcon, krAction;
     if (krScore >= 70)      { krMode="공격"; krColor="#3fb950"; krIcon="🟢"; krAction="정상매매 비중100%"; }

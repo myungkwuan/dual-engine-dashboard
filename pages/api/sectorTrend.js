@@ -20,7 +20,7 @@ export default async function handler(req, res) {
   const krAllStocks = stocks.filter(s => s.k);
   const usAllStocks = stocks.filter(s => !s.k && s.s !== "ETF");
 
-  /* ── 시장별 독립 TOP3 선정 ── */
+  /* ── 시장별 독립 가변 바스켓 선정 ── */
   function getTop3PerSector(marketStocks) {
     const sectorMap = {};
     marketStocks.forEach(stock => {
@@ -29,11 +29,14 @@ export default async function handler(req, res) {
     });
     const targets = [];
     Object.entries(sectorMap).forEach(([sector, list]) => {
+      // 가변 바스켓: 종목 수에 따라 Top3/4/5
+      const n = list.length;
+      const topN = n >= 13 ? 5 : n >= 7 ? 4 : 3;
       // 실시간 가격 있는 종목 우선, 점수 내림차순
       const withPrice = list.filter(s => s.p && s.p > 0);
       const pool = withPrice.length >= 2 ? withPrice : list;
-      const top3 = pool.sort((a, b) => b.score - a.score).slice(0, 3);
-      top3.forEach(s => targets.push({ ...s, sector }));
+      const top = pool.sort((a, b) => b.score - a.score).slice(0, topN);
+      top.forEach(s => targets.push({ ...s, sector }));
     });
     return targets;
   }
