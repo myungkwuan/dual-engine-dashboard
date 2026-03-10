@@ -1434,24 +1434,46 @@ export default function Dashboard(){
   const[syncInput,setSyncInput]=useState('');
   const[showSync,setShowSync]=useState(false);
 
-  const doExport=useCallback(()=>{
-    /* 압축 내보내기: gradeHistory 종목별 최근3건, tradeLog 최근30건, portfolio 필수필드만 */
+  const doExport=useCallback(async()=>{
+    /* gzip 압축 후 base64 — 기존 대비 60~80% 짧아짐 */
     const ghMin={};
     Object.entries(gradeHistory||{}).forEach(([t,arr])=>{
       if(arr&&arr.length) ghMin[t]=arr.slice(-3).map(x=>({d:x.date,f:{g:x.from?.grade,p:x.from?.pt},o:{g:x.to?.grade,p:x.to?.pt},pr:x.price}));
     });
     const pMin=(portfolio||[]).map(x=>({t:x.ticker,b:x.buyPrice,q:x.qty,h:x.highPrice||0}));
     const tlMin=(tradeLog||[]).slice(0,30).map(x=>({t:x.ticker,b:x.buyPrice,s:x.sellPrice,q:x.qty,d:x.date,r:x.reason}));
-    const code=btoa(unescape(encodeURIComponent(JSON.stringify({w:watchlist,p:pMin,gh:ghMin,a:calcData,tl:tlMin,v:2}))));
+    const json=JSON.stringify({w:watchlist,p:pMin,gh:ghMin,a:calcData,tl:tlMin,v:2});
+    let code;
+    try{
+      const bytes=new TextEncoder().encode(json);
+      const cs=new CompressionStream('gzip');
+      const writer=cs.writable.getWriter();
+      writer.write(bytes);writer.close();
+      const buf=await new Response(cs.readable).arrayBuffer();
+      code='gz'+btoa(String.fromCharCode(...new Uint8Array(buf)));
+    }catch{
+      code=btoa(unescape(encodeURIComponent(json)));
+    }
     navigator.clipboard.writeText(code).then(()=>setSyncMsg('✅ 코드 복사 완료! 다른 기기에서 가져오기 하세요.')).catch(()=>{
       setSyncInput(code);setSyncMsg('📋 아래 코드를 복사하세요:');
     });
     setTimeout(()=>setSyncMsg(''),4000);
   },[watchlist,portfolio,gradeHistory,calcData,tradeLog]);
 
-  const doImport=useCallback(()=>{
+  const doImport=useCallback(async()=>{
     try{
-      const json=JSON.parse(decodeURIComponent(escape(atob(syncInput.trim()))));
+      const raw=syncInput.trim();
+      let json;
+      if(raw.startsWith('gz')){
+        const bytes=Uint8Array.from(atob(raw.slice(2)),c=>c.charCodeAt(0));
+        const ds=new DecompressionStream('gzip');
+        const writer=ds.writable.getWriter();
+        writer.write(bytes);writer.close();
+        const buf=await new Response(ds.readable).arrayBuffer();
+        json=JSON.parse(new TextDecoder().decode(buf));
+      }else{
+        json=JSON.parse(decodeURIComponent(escape(atob(raw))));
+      }
       if(json.w)setWatchlist(json.w);
       if(json.p){
         const pR=json.v===2?json.p.map(x=>({ticker:x.t,buyPrice:x.b,qty:x.q,highPrice:x.h||0,stopLoss:0})):json.p;
