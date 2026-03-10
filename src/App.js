@@ -1442,7 +1442,8 @@ export default function Dashboard(){
     });
     const pMin=(portfolio||[]).map(x=>({t:x.ticker,b:x.buyPrice,q:x.qty,h:x.highPrice||0}));
     const tlMin=(tradeLog||[]).slice(0,30).map(x=>({t:x.ticker,b:x.buyPrice,s:x.sellPrice,q:x.qty,d:x.date,r:x.reason}));
-    const json=JSON.stringify({w:watchlist,p:pMin,gh:ghMin,a:calcData,tl:tlMin,v:2});
+    let anMin=null;try{const raw=localStorage.getItem('ana_data');if(raw)anMin=JSON.parse(raw);}catch(e){}
+    const json=JSON.stringify({w:watchlist,p:pMin,gh:ghMin,a:calcData,tl:tlMin,an:anMin,v:2});
     let code;
     try{
       const bytes=new TextEncoder().encode(json);
@@ -1494,7 +1495,17 @@ export default function Dashboard(){
         const tlR=json.v===2?json.tl.map(x=>({ticker:x.t,buyPrice:x.b,sellPrice:x.s,qty:x.q,date:x.d,reason:x.r})):json.tl;
         setTradeLog(tlR);try{localStorage.setItem('trade_log',JSON.stringify(tlR));}catch(e){}
       }
-      setSyncMsg('✅ 가져오기 완료! 워치'+(json.w||[]).length+'개 + 보유'+(json.p||[]).length+'개 + 거래로그'+(json.tl||[]).length+'개');
+      if(json.an){
+        try{localStorage.setItem('ana_data',JSON.stringify(json.an));}catch(e){}
+        setStocks(prev=>prev.map(d=>{
+          const a=json.an[d.t];if(!a)return d;
+          return{...d,e:a.e||d.e,r:[a.r?a.r[0]:d.r[0],a.r?a.r[1]:d.r[1],d.r[2]],v:a.v||d.v,
+            _volData:a.volData||null,_indicators:a.indicators||null,
+            _gate:a.gate||null,_riskPenalty:a.riskPenalty||0,
+            _riskReasons:a.riskReasons||[],_execTag:a.execTag||null};
+        }));
+      }
+      setSyncMsg('✅ 가져오기 완료! 워치'+(json.w||[]).length+'개 + 보유'+(json.p||[]).length+'개'+(json.an?' (분석결과 포함)':''));
       setSyncInput('');
     }catch(e){setSyncMsg('❌ 잘못된 코드입니다.');}
     setTimeout(()=>setSyncMsg(''),4000);
