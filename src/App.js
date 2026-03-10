@@ -1734,24 +1734,18 @@ export default function Dashboard(){
     setStats({ok:totalOk,fail:totalFail,time:new Date().toLocaleTimeString("ko"),ms:elapsed+"s"});
     setRt(totalFail===0?"live":"error");setProg(100);
     log(`🏁 완료: ${totalOk}성공 ${totalFail}실패 (${elapsed}s)`,"ok");
-    /* ── 지수 가격 경량 갱신 (Yahoo Finance) ── */
+    /* ── 지수 가격 경량 갱신 ── */
     try{
-      const idxTickers=[
-        {t:"%5EDJI",k:false},{t:"%5EGSPC",k:false},{t:"%5EIXIC",k:false}
-      ];
-      const idxRes=await fetch("/api/quotes",{method:"POST",headers:{"Content-Type":"application/json"},
-        body:JSON.stringify({tickers:idxTickers})});
+      const idxRes=await fetch("/api/indices");
       if(idxRes.ok){
         const idxData=await idxRes.json();
         const d2=idxData.data||{};
-        const g=(sym)=>d2[sym]||d2[sym.replace("%5E","^")];
-        const dji=g("%5EDJI");const gspc=g("%5EGSPC");const ixic=g("%5EIXIC");
-        if(dji||gspc||ixic){
+        if(d2.dji||d2.gspc||d2.ixic){
           setMKT(prev=>({...prev,
             usIndices:{
-              dji:{price:dji?.price||prev.usIndices?.dji?.price,chg:+(dji?.change_pct||prev.usIndices?.dji?.chg||0)},
-              gspc:{price:gspc?.price||prev.usIndices?.gspc?.price,chg:+(gspc?.change_pct||prev.usIndices?.gspc?.chg||0)},
-              ixic:{price:ixic?.price||prev.usIndices?.ixic?.price,chg:+(ixic?.change_pct||prev.usIndices?.ixic?.chg||0)},
+              dji:{price:d2.dji?.price||prev.usIndices?.dji?.price,chg:d2.dji?.chg??prev.usIndices?.dji?.chg??0},
+              gspc:{price:d2.gspc?.price||prev.usIndices?.gspc?.price,chg:d2.gspc?.chg??prev.usIndices?.gspc?.chg??0},
+              ixic:{price:d2.ixic?.price||prev.usIndices?.ixic?.price,chg:d2.ixic?.chg??prev.usIndices?.ixic?.chg??0},
             }
           }));
         }
