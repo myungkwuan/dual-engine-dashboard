@@ -2346,16 +2346,16 @@ export default function Dashboard(){
                 <div style={{fontSize:9,fontWeight:700,color:MKT.health?.modeColor}}>허용 {MKT.maxPositionPct}%</div>
               </div>
             </div>
-            <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:4,marginTop:4}}>
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:4,marginTop:4}}>
               {[
                 {label:"다우",val:MKT.usIndices?.dji?.price,chg:MKT.usIndices?.dji?.chg},
                 {label:"S&P500",val:MKT.usIndices?.gspc?.price,chg:MKT.usIndices?.gspc?.chg},
                 {label:"나스닥",val:MKT.usIndices?.ixic?.price,chg:MKT.usIndices?.ixic?.chg},
               ].map(idx=>(
-                <div key={idx.label} style={{background:"#0d111766",borderRadius:5,padding:"3px 4px",textAlign:"center",overflow:"hidden",minWidth:0,width:"100%"}}>
-                  <div style={{fontSize:7,color:"#484f58",fontWeight:700,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{idx.label}</div>
-                  <div style={{fontSize:8,fontWeight:800,color:"#e6edf3",fontFamily:"'JetBrains Mono'",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{idx.val?idx.val.toLocaleString():"-"}</div>
-                  <div style={{fontSize:7,color:idx.chg>0?"#3fb950":idx.chg<0?"#f85149":"#8b949e",whiteSpace:"nowrap"}}>{idx.chg!=null?(idx.chg>0?"+":"")+idx.chg+"%":"-"}</div>
+                <div key={idx.label} style={{background:"#0d111766",borderRadius:5,padding:"3px 5px",textAlign:"center"}}>
+                  <div style={{fontSize:8,color:"#484f58",fontWeight:700}}>{idx.label}</div>
+                  <div style={{fontSize:10,fontWeight:800,color:"#e6edf3",fontFamily:"'JetBrains Mono'"}}>{idx.val?idx.val.toLocaleString():"-"}</div>
+                  <div style={{fontSize:8,color:idx.chg>0?"#3fb950":idx.chg<0?"#f85149":"#8b949e"}}>{idx.chg!=null?(idx.chg>0?"+":"")+idx.chg+"%":"-"}</div>
                 </div>
               ))}
             </div>
@@ -2583,62 +2583,56 @@ export default function Dashboard(){
               ))}
             </div>}
 
-            {/* ── 섹터 상대모멘텀 (미국 + 한국 병렬) ── */}
+            {/* ── 섹터 상대모멘텀 히트맵 (미국 + 한국 병렬) ── */}
             {(()=>{
               const secNm={XLK:"기술",XLC:"커뮤니케이션",XLI:"산업재",XLY:"임의소비",XLV:"헬스케어",XLU:"유틸리티",XLE:"에너지",XLF:"금융",XLB:"소재",XLP:"필수소비",XLRE:"부동산"};
+              const medal=i=>i===0?"🥇":i===1?"🥈":i===2?"🥉":"";
+              const vColor=v=>v>5?"#3fb950":v>0?"#57c479":v>-5?"#f85149":"#e03030";
+              const vBg=v=>v>5?"#3fb95018":v>0?"#3fb95008":v>-5?"#f8514910":"#f8514920";
 
-              // pill 렌더러 — {sym, r3m, r1m} 형식 + 이름매핑
-              const SecPill=({item,rank,useR1m,nameMap})=>{
-                const v=useR1m?(item.r1m||0):(item.r3m||0);
-                const nm=nameMap?nameMap[item.sym]:item.sym;
-                const top3=rank<3;
-                const isPos=v>0;
-                const bg=isPos?(top3?"#3fb95018":"#3fb95008"):"#f8514910";
-                const bd=isPos?(top3?"#3fb95055":"#3fb95022"):"#f8514933";
-                const tc=isPos?(top3?"#3fb950":"#8b949e"):"#f85149";
-                return <span style={{display:"inline-flex",alignItems:"center",gap:4,padding:"4px 10px",borderRadius:8,fontSize:11,background:bg,border:"1px solid "+bd,color:tc,fontWeight:top3?700:400,whiteSpace:"nowrap"}}>
-                  {top3?["🥇","🥈","🥉"][rank]+" ":""}
-                  {nm}
-                  <span style={{fontFamily:"'JetBrains Mono'",fontSize:11}}>{v>0?"+":""}{v}%</span>
-                </span>;
-              };
-
-              const SectorBlock=({title,flag,data,nameMap,showAllKey})=>{
+              const HeatTable=({title,flag,data,nameMap})=>{
                 if(!data||data.length===0)return <div style={{padding:10,color:"#484f58",fontSize:11}}>데이터 없음 — 시장필터 재갱신 필요</div>;
-                const sorted3m=[...data].sort((a,b)=>b.r3m-a.r3m);
-                const sorted1m=[...data].sort((a,b)=>(b.r1m||0)-(a.r1m||0));
+                const sorted=[...data].sort((a,b)=>b.r3m-a.r3m);
+                const rank1m=[...data].sort((a,b)=>(b.r1m||0)-(a.r1m||0)).map(d=>d.sym);
                 return <div style={{flex:1,minWidth:0}}>
-                  <div style={{fontSize:12,fontWeight:800,color:"#e6edf3",marginBottom:10,display:"flex",alignItems:"center",gap:6}}>
+                  <div style={{fontSize:11,fontWeight:800,color:"#e6edf3",marginBottom:6,display:"flex",alignItems:"center",gap:4}}>
                     <span>{flag}</span><span>{title}</span>
-                    <span style={{fontSize:9,color:"#484f58",fontWeight:400,marginLeft:"auto"}}>{data.length}개 섹터</span>
+                    <span style={{fontSize:9,color:"#484f58",marginLeft:"auto"}}>{data.length}개</span>
                   </div>
-                  {[{label:"3M 수익률",arr:sorted3m,useR1m:false},{label:"1M 수익률",arr:sorted1m,useR1m:true}].map(({label,arr,useR1m})=>(
-                    <div key={label} style={{marginBottom:10}}>
-                      <div style={{fontSize:10,color:"#484f58",fontWeight:700,marginBottom:5}}>{label}</div>
-                      <div style={{display:"flex",gap:4,flexWrap:"wrap",rowGap:4}}>
-                        {arr.slice(0,5).map((item,i)=><SecPill key={item.sym+label} item={item} rank={i} useR1m={useR1m} nameMap={nameMap}/>)}
-                        {arr.length>8&&arr.slice(-3).map((item,i)=><SecPill key={item.sym+label+"b"} item={item} rank={arr.length-3+i} useR1m={useR1m} nameMap={nameMap}/>)}
-                      </div>
-                    </div>
-                  ))}
+                  <table style={{width:"100%",borderCollapse:"collapse",fontSize:isMobile?10:11}}>
+                    <thead>
+                      <tr style={{borderBottom:"1px solid #21262d"}}>
+                        <th style={{textAlign:"left",padding:"3px 4px",fontSize:9,color:"#484f58",fontWeight:700}}>섹터</th>
+                        <th style={{textAlign:"right",padding:"3px 4px",fontSize:9,color:"#484f58",fontWeight:700}}>3M</th>
+                        <th style={{textAlign:"right",padding:"3px 4px",fontSize:9,color:"#484f58",fontWeight:700}}>1M</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {sorted.map((item,i)=>{
+                        const nm=nameMap?nameMap[item.sym]:item.sym;
+                        const r1mRank=rank1m.indexOf(item.sym);
+                        return <tr key={item.sym} style={{borderBottom:"1px solid #21262d10",background:i%2===0?"transparent":"#ffffff04"}}>
+                          <td style={{padding:"3px 4px",whiteSpace:"nowrap"}}>
+                            <span style={{fontSize:10,marginRight:3}}>{medal(i)}</span>
+                            <span style={{color:"#e6edf3",fontWeight:i<3?700:400}}>{nm}</span>
+                          </td>
+                          <td style={{padding:"3px 4px",textAlign:"right",fontFamily:"'JetBrains Mono'",fontWeight:700,color:vColor(item.r3m),background:vBg(item.r3m)}}>{item.r3m>0?"+":""}{item.r3m}%</td>
+                          <td style={{padding:"3px 4px",textAlign:"right",fontFamily:"'JetBrains Mono'",fontWeight:r1mRank<3?700:400,color:vColor(item.r1m||0),background:vBg(item.r1m||0)}}>{(item.r1m||0)>0?"+":""}{item.r1m||0}%</td>
+                        </tr>;
+                      })}
+                    </tbody>
+                  </table>
                 </div>;
               };
 
-              // 미국 데이터: MKT.sec = [[sym,r3m,r1m], ...]  → {sym,r3m,r1m}
               const usData=(MKT.sec||[]).map(([sym,r3m,r1m])=>({sym,r3m,r1m}));
-              // 한국 데이터: MKT.krSectors = [{sym,r3m,r1m}, ...]
               const krData=MKT.krSectors||[];
 
               return <div style={{background:"#161b22",borderRadius:8,padding:12,marginBottom:12}}>
-                <div style={{fontSize:12,fontWeight:700,color:"#58a6ff",marginBottom:12}}>📊 섹터 상대모멘텀</div>
-                <div style={{display:isMobile?"flex":"grid",gridTemplateColumns:"1fr 1fr",flexDirection:"column",gap:isMobile?0:20}}>
-                  <div style={isMobile?{marginBottom:16}:{}}>
-                    <SectorBlock title="미국 섹터" flag="🇺🇸" data={usData} nameMap={secNm}/>
-                  </div>
-                  {isMobile&&<div style={{height:1,background:"#21262d",margin:"8px 0"}}/>}
-                  <div style={isMobile?{paddingTop:8}:{}}>
-                    <SectorBlock title="한국 섹터" flag="🇰🇷" data={krData} nameMap={null}/>
-                  </div>
+                <div style={{fontSize:12,fontWeight:700,color:"#58a6ff",marginBottom:10}}>📊 섹터 상대모멘텀</div>
+                <div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"1fr 1fr",gap:16}}>
+                  <HeatTable title="미국 섹터" flag="🇺🇸 us" data={usData} nameMap={secNm}/>
+                  <HeatTable title="한국 섹터" flag="🇰🇷 kr" data={krData} nameMap={null}/>
                 </div>
               </div>;
             })()}
