@@ -2572,11 +2572,15 @@ export default function Dashboard(){
             {/* ── 섹터 상대모멘텀 히트맵 (미국 + 한국 병렬) ── */}
             {(()=>{
               const secNm={XLK:"기술",XLC:"커뮤니케이션",XLI:"산업재",XLY:"임의소비",XLV:"헬스케어",XLU:"유틸리티",XLE:"에너지",XLF:"금융",XLB:"소재",XLP:"필수소비",XLRE:"부동산",SOXX:"반도체",XBI:"바이오테크",XHB:"주택건설",GDX:"금광주"};
+              // 미국 섹터 대표주
+              const usRep={XLK:"NVDA",XLC:"META",XLI:"GE",XLY:"AMZN",XLV:"UNH",XLU:"NEE",XLE:"XOM",XLF:"JPM",XLB:"LIN",XLP:"PG",XLRE:"PLD",SOXX:"NVDA",XBI:"REGN",XHB:"DHI",GDX:"NEM"};
+              // 한국 섹터 대표주
+              const krRep={"반도체":"삼성전자","금융":"KB금융","헬스케어":"셀트리온","철강소재":"POSCO","건설":"현대건설","소비재":"LG생활건강","산업기계":"두산밥캣","에너지화학":"LG화학","2차전지":"LG에너지솔루션","자동차":"현대차","바이오":"삼성바이오로직스","IT":"NAVER","K-뷰티":"아모레퍼시픽"};
               const medal=i=>i===0?"🥇":i===1?"🥈":i===2?"🥉":"";
               const vColor=v=>v>5?"#3fb950":v>0?"#57c479":v>-5?"#f85149":"#e03030";
               const vBg=v=>v>5?"#3fb95018":v>0?"#3fb95008":v>-5?"#f8514910":"#f8514920";
 
-              const HeatTable=({title,flag,data,nameMap})=>{
+              const HeatTable=({title,flag,data,nameMap,repMap})=>{
                 if(!data||data.length===0)return <div style={{padding:10,color:"#484f58",fontSize:11}}>데이터 없음 — 시장필터 재갱신 필요</div>;
                 const sorted=[...data].sort((a,b)=>b.r3m-a.r3m);
                 const rank1m=[...data].sort((a,b)=>(b.r1m||0)-(a.r1m||0)).map(d=>d.sym);
@@ -2589,6 +2593,7 @@ export default function Dashboard(){
                     <thead>
                       <tr style={{borderBottom:"1px solid #21262d"}}>
                         <th style={{textAlign:"left",padding:"3px 4px",fontSize:9,color:"#484f58",fontWeight:700}}>섹터</th>
+                        <th style={{textAlign:"left",padding:"3px 4px",fontSize:9,color:"#484f58",fontWeight:700}}>대표주</th>
                         <th style={{textAlign:"right",padding:"3px 4px",fontSize:9,color:"#484f58",fontWeight:700}}>3M</th>
                         <th style={{textAlign:"right",padding:"3px 4px",fontSize:9,color:"#484f58",fontWeight:700}}>1M</th>
                       </tr>
@@ -2596,11 +2601,15 @@ export default function Dashboard(){
                     <tbody>
                       {sorted.map((item,i)=>{
                         const nm=nameMap?nameMap[item.sym]:item.sym;
+                        const rep=repMap?repMap[item.sym]||repMap[nm]||"-":"-";
                         const r1mRank=rank1m.indexOf(item.sym);
                         return <tr key={item.sym} style={{borderBottom:"1px solid #21262d10",background:i%2===0?"transparent":"#ffffff04"}}>
                           <td style={{padding:"3px 4px",whiteSpace:"nowrap"}}>
                             <span style={{fontSize:10,marginRight:3}}>{medal(i)}</span>
                             <span style={{color:"#e6edf3",fontWeight:i<3?700:400}}>{nm}</span>
+                          </td>
+                          <td style={{padding:"3px 4px",whiteSpace:"nowrap"}}>
+                            <span style={{fontSize:9,color:"#484f58",fontFamily:"'JetBrains Mono'"}}>{rep}</span>
                           </td>
                           <td style={{padding:"3px 4px",textAlign:"right",fontFamily:"'JetBrains Mono'",fontWeight:700,color:vColor(item.r3m),background:vBg(item.r3m)}}>{item.r3m>0?"+":""}{item.r3m}%</td>
                           <td style={{padding:"3px 4px",textAlign:"right",fontFamily:"'JetBrains Mono'",fontWeight:r1mRank<3?700:400,color:vColor(item.r1m||0),background:vBg(item.r1m||0)}}>{(item.r1m||0)>0?"+":""}{item.r1m||0}%</td>
@@ -2617,8 +2626,8 @@ export default function Dashboard(){
               return <div style={{background:"#161b22",borderRadius:8,padding:12,marginBottom:12}}>
                 <div style={{fontSize:12,fontWeight:700,color:"#58a6ff",marginBottom:10}}>📊 섹터 상대모멘텀</div>
                 <div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"1fr 1fr",gap:16}}>
-                  <HeatTable title="미국 섹터" flag="🇺🇸 us" data={usData} nameMap={secNm}/>
-                  <HeatTable title="한국 섹터" flag="🇰🇷 kr" data={krData} nameMap={null}/>
+                  <HeatTable title="미국 섹터" flag="🇺🇸 us" data={usData} nameMap={secNm} repMap={usRep}/>
+                  <HeatTable title="한국 섹터" flag="🇰🇷 kr" data={krData} nameMap={null} repMap={krRep}/>
                 </div>
               </div>;
             })()}
