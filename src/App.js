@@ -2551,35 +2551,21 @@ export default function Dashboard(){
               </div>
             </div>
 
-            {/* 건강도 체크리스트 — 그룹화 */}
-            {MKT.health?.details && <div style={{background:"#161b22",borderRadius:8,padding:12,marginBottom:12}}>
-              <div style={{fontSize:12,fontWeight:700,color:"#58a6ff",marginBottom:8}}>🩺 시장 건강도 체크리스트</div>
+            {/* 건강도 체크리스트 — 한줄 압축 */}
+            {MKT.health?.details && <div style={{background:"#161b22",borderRadius:8,padding:"8px 12px",marginBottom:12,display:"flex",gap:6,flexWrap:"wrap",alignItems:"center"}}>
+              <span style={{fontSize:10,color:"#484f58",fontWeight:700,marginRight:4}}>🩺</span>
               {[
-                {group:"장기 추세",note:"3가지 중 2개+ 충족 시 추세 점수 인정",items:[
-                  ["SPY > 200MA",MKT.health.details.spyAbove200],
-                  ["200MA 상승추세",MKT.health.details.spy200Rising],
-                  ["골든크로스(50>200)",MKT.health.details.spyGoldenCross],
-                ]},
-                {group:"모멘텀 · 변동성",note:"개별 독립 점수",items:[
-                  ["SPY 12M 양수",MKT.health.details.spy12mPositive],
-                  ["VIX < 25",MKT.health.details.vixLow],
-                ]},
-                {group:"시장 브레드스",note:"섹터 상승 수 기준",items:[
-                  ["KOSPI > 200MA",MKT.health.details.kospiAbove200],
-                  ["섹터 브레드스 "+MKT.health.details.sectorBreadth+" 상승",!!MKT.health.details.sectorBreadth&&MKT.health.details.sectorBreadth>=6],
-                ]},
-              ].map(({group,note,items})=>(
-                <div key={group} style={{marginBottom:8}}>
-                  <div style={{fontSize:10,color:"#484f58",fontWeight:700,marginBottom:4}}>{group} <span style={{fontWeight:400,opacity:0.6}}>{note}</span></div>
-                  <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
-                    {items.map(([label,ok])=>(
-                      <div key={label} style={{display:"flex",alignItems:"center",gap:5,padding:"4px 10px",borderRadius:6,background:ok?"#3fb95010":"#f8514910",border:"1px solid "+(ok?"#3fb95022":"#f8514922")}}>
-                        <span style={{fontSize:11}}>{ok?"✅":"❌"}</span>
-                        <span style={{fontSize:11,color:ok?"#3fb950":"#f85149"}}>{label}</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
+                ["SPY>200MA",MKT.health.details.spyAbove200],
+                ["200MA상승",MKT.health.details.spy200Rising],
+                ["골든크로스",MKT.health.details.spyGoldenCross],
+                ["12M양수",MKT.health.details.spy12mPositive],
+                ["VIX<25",MKT.health.details.vixLow],
+                ["KOSPI>200MA",MKT.health.details.kospiAbove200],
+                ["섹터브레드스"+MKT.health.details.sectorBreadth+"/11",!!MKT.health.details.sectorBreadth&&MKT.health.details.sectorBreadth>=6],
+              ].map(([label,ok])=>(
+                <span key={label} style={{fontSize:10,padding:"2px 7px",borderRadius:4,background:ok?"#3fb95015":"#f8514915",color:ok?"#3fb950":"#f85149",border:"1px solid "+(ok?"#3fb95030":"#f8514930")}}>
+                  {ok?"✅":"❌"} {label}
+                </span>
               ))}
             </div>}
 
@@ -2643,7 +2629,64 @@ export default function Dashboard(){
               </div>;
             })()}
 
+            {/* ── 리더/회복/회피 섹터 포지셔닝 (US + KR) ── */}
+            {(()=>{
+              const usData=(MKT.sec||[]).map(([sym,r3m,r1m])=>({sym,r3m,r1m}));
+              const krData=MKT.krSectors||[];
+              const secNm={XLK:"기술",XLC:"커뮤니케이션",XLI:"산업재",XLY:"임의소비",XLV:"헬스케어",XLU:"유틸리티",XLE:"에너지",XLF:"금융",XLB:"소재",XLP:"필수소비",XLRE:"부동산"};
+              if(!usData.length&&!krData.length)return null;
 
+              const classify=(data,nameMap)=>{
+                if(!data.length)return{leaders:[],recovery:[],avoid:[]};
+                const s3=[...data].sort((a,b)=>b.r3m-a.r3m);
+                const s1=[...data].sort((a,b)=>(b.r1m||0)-(a.r1m||0));
+                const top3m=new Set(s3.slice(0,3).map(s=>s.sym));
+                const bot3m=new Set(s3.slice(-3).map(s=>s.sym));
+                const top1m=new Set(s1.slice(0,3).map(s=>s.sym));
+                const nm=s=>nameMap?nameMap[s]||s:s;
+                return{
+                  leaders:data.filter(s=>top3m.has(s.sym)&&top1m.has(s.sym)).map(s=>nm(s.sym)),
+                  recovery:data.filter(s=>!top3m.has(s.sym)&&top1m.has(s.sym)).map(s=>nm(s.sym)),
+                  avoid:data.filter(s=>bot3m.has(s.sym)).map(s=>nm(s.sym)),
+                };
+              };
+
+              const us=classify(usData,secNm);
+              const kr=classify(krData,null);
+
+              const Row=({icon,color,items})=><div style={{display:"flex",gap:4,flexWrap:"wrap",alignItems:"center"}}>
+                <span style={{fontSize:11}}>{icon}</span>
+                {items.length?items.map(nm=><span key={nm} style={{padding:"2px 7px",borderRadius:5,fontSize:10,background:color+"15",color:color,fontWeight:600,border:"1px solid "+color+"33"}}>{nm}</span>)
+                :<span style={{fontSize:10,color:"#484f58"}}>해당 없음</span>}
+              </div>;
+
+              const Summary=({title,flag,cls})=><div style={{flex:1,minWidth:0}}>
+                <div style={{fontSize:11,fontWeight:700,color:"#8b949e",marginBottom:8}}>{flag} {title}</div>
+                <div style={{display:"flex",flexDirection:"column",gap:6}}>
+                  <div style={{display:"flex",alignItems:"flex-start",gap:8}}>
+                    <span style={{fontSize:10,color:"#3fb950",fontWeight:700,minWidth:36,paddingTop:2}}>🥇 리더</span>
+                    <div style={{flex:1}}><Row icon="" color="#3fb950" items={cls.leaders}/></div>
+                  </div>
+                  <div style={{display:"flex",alignItems:"flex-start",gap:8}}>
+                    <span style={{fontSize:10,color:"#58a6ff",fontWeight:700,minWidth:36,paddingTop:2}}>🔄 회복</span>
+                    <div style={{flex:1}}><Row icon="" color="#58a6ff" items={cls.recovery}/></div>
+                  </div>
+                  <div style={{display:"flex",alignItems:"flex-start",gap:8}}>
+                    <span style={{fontSize:10,color:"#f85149",fontWeight:700,minWidth:36,paddingTop:2}}>🚫 회피</span>
+                    <div style={{flex:1}}><Row icon="" color="#f85149" items={cls.avoid}/></div>
+                  </div>
+                </div>
+              </div>;
+
+              return <div style={{background:"#161b22",borderRadius:8,padding:12,marginBottom:4}}>
+                <div style={{fontSize:11,fontWeight:700,color:"#484f58",marginBottom:10}}>📌 섹터 포지셔닝 요약 (3M·1M 교차 분류)</div>
+                <div style={{display:isMobile?"flex":"grid",gridTemplateColumns:"1fr 1fr",flexDirection:"column",gap:isMobile?0:20}}>
+                  <div style={isMobile?{marginBottom:14}:{}}><Summary title="미국" flag="🇺🇸" cls={us}/></div>
+                  {isMobile&&<div style={{height:1,background:"#21262d",margin:"8px 0"}}/>}
+                  <div><Summary title="한국" flag="🇰🇷" cls={kr}/></div>
+                </div>
+              </div>;
+            })()}
           </>}
 
           {/* ═══════ 심리지수 섹션 (미국주식 전용) ═══════ */}
