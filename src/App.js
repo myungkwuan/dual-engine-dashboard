@@ -2296,23 +2296,17 @@ export default function Dashboard(){
 
       {/* RT Engine Bar */}
       <div style={{maxWidth:1800,margin:"6px auto",padding:"0 20px"}}>
-        <div className="rt-bar" style={{background:"#0d1117",border:"1px solid #21262d",borderRadius:10,padding:isMobile?"6px 10px":"10px 14px",display:"flex",gap:isMobile?6:10,alignItems:"center",flexWrap:"nowrap"}}>
-          {/* 상태 dot + 텍스트 */}
-          <div style={{display:"flex",alignItems:"center",gap:4,flexShrink:0}}><Dot s={rt}/>{!isMobile&&<span style={{fontSize:14,fontWeight:700}}>{rt==="idle"?"대기":rt==="fetching"?"조회중...":rt==="live"?"✅ 완료":"⚠️ 실패"}</span>}</div>
-          {/* 진행바 */}
-          <div style={{flex:1,minWidth:isMobile?30:40,maxWidth:isMobile?60:200,flexShrink:1}}><div style={{height:4,background:"#161b22",borderRadius:3,overflow:"hidden"}}><div style={{height:"100%",background:"linear-gradient(90deg,#58a6ff,#bc8cff)",borderRadius:3,width:prog+"%",transition:"width .3s"}}/></div></div>
-          {/* stats — PC만 표시 */}
-          {!isMobile&&<div style={{display:"flex",gap:12,fontSize:12,color:"#484f58",fontFamily:"'JetBrains Mono'",flexShrink:0}}><span>{stats.time}</span><span><b style={{color:"#3fb950"}}>{stats.ok}</b>{"/"}{D.length}</span><span>{stats.ms}</span></div>}
-          {/* 모바일: 완료 시각만 표시 */}
-          {isMobile&&stats.time!=="-"&&<span style={{fontSize:10,color:"#484f58",fontFamily:"'JetBrains Mono'",flexShrink:0}}>{stats.time}</span>}
-          {/* 버튼 그룹 */}
-          <div style={{display:"flex",gap:4,marginLeft:"auto",alignItems:"center",flexShrink:0}}>
-            <button onClick={doFetch} disabled={rt==="fetching"} style={{padding:isMobile?"5px 10px":"6px 14px",borderRadius:6,border:"1px solid #bc8cff",cursor:rt==="fetching"?"wait":"pointer",background:"linear-gradient(135deg,#1a3a5c,#2d1b69)",color:"#bc8cff",fontSize:isMobile?12:14,fontWeight:700,whiteSpace:"nowrap"}}>{isMobile?"⚡":"⚡ 가격"}</button>
-            <button onClick={doAnalysis} disabled={anaRt==="fetching"} style={{padding:isMobile?"5px 10px":"6px 14px",borderRadius:6,border:"1px solid #ff922b",cursor:anaRt==="fetching"?"wait":"pointer",background:anaRt==="fetching"?"#ff922b20":"linear-gradient(135deg,#2d1b00,#3d2b10)",color:"#ff922b",fontSize:isMobile?12:14,fontWeight:700,whiteSpace:"nowrap"}}>{anaRt==="fetching"?(isMobile?anaProg+"%":"🔬 "+anaProg+"%"):(isMobile?"🔬":"🔬 분석")}</button>
-            <button onClick={toggleAuto} style={{padding:isMobile?"5px 8px":"6px 12px",borderRadius:6,fontSize:isMobile?12:14,fontWeight:600,cursor:"pointer",border:"1px solid "+(autoOn?"#3fb950":"#21262d"),background:autoOn?"rgba(63,185,80,.12)":"#161b22",color:autoOn?"#3fb950":"#8b949e",whiteSpace:"nowrap"}}>{autoOn?"⏹":"🔄"}</button>
+        <div className="rt-bar" style={{background:"#0d1117",border:"1px solid #21262d",borderRadius:10,padding:isMobile?"6px 10px":"10px 14px",display:"flex",gap:isMobile?6:10,alignItems:"center",flexWrap:"wrap"}}>
+          <div style={{display:"flex",alignItems:"center",gap:4}}><Dot s={rt}/>{!isMobile&&<span style={{fontSize:14,fontWeight:700}}>{rt==="idle"?"대기":rt==="fetching"?"조회중...":rt==="live"?"✅ 완료":"⚠️ 실패"}</span>}</div>
+          <div style={{flex:1,minWidth:40,maxWidth:isMobile?80:200}}><div style={{height:4,background:"#161b22",borderRadius:3,overflow:"hidden"}}><div style={{height:"100%",background:"linear-gradient(90deg,#58a6ff,#bc8cff)",borderRadius:3,width:prog+"%",transition:"width .3s"}}/></div></div>
+          <div style={{display:"flex",gap:isMobile?6:12,fontSize:isMobile?10:12,color:"#484f58",fontFamily:"'JetBrains Mono'"}}><span>{stats.time}</span><span><b style={{color:"#3fb950"}}>{stats.ok}</b>{"/"}{D.length}</span><span>{stats.ms}</span></div>
+          <div style={{display:"flex",gap:4,marginLeft:"auto",alignItems:"center"}}>
+            <button onClick={doFetch} disabled={rt==="fetching"} style={{padding:isMobile?"5px 10px":"6px 14px",borderRadius:6,border:"1px solid #bc8cff",cursor:rt==="fetching"?"wait":"pointer",background:"linear-gradient(135deg,#1a3a5c,#2d1b69)",color:"#bc8cff",fontSize:isMobile?12:14,fontWeight:700}}>{isMobile?"⚡":"⚡ 가격"}</button>
+            <button onClick={doAnalysis} disabled={anaRt==="fetching"} style={{padding:isMobile?"5px 10px":"6px 14px",borderRadius:6,border:"1px solid #ff922b",cursor:anaRt==="fetching"?"wait":"pointer",background:anaRt==="fetching"?"#ff922b20":"linear-gradient(135deg,#2d1b00,#3d2b10)",color:"#ff922b",fontSize:isMobile?12:14,fontWeight:700}}>{anaRt==="fetching"?(isMobile?anaProg+"%":"🔬 "+anaProg+"%"):(isMobile?"🔬":"🔬 분석")}</button>
+            <button onClick={toggleAuto} style={{padding:isMobile?"5px 8px":"6px 12px",borderRadius:6,fontSize:isMobile?12:14,fontWeight:600,cursor:"pointer",border:"1px solid "+(autoOn?"#3fb950":"#21262d"),background:autoOn?"rgba(63,185,80,.12)":"#161b22",color:autoOn?"#3fb950":"#8b949e"}}>{autoOn?"⏹":"🔄"}</button>
             {!isMobile&&<><input type="number" value={intv} min={1} max={60} onChange={e=>setIntv(+e.target.value||3)} style={{width:40,padding:"4px 5px",borderRadius:4,border:"1px solid #21262d",background:"#0d1117",color:"#e6edf3",fontSize:13,fontFamily:"'JetBrains Mono'",textAlign:"center",outline:"none"}}/>
             <span style={{fontSize:12,color:"#484f58"}}>분</span></>}
-            <button onClick={()=>setShowLog(!showLog)} style={{padding:isMobile?"4px 8px":"5px 10px",borderRadius:5,border:"1px solid #21262d",background:"#161b22",color:"#8b949e",cursor:"pointer",fontSize:isMobile?11:13,whiteSpace:"nowrap"}}>📋</button>
+            <button onClick={()=>setShowLog(!showLog)} style={{padding:isMobile?"4px 8px":"5px 10px",borderRadius:5,border:"1px solid #21262d",background:"#161b22",color:"#8b949e",cursor:"pointer",fontSize:isMobile?11:13}}>📋</button>
           </div>
         </div>
         {/* 분석 진행바 */}
@@ -2337,7 +2331,7 @@ export default function Dashboard(){
         <div style={{display:"grid",gridTemplateColumns:isMobile?"1fr 1fr":"1fr 1fr",gap:6}}>
 
           {/* 🇺🇸 미국 카드 */}
-          <div style={{background:MKT.health?.modeColor+"12",border:"2px solid "+MKT.health?.modeColor+"44",borderRadius:10,padding:"10px 14px"}}>
+          <div style={{background:MKT.health?.modeColor+"12",border:"2px solid "+MKT.health?.modeColor+"44",borderRadius:10,padding:"10px 14px",minHeight:110}}>
             <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:6}}>
               <div style={{display:"flex",alignItems:"center",gap:6}}>
                 <span style={{fontSize:16}}>{MKT.health?.modeIcon}</span>
@@ -2358,17 +2352,17 @@ export default function Dashboard(){
                 {label:"S&P500",val:MKT.usIndices?.gspc?.price,chg:MKT.usIndices?.gspc?.chg},
                 {label:"나스닥",val:MKT.usIndices?.ixic?.price,chg:MKT.usIndices?.ixic?.chg},
               ].map(idx=>(
-                <div key={idx.label} style={{background:"#0d111766",borderRadius:5,padding:"3px 5px",textAlign:"center"}}>
+                <div key={idx.label} style={{background:"#0d111766",borderRadius:5,padding:"3px 5px",textAlign:"center",minHeight:42}}>
                   <div style={{fontSize:8,color:"#484f58",fontWeight:700}}>{idx.label}</div>
-                  <div style={{fontSize:10,fontWeight:800,color:"#e6edf3",fontFamily:"'JetBrains Mono'"}}>{idx.val?idx.val.toLocaleString():"-"}</div>
-                  <div style={{fontSize:8,color:idx.chg>0?"#3fb950":idx.chg<0?"#f85149":"#8b949e"}}>{idx.chg!=null?(idx.chg>0?"+":"")+idx.chg+"%":"-"}</div>
+                  <div style={{fontSize:10,fontWeight:800,color:"#e6edf3",fontFamily:"'JetBrains Mono'",minHeight:16}}>{idx.val?idx.val.toLocaleString():"-"}</div>
+                  <div style={{fontSize:8,color:idx.chg>0?"#3fb950":idx.chg<0?"#f85149":"#8b949e",minHeight:12}}>{idx.chg!=null?(idx.chg>0?"+":"")+idx.chg+"%":"-"}</div>
                 </div>
               ))}
             </div>
           </div>
 
           {/* 🇰🇷 한국 카드 */}
-          <div style={{background:(MKT.krHealth?.modeColor||"#484f58")+"12",border:"2px solid "+(MKT.krHealth?.modeColor||"#484f58")+"44",borderRadius:10,padding:"10px 14px"}}>
+          <div style={{background:(MKT.krHealth?.modeColor||"#484f58")+"12",border:"2px solid "+(MKT.krHealth?.modeColor||"#484f58")+"44",borderRadius:10,padding:"10px 14px",minHeight:110}}>
             <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:6}}>
               <div style={{display:"flex",alignItems:"center",gap:6}}>
                 <span style={{fontSize:16}}>{MKT.krHealth?.modeIcon||"⏳"}</span>
@@ -2388,10 +2382,10 @@ export default function Dashboard(){
                 {label:"KOSPI",val:MKT.kospiPrice,chg:MKT.kospiDayChg},
                 {label:"KOSDAQ",val:MKT.kosdaqPrice,chg:MKT.kosdaqChg},
               ].map(idx=>(
-                <div key={idx.label} style={{background:"#0d111766",borderRadius:5,padding:"3px 6px",textAlign:"center"}}>
+                <div key={idx.label} style={{background:"#0d111766",borderRadius:5,padding:"3px 6px",textAlign:"center",minHeight:42}}>
                   <div style={{fontSize:8,color:"#484f58",fontWeight:700}}>{idx.label}</div>
-                  <div style={{fontSize:11,fontWeight:800,color:"#e6edf3",fontFamily:"'JetBrains Mono'"}}>{idx.val?idx.val.toLocaleString():"-"}</div>
-                  {idx.chg!=null&&<div style={{fontSize:8,color:idx.chg>0?"#3fb950":idx.chg<0?"#f85149":"#8b949e"}}>{(idx.chg>0?"+":"")+idx.chg+"%"}</div>}
+                  <div style={{fontSize:11,fontWeight:800,color:"#e6edf3",fontFamily:"'JetBrains Mono'",minHeight:16}}>{idx.val?idx.val.toLocaleString():"-"}</div>
+                  <div style={{fontSize:8,color:idx.chg!=null?(idx.chg>0?"#3fb950":idx.chg<0?"#f85149":"#8b949e"):"#8b949e",minHeight:12}}>{idx.chg!=null?(idx.chg>0?"+":"")+idx.chg+"%":"-"}</div>
                 </div>
               ))}
             </div>
@@ -2594,51 +2588,122 @@ export default function Dashboard(){
               const secNm={XLK:"기술",XLC:"커뮤니케이션",XLI:"산업재",XLY:"임의소비",XLV:"헬스케어",XLU:"유틸리티",XLE:"에너지",XLF:"금융",XLB:"소재",XLP:"필수소비",XLRE:"부동산"};
 
               // pill 렌더러 — {sym, r3m, r1m} 형식 + 이름매핑
-              /* ── 섹터 히트맵 (미국/한국 통합) ── */
-              const secNm2={XLK:"기술",XLC:"커뮤니케이션",XLI:"산업재",XLY:"임의소비재",XLV:"헬스케어",XLU:"유틸리티",XLE:"에너지",XLF:"금융",XLB:"소재",XLP:"필수소비재",XLRE:"부동산"};
-              const usData=(MKT.sec||[]).map(([sym,r3m,r1m])=>({sym,name:secNm2[sym]||sym,r3m,r1m}));
-              const krData=(MKT.krSectors||[]).map(s=>({...s,name:s.sym}));
-
-              const HeatRow=({item,rank,total})=>{
-                const isTop3=rank<3;
-                const isBot3=rank>=total-3;
-                const medal=rank===0?"🥇":rank===1?"🥈":rank===2?"🥉":"";
-                const r3c=item.r3m>5?"#3fb950":item.r3m>0?"#8bc34a":item.r3m>-5?"#ffd600":"#f85149";
-                const r1c=(item.r1m||0)>3?"#3fb950":(item.r1m||0)>0?"#8bc34a":(item.r1m||0)>-3?"#ffd600":"#f85149";
-                return <div style={{display:"grid",gridTemplateColumns:"1fr 52px 52px",alignItems:"center",padding:"3px 6px",borderRadius:5,background:isTop3?"#3fb95008":isBot3?"#f8514908":"transparent",borderBottom:"1px solid #21262d22"}}>
-                  <div style={{fontSize:10,color:isTop3?"#e6edf3":isBot3?"#8b949e":"#c9d1d9",fontWeight:isTop3?700:400,display:"flex",alignItems:"center",gap:3}}>
-                    {medal&&<span style={{fontSize:9}}>{medal}</span>}
-                    <span style={{overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{item.name}</span>
-                  </div>
-                  <div style={{textAlign:"right",fontSize:10,fontWeight:700,color:r3c,fontFamily:"'JetBrains Mono'"}}>{item.r3m>0?"+":""}{item.r3m}%</div>
-                  <div style={{textAlign:"right",fontSize:10,fontWeight:600,color:r1c,fontFamily:"'JetBrains Mono'"}}>{(item.r1m||0)>0?"+":""}{(item.r1m||0).toFixed(1)}%</div>
-                </div>;
+              const SecPill=({item,rank,useR1m,nameMap})=>{
+                const v=useR1m?(item.r1m||0):(item.r3m||0);
+                const nm=nameMap?nameMap[item.sym]:item.sym;
+                const top3=rank<3;
+                const isPos=v>0;
+                const bg=isPos?(top3?"#3fb95018":"#3fb95008"):"#f8514910";
+                const bd=isPos?(top3?"#3fb95055":"#3fb95022"):"#f8514933";
+                const tc=isPos?(top3?"#3fb950":"#8b949e"):"#f85149";
+                return <span style={{display:"inline-flex",alignItems:"center",gap:4,padding:"4px 10px",borderRadius:8,fontSize:11,background:bg,border:"1px solid "+bd,color:tc,fontWeight:top3?700:400,whiteSpace:"nowrap"}}>
+                  {top3?["🥇","🥈","🥉"][rank]+" ":""}
+                  {nm}
+                  <span style={{fontFamily:"'JetBrains Mono'",fontSize:11}}>{v>0?"+":""}{v}%</span>
+                </span>;
               };
 
-              const HeatTable=({title,flag,data})=>{
-                if(!data||!data.length)return <div style={{flex:1,padding:8,color:"#484f58",fontSize:10}}>데이터 없음</div>;
-                const sorted=[...data].sort((a,b)=>b.r3m-a.r3m);
+              const SectorBlock=({title,flag,data,nameMap,showAllKey})=>{
+                if(!data||data.length===0)return <div style={{padding:10,color:"#484f58",fontSize:11}}>데이터 없음 — 시장필터 재갱신 필요</div>;
+                const sorted3m=[...data].sort((a,b)=>b.r3m-a.r3m);
+                const sorted1m=[...data].sort((a,b)=>(b.r1m||0)-(a.r1m||0));
                 return <div style={{flex:1,minWidth:0}}>
-                  <div style={{display:"grid",gridTemplateColumns:"1fr 52px 52px",padding:"3px 6px",marginBottom:3}}>
-                    <div style={{fontSize:9,color:"#484f58",fontWeight:700}}>{flag} {title}</div>
-                    <div style={{textAlign:"right",fontSize:9,color:"#484f58",fontWeight:700}}>3M</div>
-                    <div style={{textAlign:"right",fontSize:9,color:"#484f58",fontWeight:700}}>1M</div>
+                  <div style={{fontSize:12,fontWeight:800,color:"#e6edf3",marginBottom:10,display:"flex",alignItems:"center",gap:6}}>
+                    <span>{flag}</span><span>{title}</span>
+                    <span style={{fontSize:9,color:"#484f58",fontWeight:400,marginLeft:"auto"}}>{data.length}개 섹터</span>
                   </div>
-                  {sorted.map((item,i)=><HeatRow key={item.sym} item={item} rank={i} total={sorted.length}/>)}
+                  {[{label:"3M 수익률",arr:sorted3m,useR1m:false},{label:"1M 수익률",arr:sorted1m,useR1m:true}].map(({label,arr,useR1m})=>(
+                    <div key={label} style={{marginBottom:10}}>
+                      <div style={{fontSize:10,color:"#484f58",fontWeight:700,marginBottom:5}}>{label}</div>
+                      <div style={{display:"flex",gap:4,flexWrap:"wrap",rowGap:4}}>
+                        {arr.slice(0,5).map((item,i)=><SecPill key={item.sym+label} item={item} rank={i} useR1m={useR1m} nameMap={nameMap}/>)}
+                        {arr.length>8&&arr.slice(-3).map((item,i)=><SecPill key={item.sym+label+"b"} item={item} rank={arr.length-3+i} useR1m={useR1m} nameMap={nameMap}/>)}
+                      </div>
+                    </div>
+                  ))}
                 </div>;
               };
+
+              // 미국 데이터: MKT.sec = [[sym,r3m,r1m], ...]  → {sym,r3m,r1m}
+              const usData=(MKT.sec||[]).map(([sym,r3m,r1m])=>({sym,r3m,r1m}));
+              // 한국 데이터: MKT.krSectors = [{sym,r3m,r1m}, ...]
+              const krData=MKT.krSectors||[];
 
               return <div style={{background:"#161b22",borderRadius:8,padding:12,marginBottom:12}}>
-                <div style={{fontSize:12,fontWeight:700,color:"#58a6ff",marginBottom:10}}>📊 섹터 상대모멘텀</div>
-                <div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"1fr 1fr",gap:isMobile?12:20}}>
-                  <HeatTable title="미국 섹터" flag="🇺🇸" data={usData}/>
-                  {isMobile&&<div style={{height:1,background:"#21262d"}}/>}
-                  <HeatTable title="한국 섹터" flag="🇰🇷" data={krData}/>
+                <div style={{fontSize:12,fontWeight:700,color:"#58a6ff",marginBottom:12}}>📊 섹터 상대모멘텀</div>
+                <div style={{display:isMobile?"flex":"grid",gridTemplateColumns:"1fr 1fr",flexDirection:"column",gap:isMobile?0:20}}>
+                  <div style={isMobile?{marginBottom:16}:{}}>
+                    <SectorBlock title="미국 섹터" flag="🇺🇸" data={usData} nameMap={secNm}/>
+                  </div>
+                  {isMobile&&<div style={{height:1,background:"#21262d",margin:"8px 0"}}/>}
+                  <div style={isMobile?{paddingTop:8}:{}}>
+                    <SectorBlock title="한국 섹터" flag="🇰🇷" data={krData} nameMap={null}/>
+                  </div>
                 </div>
               </div>;
             })()}
 
-                    {/* ═══════ 심리지수 섹션 (미국주식 전용) ═══════ */}
+            {/* ── 리더/회복/회피 섹터 포지셔닝 (US + KR) ── */}
+            {(()=>{
+              const usData=(MKT.sec||[]).map(([sym,r3m,r1m])=>({sym,r3m,r1m}));
+              const krData=MKT.krSectors||[];
+              const secNm={XLK:"기술",XLC:"커뮤니케이션",XLI:"산업재",XLY:"임의소비",XLV:"헬스케어",XLU:"유틸리티",XLE:"에너지",XLF:"금융",XLB:"소재",XLP:"필수소비",XLRE:"부동산"};
+              if(!usData.length&&!krData.length)return null;
+
+              const classify=(data,nameMap)=>{
+                if(!data.length)return{leaders:[],recovery:[],avoid:[]};
+                const s3=[...data].sort((a,b)=>b.r3m-a.r3m);
+                const s1=[...data].sort((a,b)=>(b.r1m||0)-(a.r1m||0));
+                const top3m=new Set(s3.slice(0,3).map(s=>s.sym));
+                const bot3m=new Set(s3.slice(-3).map(s=>s.sym));
+                const top1m=new Set(s1.slice(0,3).map(s=>s.sym));
+                const nm=s=>nameMap?nameMap[s]||s:s;
+                return{
+                  leaders:data.filter(s=>top3m.has(s.sym)&&top1m.has(s.sym)).map(s=>nm(s.sym)),
+                  recovery:data.filter(s=>!top3m.has(s.sym)&&top1m.has(s.sym)).map(s=>nm(s.sym)),
+                  avoid:data.filter(s=>bot3m.has(s.sym)).map(s=>nm(s.sym)),
+                };
+              };
+
+              const us=classify(usData,secNm);
+              const kr=classify(krData,null);
+
+              const Row=({icon,color,items})=><div style={{display:"flex",gap:4,flexWrap:"wrap",alignItems:"center"}}>
+                <span style={{fontSize:11}}>{icon}</span>
+                {items.length?items.map(nm=><span key={nm} style={{padding:"2px 7px",borderRadius:5,fontSize:10,background:color+"15",color:color,fontWeight:600,border:"1px solid "+color+"33"}}>{nm}</span>)
+                :<span style={{fontSize:10,color:"#484f58"}}>해당 없음</span>}
+              </div>;
+
+              const Summary=({title,flag,cls})=><div style={{flex:1,minWidth:0}}>
+                <div style={{fontSize:11,fontWeight:700,color:"#8b949e",marginBottom:8}}>{flag} {title}</div>
+                <div style={{display:"flex",flexDirection:"column",gap:6}}>
+                  <div style={{display:"flex",alignItems:"flex-start",gap:8}}>
+                    <span style={{fontSize:10,color:"#3fb950",fontWeight:700,minWidth:36,paddingTop:2}}>🥇 리더</span>
+                    <div style={{flex:1}}><Row icon="" color="#3fb950" items={cls.leaders}/></div>
+                  </div>
+                  <div style={{display:"flex",alignItems:"flex-start",gap:8}}>
+                    <span style={{fontSize:10,color:"#58a6ff",fontWeight:700,minWidth:36,paddingTop:2}}>🔄 회복</span>
+                    <div style={{flex:1}}><Row icon="" color="#58a6ff" items={cls.recovery}/></div>
+                  </div>
+                  <div style={{display:"flex",alignItems:"flex-start",gap:8}}>
+                    <span style={{fontSize:10,color:"#f85149",fontWeight:700,minWidth:36,paddingTop:2}}>🚫 회피</span>
+                    <div style={{flex:1}}><Row icon="" color="#f85149" items={cls.avoid}/></div>
+                  </div>
+                </div>
+              </div>;
+
+              return <div style={{background:"#161b22",borderRadius:8,padding:12,marginBottom:4}}>
+                <div style={{fontSize:11,fontWeight:700,color:"#484f58",marginBottom:10}}>📌 섹터 포지셔닝 요약 (3M·1M 교차 분류)</div>
+                <div style={{display:isMobile?"flex":"grid",gridTemplateColumns:"1fr 1fr",flexDirection:"column",gap:isMobile?0:20}}>
+                  <div style={isMobile?{marginBottom:14}:{}}><Summary title="미국" flag="🇺🇸" cls={us}/></div>
+                  {isMobile&&<div style={{height:1,background:"#21262d",margin:"8px 0"}}/>}
+                  <div><Summary title="한국" flag="🇰🇷" cls={kr}/></div>
+                </div>
+              </div>;
+            })()}
+          </>}
+
+          {/* ═══════ 심리지수 섹션 (미국주식 전용) ═══════ */}
           <div style={{marginTop:14,borderTop:"1px solid #21262d",paddingTop:14}}>
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
               <div style={{fontSize:16,fontWeight:800,color:"#f778ba"}}>🧠 시장 심리지수 <span style={{fontSize:10,color:"#484f58",fontWeight:400}}>(미국주식 전용)</span></div>
@@ -4577,9 +4642,7 @@ export default function Dashboard(){
       }}/>}
 
       <style>{`
-        *{box-sizing:border-box;margin:0;padding:0}
-        html,body,#__next{background:#06080d!important;width:100%;overflow-x:hidden}
-        body{-webkit-text-size-adjust:100%}
+        *{box-sizing:border-box}
         table tbody tr:hover{background:#161b22!important}
         ::-webkit-scrollbar{width:5px;height:5px}
         ::-webkit-scrollbar-track{background:#0d1117}
