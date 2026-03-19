@@ -1010,7 +1010,7 @@ function StockDetailModal({ stock, onClose, isWatched, onToggleWatch, gradeHisto
 
             {/* 엔진3: VCP */}
             <div style={{background:'#080818',borderRadius:'10px',padding:'14px'}}>
-              <div style={{fontSize:'12px',fontWeight:700,color:'#ffd43b',marginBottom:'10px'}}>◈ 엔진3: VCP 변동성수축 <span style={{fontSize:'9px',fontWeight:400,color:'#8b949e'}}>— 매수 타이밍이 왔나?</span> {stock._vcpDetail?<span style={{fontSize:'9px',color:'#3fb950',fontWeight:400}}>🔄 실시간 감지</span>:<span style={{fontSize:'9px',color:'#484f58',fontWeight:400}}>📋 고정값</span>}</div>
+              <div style={{fontSize:'12px',fontWeight:700,color:'#ffd43b',marginBottom:'10px'}}>◈ 엔진3: VCP 변동성수축 <span style={{fontSize:'9px',fontWeight:400,color:'#8b949e'}}>— 매수 타이밍이 왔나?</span> {stock._vcpDetail?<span style={{fontSize:'9px',color:'#3fb950',fontWeight:400}}>🔄 최신 분석</span>:<span style={{fontSize:'9px',color:'#ff922b',fontWeight:400}}>⚠️ 분석 재실행 필요</span>}</div>
               <div style={{textAlign:'center',padding:'10px 0'}}>
                 <div style={{fontSize:'32px',fontWeight:900,color:vcpMt(stock).includes("성숙")?'#00ff88':vcpMt(stock)==="형성중"?'#ffd43b':'#ff6b6b'}}>
                   {vcpMt(stock).includes("성숙")?'✅':vcpMt(stock).includes("돌파")?'🚀':vcpMt(stock)==="형성중"?'⏳':'❌'}
@@ -1031,16 +1031,18 @@ function StockDetailModal({ stock, onClose, isWatched, onToggleWatch, gradeHisto
                 </div>
                 <div style={{marginTop:'6px',display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:'4px'}}>
                   <div style={{padding:'4px',background:'#0d0d1a',borderRadius:'4px'}}>
-                    <div style={{fontSize:'9px',color:'#666'}}>베이스</div>
+                    <div style={{fontSize:'9px',color:'#666'}}>횡보 기간</div>
                     <div style={{fontSize:'12px',fontWeight:700,color:'#e6edf3'}}>{stock.v[3]}주</div>
+                    <div style={{fontSize:'8px',color:'#484f58'}}>수축 진행 중인 기간</div>
                   </div>
                   <div style={{padding:'4px',background:'#0d0d1a',borderRadius:'4px'}}>
                     <div style={{fontSize:'9px',color:'#666'}}>피봇</div>
                     <div style={{fontSize:'12px',fontWeight:700,color:'#58a6ff',fontFamily:"'JetBrains Mono'"}}>{fP(vcpPv(stock),stock.k)}</div>
                   </div>
                   <div style={{padding:'4px',background:vcpPx(stock)<=5?'#3fb95015':'#0d0d1a',borderRadius:'4px',border:vcpPx(stock)<=5?'1px solid #3fb95033':'none'}}>
-                    <div style={{fontSize:'9px',color:'#666'}}>근접도</div>
-                    <div style={{fontSize:'12px',fontWeight:700,color:vcpPx(stock)<=5?'#3fb950':vcpPx(stock)<=10?'#d29922':'#8b949e',fontFamily:"'JetBrains Mono'"}}>{vcpPx(stock)}%</div>
+                    <div style={{fontSize:'9px',color:'#666'}}>{vcpPx(stock)<0?'피봇 초과':'피봇까지'}</div>
+                    <div style={{fontSize:'12px',fontWeight:700,color:vcpPx(stock)<=5?'#3fb950':vcpPx(stock)<=10?'#d29922':'#8b949e',fontFamily:"'JetBrains Mono'"}}>{vcpPx(stock)<0?'+'+Math.abs(vcpPx(stock)):vcpPx(stock)}%</div>
+                    <div style={{fontSize:'8px',color:'#484f58'}}>{vcpPx(stock)<=5&&vcpPx(stock)>=0?'진입 임박':vcpPx(stock)<0?'돌파 후':'대기 중'}</div>
                   </div>
                 </div>
                 {stock._vcpDetail?.volDrying && <div style={{marginTop:'6px',fontSize:'10px',color:'#4dabf7',fontWeight:600}}>💧 거래량 수축 동반 — 에너지 응축 확인</div>}
@@ -1621,6 +1623,7 @@ export default function Dashboard(){
             e:a.e||d.e,
             r:[a.r?a.r[0]:d.r[0], a.r?a.r[1]:d.r[1], d.r[2]],
             v:a.v||d.v,
+            _vcpDetail:a.vcpDetail||null,
             _volData:a.volData||null,
             _indicators:a.indicators||null,
             _gate:a.gate||null,
