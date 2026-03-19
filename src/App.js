@@ -2380,13 +2380,12 @@ export default function Dashboard(){
             <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:4,marginTop:4}}>
               {[
                 {label:"KOSPI",val:MKT.kospiPrice,chg:MKT.kospiDayChg},
-                {label:"VIX",val:MKT.vix,chg:null,unit:""},
+                {label:"KOSDAQ",val:MKT.kosdaqPrice,chg:MKT.kosdaqChg},
               ].map(idx=>(
                 <div key={idx.label} style={{background:"#0d111766",borderRadius:5,padding:"3px 6px",textAlign:"center"}}>
                   <div style={{fontSize:8,color:"#484f58",fontWeight:700}}>{idx.label}</div>
-                  <div style={{fontSize:11,fontWeight:800,color:idx.label==="VIX"?(MKT.vix<20?"#3fb950":MKT.vix<25?"#ffd600":MKT.vix<30?"#ff922b":"#f85149"):"#e6edf3",fontFamily:"'JetBrains Mono'"}}>{idx.val?idx.val.toLocaleString():"-"}</div>
+                  <div style={{fontSize:11,fontWeight:800,color:"#e6edf3",fontFamily:"'JetBrains Mono'"}}>{idx.val?idx.val.toLocaleString():"-"}</div>
                   {idx.chg!=null&&<div style={{fontSize:8,color:idx.chg>0?"#3fb950":idx.chg<0?"#f85149":"#8b949e"}}>{(idx.chg>0?"+":"")+idx.chg+"%"}</div>}
-                  {idx.label==="VIX"&&<div style={{fontSize:8,color:"#8b949e"}}>{MKT.vixLevel}</div>}
                 </div>
               ))}
             </div>
