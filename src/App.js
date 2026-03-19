@@ -4577,7 +4577,9 @@ export default function Dashboard(){
       }}/>}
 
       <style>{`
-        *{box-sizing:border-box}
+        *{box-sizing:border-box;margin:0;padding:0}
+        html,body,#__next{background:#06080d!important;width:100%;overflow-x:hidden}
+        body{-webkit-text-size-adjust:100%}
         table tbody tr:hover{background:#161b22!important}
         ::-webkit-scrollbar{width:5px;height:5px}
         ::-webkit-scrollbar-track{background:#0d1117}
