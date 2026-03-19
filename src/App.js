@@ -2331,7 +2331,7 @@ export default function Dashboard(){
         <div style={{display:"grid",gridTemplateColumns:isMobile?"1fr 1fr":"1fr 1fr",gap:6}}>
 
           {/* 🇺🇸 미국 카드 */}
-          <div style={{background:MKT.health?.modeColor+"12",border:"2px solid "+MKT.health?.modeColor+"44",borderRadius:10,padding:"10px 14px",minHeight:110}}>
+          <div style={{background:MKT.health?.modeColor+"12",border:"2px solid "+MKT.health?.modeColor+"44",borderRadius:10,padding:"10px 14px"}}>
             <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:6}}>
               <div style={{display:"flex",alignItems:"center",gap:6}}>
                 <span style={{fontSize:16}}>{MKT.health?.modeIcon}</span>
@@ -2346,23 +2346,23 @@ export default function Dashboard(){
                 <div style={{fontSize:9,fontWeight:700,color:MKT.health?.modeColor}}>허용 {MKT.maxPositionPct}%</div>
               </div>
             </div>
-            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:4,marginTop:4}}>
+            <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:4,marginTop:4}}>
               {[
                 {label:"다우",val:MKT.usIndices?.dji?.price,chg:MKT.usIndices?.dji?.chg},
                 {label:"S&P500",val:MKT.usIndices?.gspc?.price,chg:MKT.usIndices?.gspc?.chg},
                 {label:"나스닥",val:MKT.usIndices?.ixic?.price,chg:MKT.usIndices?.ixic?.chg},
               ].map(idx=>(
-                <div key={idx.label} style={{background:"#0d111766",borderRadius:5,padding:"3px 5px",textAlign:"center",minHeight:42}}>
-                  <div style={{fontSize:8,color:"#484f58",fontWeight:700}}>{idx.label}</div>
-                  <div style={{fontSize:10,fontWeight:800,color:"#e6edf3",fontFamily:"'JetBrains Mono'",minHeight:16}}>{idx.val?idx.val.toLocaleString():"-"}</div>
-                  <div style={{fontSize:8,color:idx.chg>0?"#3fb950":idx.chg<0?"#f85149":"#8b949e",minHeight:12}}>{idx.chg!=null?(idx.chg>0?"+":"")+idx.chg+"%":"-"}</div>
+                <div key={idx.label} style={{background:"#0d111766",borderRadius:5,padding:"3px 4px",textAlign:"center",overflow:"hidden",minWidth:0,width:"100%"}}>
+                  <div style={{fontSize:7,color:"#484f58",fontWeight:700,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{idx.label}</div>
+                  <div style={{fontSize:8,fontWeight:800,color:"#e6edf3",fontFamily:"'JetBrains Mono'",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{idx.val?idx.val.toLocaleString():"-"}</div>
+                  <div style={{fontSize:7,color:idx.chg>0?"#3fb950":idx.chg<0?"#f85149":"#8b949e",whiteSpace:"nowrap"}}>{idx.chg!=null?(idx.chg>0?"+":"")+idx.chg+"%":"-"}</div>
                 </div>
               ))}
             </div>
           </div>
 
           {/* 🇰🇷 한국 카드 */}
-          <div style={{background:(MKT.krHealth?.modeColor||"#484f58")+"12",border:"2px solid "+(MKT.krHealth?.modeColor||"#484f58")+"44",borderRadius:10,padding:"10px 14px",minHeight:110}}>
+          <div style={{background:(MKT.krHealth?.modeColor||"#484f58")+"12",border:"2px solid "+(MKT.krHealth?.modeColor||"#484f58")+"44",borderRadius:10,padding:"10px 14px"}}>
             <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:6}}>
               <div style={{display:"flex",alignItems:"center",gap:6}}>
                 <span style={{fontSize:16}}>{MKT.krHealth?.modeIcon||"⏳"}</span>
@@ -2382,10 +2382,10 @@ export default function Dashboard(){
                 {label:"KOSPI",val:MKT.kospiPrice,chg:MKT.kospiDayChg},
                 {label:"KOSDAQ",val:MKT.kosdaqPrice,chg:MKT.kosdaqChg},
               ].map(idx=>(
-                <div key={idx.label} style={{background:"#0d111766",borderRadius:5,padding:"3px 6px",textAlign:"center",minHeight:42}}>
+                <div key={idx.label} style={{background:"#0d111766",borderRadius:5,padding:"3px 6px",textAlign:"center"}}>
                   <div style={{fontSize:8,color:"#484f58",fontWeight:700}}>{idx.label}</div>
-                  <div style={{fontSize:11,fontWeight:800,color:"#e6edf3",fontFamily:"'JetBrains Mono'",minHeight:16}}>{idx.val?idx.val.toLocaleString():"-"}</div>
-                  <div style={{fontSize:8,color:idx.chg!=null?(idx.chg>0?"#3fb950":idx.chg<0?"#f85149":"#8b949e"):"#8b949e",minHeight:12}}>{idx.chg!=null?(idx.chg>0?"+":"")+idx.chg+"%":"-"}</div>
+                  <div style={{fontSize:11,fontWeight:800,color:"#e6edf3",fontFamily:"'JetBrains Mono'"}}>{idx.val?idx.val.toLocaleString():"-"}</div>
+                  {idx.chg!=null&&<div style={{fontSize:8,color:idx.chg>0?"#3fb950":idx.chg<0?"#f85149":"#8b949e"}}>{(idx.chg>0?"+":"")+idx.chg+"%"}</div>}
                 </div>
               ))}
             </div>
