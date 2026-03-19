@@ -2326,25 +2326,33 @@ export default function Dashboard(){
         </div>}
       </div>
 
-      {/* US/KR 분리 시장 배너 */}
+      {/* 메인 시장 카드 — 미국/한국 2개 */}
       {MKT.loaded && (tab==="main"||tab==="filter") && <div style={{maxWidth:1800,margin:"0 auto",padding:"0 20px 4px"}}>
-        <div style={{display:"grid",gridTemplateColumns:isMobile?"1fr 1fr":"repeat(4,1fr)",gap:6}}>
-          {/* US Risk State + 3대 지수 */}
-          <div style={{background:MKT.health?.modeColor+"12",border:"1px solid "+(MKT.health?.modeColor)+"44",borderRadius:8,padding:"8px 12px"}}>
-            <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:6}}>
-              <span style={{fontSize:18}}>{MKT.health?.modeIcon}</span>
-              <div>
-                <div style={{fontSize:9,color:"#484f58",fontWeight:700}}>🇺🇸 미국 시장</div>
-                <div style={{fontSize:12,fontWeight:800,color:MKT.health?.modeColor}}>{MKT.health?.mode} 모드 · 허용 {MKT.maxPositionPct}%</div>
+        <div style={{display:"grid",gridTemplateColumns:isMobile?"1fr 1fr":"1fr 1fr",gap:6}}>
+
+          {/* 🇺🇸 미국 카드 */}
+          <div style={{background:MKT.health?.modeColor+"12",border:"2px solid "+MKT.health?.modeColor+"44",borderRadius:10,padding:"10px 14px"}}>
+            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:6}}>
+              <div style={{display:"flex",alignItems:"center",gap:6}}>
+                <span style={{fontSize:16}}>{MKT.health?.modeIcon}</span>
+                <div>
+                  <div style={{fontSize:9,color:"#484f58",fontWeight:700}}>🇺🇸 미국 시장</div>
+                  <div style={{fontSize:13,fontWeight:900,color:MKT.health?.modeColor}}>{MKT.health?.mode} 모드</div>
+                </div>
+              </div>
+              <div style={{textAlign:"right"}}>
+                <div style={{fontSize:22,fontWeight:900,color:MKT.health?.modeColor,fontFamily:"'JetBrains Mono'",lineHeight:1}}>{MKT.health?.score}</div>
+                <div style={{fontSize:8,color:"#484f58"}}>/ 100점</div>
+                <div style={{fontSize:9,fontWeight:700,color:MKT.health?.modeColor}}>허용 {MKT.maxPositionPct}%</div>
               </div>
             </div>
-            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:4}}>
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:4,marginTop:4}}>
               {[
                 {label:"다우",val:MKT.usIndices?.dji?.price,chg:MKT.usIndices?.dji?.chg},
                 {label:"S&P500",val:MKT.usIndices?.gspc?.price,chg:MKT.usIndices?.gspc?.chg},
                 {label:"나스닥",val:MKT.usIndices?.ixic?.price,chg:MKT.usIndices?.ixic?.chg},
               ].map(idx=>(
-                <div key={idx.label} style={{background:"#0d111788",borderRadius:5,padding:"3px 5px"}}>
+                <div key={idx.label} style={{background:"#0d111766",borderRadius:5,padding:"3px 5px",textAlign:"center"}}>
                   <div style={{fontSize:8,color:"#484f58",fontWeight:700}}>{idx.label}</div>
                   <div style={{fontSize:10,fontWeight:800,color:"#e6edf3",fontFamily:"'JetBrains Mono'"}}>{idx.val?idx.val.toLocaleString():"-"}</div>
                   <div style={{fontSize:8,color:idx.chg>0?"#3fb950":idx.chg<0?"#f85149":"#8b949e"}}>{idx.chg!=null?(idx.chg>0?"+":"")+idx.chg+"%":"-"}</div>
@@ -2352,55 +2360,42 @@ export default function Dashboard(){
               ))}
             </div>
           </div>
-          {/* SPY + VIX */}
-          <div style={{background:"#161b22",border:"1px solid #21262d",borderRadius:8,padding:"8px 12px"}}>
-            <div style={{fontSize:9,color:"#484f58",fontWeight:700,marginBottom:4}}>🇺🇸 SPY · VIX</div>
-            <div style={{display:"flex",gap:10,alignItems:"flex-end"}}>
-              <div>
-                <div style={{fontSize:9,color:"#484f58"}}>SPY</div>
-                <div style={{fontSize:13,fontWeight:800,color:"#e6edf3",fontFamily:"'JetBrains Mono'"}}>${MKT.spyPrice||"-"}</div>
-                <div style={{fontSize:8,color:MKT.spy200==="위"?"#3fb950":"#f85149"}}>200MA {MKT.spy200} · 12M {MKT.spy12m>0?"+":""}{MKT.spy12m}%</div>
+
+          {/* 🇰🇷 한국 카드 */}
+          <div style={{background:(MKT.krHealth?.modeColor||"#484f58")+"12",border:"2px solid "+(MKT.krHealth?.modeColor||"#484f58")+"44",borderRadius:10,padding:"10px 14px"}}>
+            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:6}}>
+              <div style={{display:"flex",alignItems:"center",gap:6}}>
+                <span style={{fontSize:16}}>{MKT.krHealth?.modeIcon||"⏳"}</span>
+                <div>
+                  <div style={{fontSize:9,color:"#484f58",fontWeight:700}}>🇰🇷 한국 시장</div>
+                  <div style={{fontSize:13,fontWeight:900,color:MKT.krHealth?.modeColor||"#484f58"}}>{MKT.krHealth?.mode||"조회전"} 모드</div>
+                </div>
               </div>
-              <div style={{borderLeft:"1px solid #21262d",paddingLeft:10}}>
-                <div style={{fontSize:9,color:"#484f58"}}>VIX</div>
-                <div style={{fontSize:13,fontWeight:800,color:MKT.vix<20?"#3fb950":MKT.vix<25?"#ffd600":MKT.vix<30?"#ff922b":"#f85149",fontFamily:"'JetBrains Mono'"}}>{MKT.vix||"-"}</div>
-                <div style={{fontSize:8,color:"#8b949e"}}>{MKT.vixLevel}</div>
-              </div>
-            </div>
-          </div>
-          {/* KR Risk State + KOSPI/KOSDAQ */}
-          <div style={{background:(MKT.krHealth?.modeColor||"#484f58")+"12",border:"1px solid "+((MKT.krHealth?.modeColor)||"#484f58")+"44",borderRadius:8,padding:"8px 12px"}}>
-            <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:6}}>
-              <span style={{fontSize:18}}>{MKT.krHealth?.modeIcon||"⏳"}</span>
-              <div>
-                <div style={{fontSize:9,color:"#484f58",fontWeight:700}}>🇰🇷 한국 시장</div>
-                <div style={{fontSize:12,fontWeight:800,color:MKT.krHealth?.modeColor||"#484f58"}}>{MKT.krHealth?.mode||"조회전"} 모드 · 허용 {MKT.krMaxPositionPct||100}%</div>
+              <div style={{textAlign:"right"}}>
+                <div style={{fontSize:22,fontWeight:900,color:MKT.krHealth?.modeColor||"#484f58",fontFamily:"'JetBrains Mono'",lineHeight:1}}>{MKT.krHealth?.score||"-"}</div>
+                <div style={{fontSize:8,color:"#484f58"}}>/ 100점</div>
+                <div style={{fontSize:9,fontWeight:700,color:MKT.krHealth?.modeColor||"#484f58"}}>허용 {MKT.krMaxPositionPct||"-"}%</div>
               </div>
             </div>
-            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:4}}>
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:4,marginTop:4}}>
               {[
-                {label:"KOSPI",val:MKT.kospiPrice,chg:MKT.kospiDayChg??0},
-                {label:"KOSDAQ",val:MKT.kosdaqPrice,chg:MKT.kosdaqChg},
+                {label:"KOSPI",val:MKT.kospiPrice,chg:MKT.kospiDayChg},
+                {label:"VIX",val:MKT.vix,chg:null,unit:""},
               ].map(idx=>(
-                <div key={idx.label} style={{background:"#0d111788",borderRadius:5,padding:"3px 6px"}}>
+                <div key={idx.label} style={{background:"#0d111766",borderRadius:5,padding:"3px 6px",textAlign:"center"}}>
                   <div style={{fontSize:8,color:"#484f58",fontWeight:700}}>{idx.label}</div>
-                  <div style={{fontSize:11,fontWeight:800,color:"#e6edf3",fontFamily:"'JetBrains Mono'"}}>{idx.val?idx.val.toLocaleString():"-"}</div>
-                  <div style={{fontSize:8,color:idx.chg>0?"#3fb950":idx.chg<0?"#f85149":"#8b949e"}}>{idx.chg!=null?(idx.chg>0?"+":"")+idx.chg+"%":"-"}</div>
+                  <div style={{fontSize:11,fontWeight:800,color:idx.label==="VIX"?(MKT.vix<20?"#3fb950":MKT.vix<25?"#ffd600":MKT.vix<30?"#ff922b":"#f85149"):"#e6edf3",fontFamily:"'JetBrains Mono'"}}>{idx.val?idx.val.toLocaleString():"-"}</div>
+                  {idx.chg!=null&&<div style={{fontSize:8,color:idx.chg>0?"#3fb950":idx.chg<0?"#f85149":"#8b949e"}}>{(idx.chg>0?"+":"")+idx.chg+"%"}</div>}
+                  {idx.label==="VIX"&&<div style={{fontSize:8,color:"#8b949e"}}>{MKT.vixLevel}</div>}
                 </div>
               ))}
             </div>
           </div>
-          {/* 심리/공포 */}
-          <div style={{background:"#161b22",border:"1px solid #21262d",borderRadius:8,padding:"8px 12px"}}>
-            <div style={{fontSize:9,color:"#484f58",fontWeight:700,marginBottom:4}}>📊 공포지수</div>
-            <div style={{fontSize:9,color:"#484f58",marginBottom:2}}>VIX</div>
-            <div style={{fontSize:18,fontWeight:900,color:MKT.vix<20?"#3fb950":MKT.vix<25?"#ffd600":MKT.vix<30?"#ff922b":"#f85149",fontFamily:"'JetBrains Mono'"}}>{MKT.vix||"-"}</div>
-            <div style={{fontSize:9,color:"#8b949e"}}>{MKT.vixLevel}</div>
-          </div>
+
         </div>
       </div>}
 
-      {showLog && <div style={{maxWidth:1800,margin:"0 auto",padding:"0 20px 4px"}}><div style={{background:"#0d1117",border:"1px solid #21262d",borderRadius:6,padding:"6px 10px",maxHeight:100,overflowY:"auto",fontFamily:"'JetBrains Mono'",fontSize:12}}>{logs.map((l,i)=><div key={i} style={{padding:"1px 0"}}><span style={{color:"#484f58",marginRight:4}}>{l.ts}</span><span style={{color:l.c==="ok"?"#3fb950":l.c==="er"?"#f85149":"#58a6ff"}}>{l.msg}</span></div>)}</div></div>}
+            {showLog && <div style={{maxWidth:1800,margin:"0 auto",padding:"0 20px 4px"}}><div style={{background:"#0d1117",border:"1px solid #21262d",borderRadius:6,padding:"6px 10px",maxHeight:100,overflowY:"auto",fontFamily:"'JetBrains Mono'",fontSize:12}}>{logs.map((l,i)=><div key={i} style={{padding:"1px 0"}}><span style={{color:"#484f58",marginRight:4}}>{l.ts}</span><span style={{color:l.c==="ok"?"#3fb950":l.c==="er"?"#f85149":"#58a6ff"}}>{l.msg}</span></div>)}</div></div>}
 
       {/* Tab Nav */}
       <div className="tab-nav" style={{maxWidth:1800,margin:"6px auto",padding:"0 20px"}}>
