@@ -196,7 +196,7 @@ export default async function handler(req, res) {
     await sleep(500);
 
     /* ── 6. 섹터 ETF 상대강도 (3M 수익률 기준) ── */
-    const sectorETFs = ["XLK","XLC","XLI","XLY","XLV","XLU","XLE","XLF","XLB","XLP","XLRE"];
+    const sectorETFs = ["XLK","XLC","XLI","XLY","XLV","XLU","XLE","XLF","XLB","XLP","XLRE","SOXX","XBI","XHB","GDX"];
     const sectorResults = [];
     
     // 배치 처리 (5개씩)
@@ -234,6 +234,10 @@ export default async function handler(req, res) {
       { sym: "091230.KS", name: "산업기계" },
       { sym: "227540.KS", name: "에너지화학" },
       { sym: "305720.KS", name: "2차전지" },
+      { sym: "091180.KS", name: "자동차" },
+      { sym: "244580.KS", name: "바이오" },
+      { sym: "091170.KS", name: "IT" },
+      { sym: "228800.KS", name: "K-뷰티" },
     ];
     const krSectorResults = [];
     for (let i = 0; i < krSectorETFs.length; i += 4) {

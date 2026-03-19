@@ -2353,8 +2353,8 @@ export default function Dashboard(){
                 {label:"나스닥",val:MKT.usIndices?.ixic?.price,chg:MKT.usIndices?.ixic?.chg},
               ].map(idx=>(
                 <div key={idx.label} style={{background:"#0d111766",borderRadius:5,padding:"3px 5px",textAlign:"center"}}>
-                  <div style={{fontSize:11,color:"#e6edf3",fontWeight:700}}>{idx.label}</div>
-                  <div style={{fontSize:10,fontWeight:800,color:"#e6edf3",fontFamily:"'JetBrains Mono'"}}>{idx.val?Math.floor(idx.val).toLocaleString():"-"}</div>
+                  <div style={{fontSize:8,color:"#484f58",fontWeight:700}}>{idx.label}</div>
+                  <div style={{fontSize:10,fontWeight:800,color:"#e6edf3",fontFamily:"'JetBrains Mono'"}}>{idx.val?idx.val.toLocaleString():"-"}</div>
                   <div style={{fontSize:8,color:idx.chg>0?"#3fb950":idx.chg<0?"#f85149":"#8b949e"}}>{idx.chg!=null?(idx.chg>0?"+":"")+idx.chg+"%":"-"}</div>
                 </div>
               ))}
@@ -2383,8 +2383,8 @@ export default function Dashboard(){
                 {label:"KOSDAQ",val:MKT.kosdaqPrice,chg:MKT.kosdaqChg},
               ].map(idx=>(
                 <div key={idx.label} style={{background:"#0d111766",borderRadius:5,padding:"3px 6px",textAlign:"center"}}>
-                  <div style={{fontSize:11,color:"#e6edf3",fontWeight:700}}>{idx.label}</div>
-                  <div style={{fontSize:11,fontWeight:800,color:"#e6edf3",fontFamily:"'JetBrains Mono'"}}>{idx.val?Math.floor(idx.val).toLocaleString():"-"}</div>
+                  <div style={{fontSize:8,color:"#484f58",fontWeight:700}}>{idx.label}</div>
+                  <div style={{fontSize:11,fontWeight:800,color:"#e6edf3",fontFamily:"'JetBrains Mono'"}}>{idx.val?idx.val.toLocaleString():"-"}</div>
                   {idx.chg!=null&&<div style={{fontSize:8,color:idx.chg>0?"#3fb950":idx.chg<0?"#f85149":"#8b949e"}}>{(idx.chg>0?"+":"")+idx.chg+"%"}</div>}
                 </div>
               ))}
@@ -2571,7 +2571,7 @@ export default function Dashboard(){
 
             {/* ── 섹터 상대모멘텀 히트맵 (미국 + 한국 병렬) ── */}
             {(()=>{
-              const secNm={XLK:"기술",XLC:"커뮤니케이션",XLI:"산업재",XLY:"임의소비",XLV:"헬스케어",XLU:"유틸리티",XLE:"에너지",XLF:"금융",XLB:"소재",XLP:"필수소비",XLRE:"부동산"};
+              const secNm={XLK:"기술",XLC:"커뮤니케이션",XLI:"산업재",XLY:"임의소비",XLV:"헬스케어",XLU:"유틸리티",XLE:"에너지",XLF:"금융",XLB:"소재",XLP:"필수소비",XLRE:"부동산",SOXX:"반도체",XBI:"바이오테크",XHB:"주택건설",GDX:"금광주"};
               const medal=i=>i===0?"🥇":i===1?"🥈":i===2?"🥉":"";
               const vColor=v=>v>5?"#3fb950":v>0?"#57c479":v>-5?"#f85149":"#e03030";
               const vBg=v=>v>5?"#3fb95018":v>0?"#3fb95008":v>-5?"#f8514910":"#f8514920";
