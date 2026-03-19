@@ -571,12 +571,33 @@ function genAnalysis(d) {
   }
 
   /* ── 최종 결론 ── */
-  if (v.stars >= 5) lines.push('\n🔥 결론: 종목과 자리 모두 강합니다. ' + d.q[5] + '% 비중, 진입가 ' + fP(d.q[0] || d.p, d.k) + ' 부근. 손절 ' + fP(d.q[1] || (d.p * 0.93), d.k) + ' (-7%)');
-  else if (v.stars >= 4 && execTag === 'BUY ON BREAKOUT') lines.push('\n💡 결론: 종목은 좋고, 자리만 기다리면 됩니다. 피봇 돌파 확인 후 진입이 더 유리합니다.');
-  else if (v.stars >= 4) lines.push('\n💡 결론: 소량 먼저 사고, 돌파 확인 시 추가매수.');
-  else if (v.stars >= 3) lines.push('\n👀 결론: 워치리스트에 넣고 조건이 좋아지면 다시 보세요.');
-  else if (v.stars >= 2) lines.push('\n⏸ 결론: 아직 때가 아닙니다. 추세가 돌아설 때까지 기다리세요.');
-  else lines.push('\n🚫 결론: 진입하지 마세요. 지금은 리스크가 기대수익을 초과합니다.');
+  /* ── 결론 (피봇 기반 실시간 계산) ── */
+  const pivot = d.v[4] || 0;
+  const curP  = d.p || 0;
+  const wt    = d.q[5] || '-';
+  const stopP = pivot > 0 ? fP(d.k ? Math.round(pivot*0.93) : +(pivot*0.93).toFixed(2), d.k) : '-';
+  const alreadyOver = pivot > 0 && curP > pivot * 1.02;
+  const overPct = pivot > 0 ? +((curP/pivot-1)*100).toFixed(1) : 0;
+
+  if (v.stars >= 5) {
+    if (alreadyOver && overPct <= 10) {
+      lines.push('\n🔥 결론: 종목 최상. 피봇(' + fP(pivot,d.k) + ') ' + overPct + '% 초과 — 눌림목(' + fP(d.k?Math.round(pivot*1.02):+(pivot*1.02).toFixed(2),d.k) + ') 대기 또는 소량 추격. 손절 ' + stopP + ' (-7%)');
+    } else if (alreadyOver) {
+      lines.push('\n⚠️ 결론: 종목 최상이나 피봇 ' + overPct + '% 초과 — 추격 위험. 눌림목 재진입 기다리세요. 손절 ' + stopP);
+    } else {
+      lines.push('\n🔥 결론: 종목과 자리 모두 강합니다. ' + wt + '% 비중, 피봇 ' + fP(pivot,d.k) + ' 돌파 시 진입. 손절 ' + stopP + ' (-7%)');
+    }
+  } else if (v.stars >= 4 && execTag === 'BUY ON BREAKOUT') {
+    lines.push('\n💡 결론: 종목은 좋고 자리만 기다리면 됩니다. 피봇 ' + (pivot>0?fP(pivot,d.k):'') + ' 돌파 확인 후 진입.');
+  } else if (v.stars >= 4) {
+    lines.push('\n💡 결론: 조건 양호. 피봇 ' + (pivot>0?fP(pivot,d.k):'확인') + ' 돌파 시 소량 진입 후 확인 매수.');
+  } else if (v.stars >= 3) {
+    lines.push('\n👀 결론: 워치리스트에 넣고 조건이 좋아지면 다시 보세요.');
+  } else if (v.stars >= 2) {
+    lines.push('\n⏸ 결론: 아직 때가 아닙니다. 추세가 돌아설 때까지 기다리세요.');
+  } else {
+    lines.push('\n🚫 결론: 진입하지 마세요. 리스크가 기대수익을 초과합니다.');
+  }
 
   return lines;
 }
@@ -1142,47 +1163,92 @@ function StockDetailModal({ stock, onClose, isWatched, onToggleWatch, gradeHisto
           </div>;
           })()}
 
-          {/* 진입전략 — 현재가 기반 실시간 계산 */}
-          {(stock.q[0] > 0 || vcpPv(stock) || stock.p) && (()=>{
-            /* 진입가: VCP 피봇 > q[0] > 현재가 순으로 우선 */
-            const curP = stock.p || 0;
-            const pivot = vcpPv(stock) || 0;
-            const qEntry = stock.q[0] || 0;
-            /* 피봇이 현재가보다 높으면 피봇 대기, 낮으면 현재가 기준 */
-            const entryBase = qEntry > 0 ? qEntry : (pivot > 0 ? pivot : curP);
-            /* 손절/목표는 항상 entryBase 기준 실시간 계산 */
-            const stopP  = stock.k ? Math.round(entryBase*0.93) : +(entryBase*0.93).toFixed(2);
-            const tgt1   = stock.k ? Math.round(entryBase*1.15) : +(entryBase*1.15).toFixed(2);
-            const tgt2   = stock.k ? Math.round(entryBase*1.30) : +(entryBase*1.30).toFixed(2);
-            const rr     = stock.q[4] || 2.1;
-            const wt     = stock.q[5] || '-';
-            /* 현재가 vs 진입가 거리 */
-            const distPct = entryBase>0 ? +((curP-entryBase)/entryBase*100).toFixed(1) : 0;
-            const distColor = distPct>0?'#f85149':distPct<-3?'#3fb950':'#ffd43b';
+          {/* 진입전략 — 3가지 진입 시나리오 */}
+          {(vcpPv(stock) > 0 || stock.q[0] > 0 || stock.p > 0) && (()=>{
+            const curP  = stock.p || 0;
+            const pivot = vcpPv(stock) || stock.q[0] || curP;
+            const isKR  = stock.k;
+            const fmt   = (v) => isKR ? Math.round(v) : +(v).toFixed(2);
+            const overPct = pivot > 0 ? +((curP/pivot-1)*100).toFixed(1) : 0;
+            const isPivotOver = curP > pivot * 1.02;
+            const isOverextended = overPct > 10;
+            const entry1 = fmt(pivot);
+            const entry2 = fmt(pivot * 1.02);
+            const entry3 = isPivotOver ? fmt(curP) : null;
+            const mkStop = (e) => fP(isKR?Math.round(e*0.93):+(e*0.93).toFixed(2), isKR);
+            const mkTgt1 = (e) => fP(isKR?Math.round(e*1.15):+(e*1.15).toFixed(2), isKR);
+            const mkTgt2 = (e) => fP(isKR?Math.round(e*1.30):+(e*1.30).toFixed(2), isKR);
+            const wt = stock.q[5] || '-';
+            const proximityTxt = isPivotOver
+              ? '피봇 ' + overPct + '% 초과 (돌파 후)'
+              : '피봇까지 ' + Math.abs(overPct) + '% 남음';
+            const proximityColor = isPivotOver ? (isOverextended?'#f85149':'#ffd43b') : '#3fb950';
             return <div style={{background:'#080818',borderRadius:'10px',padding:'14px',marginBottom:'12px'}}>
               <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:10}}>
                 <div style={{fontSize:'12px',fontWeight:700,color:'#58a6ff'}}>◈ 진입 전략</div>
-                <div style={{fontSize:10,color:distColor}}>현재가 {distPct>0?'+':''}{distPct}% vs 진입가</div>
+                <div style={{fontSize:10,fontWeight:600,color:proximityColor}}>{proximityTxt}</div>
               </div>
-              <div className="strategy-grid" style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:'8px'}}>
-                {[
-                  ['진입가',fP(entryBase,stock.k),'#58a6ff'],
-                  ['손절(-7%)',fP(stopP,stock.k),'#f85149'],
-                  ['1차목표(+15%)',fP(tgt1,stock.k),'#3fb950'],
-                  ['2차목표(+30%)',fP(tgt2,stock.k),'#3fb950'],
-                  ['손익비',rr+':1','#bc8cff'],
-                  ['추천비중',wt+'%','#ff922b'],
-                ].map(([l,v,c])=>(
-                  <div key={l} style={{textAlign:'center',padding:'6px',background:'#0d0d1a',borderRadius:'6px'}}>
-                    <div style={{fontSize:'10px',color:'#666'}}>{l}</div>
-                    <div style={{fontSize:'14px',fontWeight:700,color:c,fontFamily:"'JetBrains Mono'"}}>{v}</div>
+              <div style={{display:'flex',flexDirection:'column',gap:8}}>
+                <div style={{background:'#0d0d1a',borderRadius:8,padding:'8px 10px',border:'1px solid #58a6ff22'}}>
+                  <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:5}}>
+                    <div style={{fontSize:11,fontWeight:700,color:'#58a6ff'}}>① 피봇 돌파 진입</div>
+                    <div style={{fontSize:10,color:'#484f58'}}>{isPivotOver?'✅ 돌파 완료':'⏳ 대기 중'}</div>
                   </div>
-                ))}
+                  <div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:4}}>
+                    {[['진입가',fP(entry1,isKR),'#58a6ff'],['손절(-7%)',mkStop(entry1),'#f85149'],['1차(+15%)',mkTgt1(entry1),'#3fb950'],['2차(+30%)',mkTgt2(entry1),'#3fb950']].map(([l,v,c])=>(
+                      <div key={l} style={{textAlign:'center',padding:'4px',background:'#080818',borderRadius:4}}>
+                        <div style={{fontSize:9,color:'#484f58'}}>{l}</div>
+                        <div style={{fontSize:11,fontWeight:700,color:c,fontFamily:"'JetBrains Mono'"}}>{v}</div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+                <div style={{background:'#0d0d1a',borderRadius:8,padding:'8px 10px',border:'1px solid #ffd43b22'}}>
+                  <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:5}}>
+                    <div style={{fontSize:11,fontWeight:700,color:'#ffd43b'}}>② 눌림목 진입</div>
+                    <div style={{fontSize:10,color:'#484f58'}}>피봇 직상단 (+2%)</div>
+                  </div>
+                  <div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:4}}>
+                    {[['진입가',fP(entry2,isKR),'#ffd43b'],['손절(-7%)',mkStop(entry2),'#f85149'],['1차(+15%)',mkTgt1(entry2),'#3fb950'],['2차(+30%)',mkTgt2(entry2),'#3fb950']].map(([l,v,c])=>(
+                      <div key={l} style={{textAlign:'center',padding:'4px',background:'#080818',borderRadius:4}}>
+                        <div style={{fontSize:9,color:'#484f58'}}>{l}</div>
+                        <div style={{fontSize:11,fontWeight:700,color:c,fontFamily:"'JetBrains Mono'"}}>{v}</div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+                {entry3 && <div style={{background:'#0d0d1a',borderRadius:8,padding:'8px 10px',border:'1px solid '+(isOverextended?'#f8514922':'#ff922b22')}}>
+                  <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:5}}>
+                    <div style={{fontSize:11,fontWeight:700,color:isOverextended?'#f85149':'#ff922b'}}>③ 추격 진입 (현재가)</div>
+                    <div style={{fontSize:10,color:isOverextended?'#f85149':'#484f58'}}>{isOverextended?'⚠️ +10% 초과 — 추격 위험':'피봇 +'+overPct+'%'}</div>
+                  </div>
+                  {isOverextended
+                    ? <div style={{fontSize:10,color:'#f85149',padding:'2px 0'}}>피봇 대비 10% 이상 상승 — 지금 진입은 리스크 높음. 눌림목 기다리세요.</div>
+                    : <div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:4}}>
+                        {[['진입가',fP(entry3,isKR),'#ff922b'],['손절(-7%)',mkStop(entry3),'#f85149'],['1차(+15%)',mkTgt1(entry3),'#3fb950'],['2차(+30%)',mkTgt2(entry3),'#3fb950']].map(([l,v,c])=>(
+                          <div key={l} style={{textAlign:'center',padding:'4px',background:'#080818',borderRadius:4}}>
+                            <div style={{fontSize:9,color:'#484f58'}}>{l}</div>
+                            <div style={{fontSize:11,fontWeight:700,color:c,fontFamily:"'JetBrains Mono'"}}>{v}</div>
+                          </div>
+                        ))}
+                      </div>
+                  }
+                </div>}
+                <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:6}}>
+                  <div style={{textAlign:'center',padding:'6px',background:'#0d0d1a',borderRadius:6}}>
+                    <div style={{fontSize:9,color:'#484f58'}}>추천 비중</div>
+                    <div style={{fontSize:14,fontWeight:700,color:'#ff922b'}}>{wt}%</div>
+                  </div>
+                  <div style={{textAlign:'center',padding:'6px',background:'#0d0d1a',borderRadius:6}}>
+                    <div style={{fontSize:9,color:'#484f58'}}>손익비</div>
+                    <div style={{fontSize:14,fontWeight:700,color:'#bc8cff'}}>{stock.q[4]||2.1}:1</div>
+                  </div>
+                </div>
               </div>
             </div>;
           })()}
 
-          {/* 등급 전환 히스토리 */}
+                    {/* 등급 전환 히스토리 */}
           {(()=>{
             const h=gradeHistory&&gradeHistory[stock.t];
             if(!h||!h.length)return null;
@@ -1355,12 +1421,45 @@ function StockDetailModal({ stock, onClose, isWatched, onToggleWatch, gradeHisto
               </div>;
             })()}
 
-            {/* 텍스트 분석 */}
-            {analysis.map((line,i)=>(
-              <div key={i} style={{fontSize:'13px',color:'#ccc',lineHeight:1.8,padding:'4px 0',borderBottom:i<analysis.length-1?'1px solid #1a1a2e':'none'}}>
-                {line}
-              </div>
-            ))}
+            {/* 텍스트 분석 — 섹션별 구조화 */}
+            {(()=>{
+              /* 결론 줄 분리 */
+              const conclusionLine = analysis.find(l=>l.includes('결론:'));
+              const bodyLines = analysis.filter(l=>!l.includes('결론:') && l.trim());
+              /* 섹션 그룹핑: 이모지 기준 */
+              const sections = [
+                {key:'종목', lines: bodyLines.filter(l=>l.startsWith('💬')||l.startsWith('🏷️')||l.startsWith('   └')||l.startsWith('📊')||l.startsWith('🚧')||l.startsWith('⚠️')), color:'#8b949e'},
+                {key:'추세·모멘텀', lines: bodyLines.filter(l=>l.startsWith('📈')||l.startsWith('📉')||l.startsWith('🚀')||l.startsWith('➡️')||l.startsWith('🔻')), color:'#58a6ff'},
+                {key:'타이밍·거래량', lines: bodyLines.filter(l=>l.startsWith('⏰')||l.startsWith('⏳')||l.startsWith('❌')||l.startsWith('💰')||l.startsWith('🚨')||l.startsWith('⚡')||l.startsWith('📉')||l.startsWith('🤫')), color:'#ffd43b'},
+                {key:'실적', lines: bodyLines.filter(l=>l.startsWith('✅')||l.startsWith('⚠️ 실적')), color:'#3fb950'},
+              ];
+              return <>
+                {/* 본문 섹션 */}
+                {sections.map(sec=>sec.lines.length>0&&(
+                  <div key={sec.key} style={{marginBottom:8}}>
+                    {sec.lines.map((line,i)=>(
+                      <div key={i} style={{fontSize:12,color:line.startsWith('   └')?'#8b949e':'#c9d1d9',lineHeight:1.7,padding:'2px 0',paddingLeft:line.startsWith('   └')?12:0}}>
+                        {line.trim()}
+                      </div>
+                    ))}
+                  </div>
+                ))}
+                {/* 결론 박스 — 강조 */}
+                {conclusionLine && <div style={{marginTop:10,padding:'10px 14px',borderRadius:8,
+                  background: conclusionLine.includes('🔥')?'#ff6b3515':
+                              conclusionLine.includes('💡')?'#58a6ff15':
+                              conclusionLine.includes('⚠️')?'#ffd43b15':
+                              conclusionLine.includes('🚫')?'#f8514915':'#21262d',
+                  border:'1px solid '+(
+                    conclusionLine.includes('🔥')?'#ff6b3544':
+                    conclusionLine.includes('💡')?'#58a6ff44':
+                    conclusionLine.includes('⚠️')?'#ffd43b44':
+                    conclusionLine.includes('🚫')?'#f8514944':'#30363d'
+                  )}}>
+                  <div style={{fontSize:13,fontWeight:700,color:'#e6edf3',lineHeight:1.7}}>{conclusionLine.trim()}</div>
+                </div>}
+              </>;
+            })()}
           </div>
         </div>
 
