@@ -2296,17 +2296,23 @@ export default function Dashboard(){
 
       {/* RT Engine Bar */}
       <div style={{maxWidth:1800,margin:"6px auto",padding:"0 20px"}}>
-        <div className="rt-bar" style={{background:"#0d1117",border:"1px solid #21262d",borderRadius:10,padding:isMobile?"6px 10px":"10px 14px",display:"flex",gap:isMobile?6:10,alignItems:"center",flexWrap:"wrap"}}>
-          <div style={{display:"flex",alignItems:"center",gap:4}}><Dot s={rt}/>{!isMobile&&<span style={{fontSize:14,fontWeight:700}}>{rt==="idle"?"대기":rt==="fetching"?"조회중...":rt==="live"?"✅ 완료":"⚠️ 실패"}</span>}</div>
-          <div style={{flex:1,minWidth:40,maxWidth:isMobile?80:200}}><div style={{height:4,background:"#161b22",borderRadius:3,overflow:"hidden"}}><div style={{height:"100%",background:"linear-gradient(90deg,#58a6ff,#bc8cff)",borderRadius:3,width:prog+"%",transition:"width .3s"}}/></div></div>
-          <div style={{display:"flex",gap:isMobile?6:12,fontSize:isMobile?10:12,color:"#484f58",fontFamily:"'JetBrains Mono'"}}><span>{stats.time}</span><span><b style={{color:"#3fb950"}}>{stats.ok}</b>{"/"}{D.length}</span><span>{stats.ms}</span></div>
-          <div style={{display:"flex",gap:4,marginLeft:"auto",alignItems:"center"}}>
-            <button onClick={doFetch} disabled={rt==="fetching"} style={{padding:isMobile?"5px 10px":"6px 14px",borderRadius:6,border:"1px solid #bc8cff",cursor:rt==="fetching"?"wait":"pointer",background:"linear-gradient(135deg,#1a3a5c,#2d1b69)",color:"#bc8cff",fontSize:isMobile?12:14,fontWeight:700}}>{isMobile?"⚡":"⚡ 가격"}</button>
-            <button onClick={doAnalysis} disabled={anaRt==="fetching"} style={{padding:isMobile?"5px 10px":"6px 14px",borderRadius:6,border:"1px solid #ff922b",cursor:anaRt==="fetching"?"wait":"pointer",background:anaRt==="fetching"?"#ff922b20":"linear-gradient(135deg,#2d1b00,#3d2b10)",color:"#ff922b",fontSize:isMobile?12:14,fontWeight:700}}>{anaRt==="fetching"?(isMobile?anaProg+"%":"🔬 "+anaProg+"%"):(isMobile?"🔬":"🔬 분석")}</button>
-            <button onClick={toggleAuto} style={{padding:isMobile?"5px 8px":"6px 12px",borderRadius:6,fontSize:isMobile?12:14,fontWeight:600,cursor:"pointer",border:"1px solid "+(autoOn?"#3fb950":"#21262d"),background:autoOn?"rgba(63,185,80,.12)":"#161b22",color:autoOn?"#3fb950":"#8b949e"}}>{autoOn?"⏹":"🔄"}</button>
+        <div className="rt-bar" style={{background:"#0d1117",border:"1px solid #21262d",borderRadius:10,padding:isMobile?"6px 10px":"10px 14px",display:"flex",gap:isMobile?6:10,alignItems:"center",flexWrap:"nowrap"}}>
+          {/* 상태 dot + 텍스트 */}
+          <div style={{display:"flex",alignItems:"center",gap:4,flexShrink:0}}><Dot s={rt}/>{!isMobile&&<span style={{fontSize:14,fontWeight:700}}>{rt==="idle"?"대기":rt==="fetching"?"조회중...":rt==="live"?"✅ 완료":"⚠️ 실패"}</span>}</div>
+          {/* 진행바 */}
+          <div style={{flex:1,minWidth:isMobile?30:40,maxWidth:isMobile?60:200,flexShrink:1}}><div style={{height:4,background:"#161b22",borderRadius:3,overflow:"hidden"}}><div style={{height:"100%",background:"linear-gradient(90deg,#58a6ff,#bc8cff)",borderRadius:3,width:prog+"%",transition:"width .3s"}}/></div></div>
+          {/* stats — PC만 표시 */}
+          {!isMobile&&<div style={{display:"flex",gap:12,fontSize:12,color:"#484f58",fontFamily:"'JetBrains Mono'",flexShrink:0}}><span>{stats.time}</span><span><b style={{color:"#3fb950"}}>{stats.ok}</b>{"/"}{D.length}</span><span>{stats.ms}</span></div>}
+          {/* 모바일: 완료 시각만 표시 */}
+          {isMobile&&stats.time!=="-"&&<span style={{fontSize:10,color:"#484f58",fontFamily:"'JetBrains Mono'",flexShrink:0}}>{stats.time}</span>}
+          {/* 버튼 그룹 */}
+          <div style={{display:"flex",gap:4,marginLeft:"auto",alignItems:"center",flexShrink:0}}>
+            <button onClick={doFetch} disabled={rt==="fetching"} style={{padding:isMobile?"5px 10px":"6px 14px",borderRadius:6,border:"1px solid #bc8cff",cursor:rt==="fetching"?"wait":"pointer",background:"linear-gradient(135deg,#1a3a5c,#2d1b69)",color:"#bc8cff",fontSize:isMobile?12:14,fontWeight:700,whiteSpace:"nowrap"}}>{isMobile?"⚡":"⚡ 가격"}</button>
+            <button onClick={doAnalysis} disabled={anaRt==="fetching"} style={{padding:isMobile?"5px 10px":"6px 14px",borderRadius:6,border:"1px solid #ff922b",cursor:anaRt==="fetching"?"wait":"pointer",background:anaRt==="fetching"?"#ff922b20":"linear-gradient(135deg,#2d1b00,#3d2b10)",color:"#ff922b",fontSize:isMobile?12:14,fontWeight:700,whiteSpace:"nowrap"}}>{anaRt==="fetching"?(isMobile?anaProg+"%":"🔬 "+anaProg+"%"):(isMobile?"🔬":"🔬 분석")}</button>
+            <button onClick={toggleAuto} style={{padding:isMobile?"5px 8px":"6px 12px",borderRadius:6,fontSize:isMobile?12:14,fontWeight:600,cursor:"pointer",border:"1px solid "+(autoOn?"#3fb950":"#21262d"),background:autoOn?"rgba(63,185,80,.12)":"#161b22",color:autoOn?"#3fb950":"#8b949e",whiteSpace:"nowrap"}}>{autoOn?"⏹":"🔄"}</button>
             {!isMobile&&<><input type="number" value={intv} min={1} max={60} onChange={e=>setIntv(+e.target.value||3)} style={{width:40,padding:"4px 5px",borderRadius:4,border:"1px solid #21262d",background:"#0d1117",color:"#e6edf3",fontSize:13,fontFamily:"'JetBrains Mono'",textAlign:"center",outline:"none"}}/>
             <span style={{fontSize:12,color:"#484f58"}}>분</span></>}
-            <button onClick={()=>setShowLog(!showLog)} style={{padding:isMobile?"4px 8px":"5px 10px",borderRadius:5,border:"1px solid #21262d",background:"#161b22",color:"#8b949e",cursor:"pointer",fontSize:isMobile?11:13}}>📋</button>
+            <button onClick={()=>setShowLog(!showLog)} style={{padding:isMobile?"4px 8px":"5px 10px",borderRadius:5,border:"1px solid #21262d",background:"#161b22",color:"#8b949e",cursor:"pointer",fontSize:isMobile?11:13,whiteSpace:"nowrap"}}>📋</button>
           </div>
         </div>
         {/* 분석 진행바 */}
