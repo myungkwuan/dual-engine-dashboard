@@ -1142,18 +1142,45 @@ function StockDetailModal({ stock, onClose, isWatched, onToggleWatch, gradeHisto
           </div>;
           })()}
 
-          {/* 진입전략 */}
-          {(stock.q[0] > 0) && <div style={{background:'#080818',borderRadius:'10px',padding:'14px',marginBottom:'12px'}}>
-            <div style={{fontSize:'12px',fontWeight:700,color:'#58a6ff',marginBottom:'10px'}}>◈ 진입 전략</div>
-            <div className="strategy-grid" style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:'8px'}}>
-              {[['진입가',fP(stock.q[0],stock.k),'#58a6ff'],['손절(-7%)',fP(stock.q[1],stock.k),'#f85149'],['1차목표(+15%)',fP(stock.q[2],stock.k),'#3fb950'],['2차목표(+30%)',fP(stock.q[3],stock.k),'#3fb950'],['손익비',stock.q[4]+':1','#bc8cff'],['추천비중',stock.q[5]+'%','#ff922b']].map(([l,v,c])=>(
-                <div key={l} style={{textAlign:'center',padding:'6px',background:'#0d0d1a',borderRadius:'6px'}}>
-                  <div style={{fontSize:'10px',color:'#666'}}>{l}</div>
-                  <div style={{fontSize:'14px',fontWeight:700,color:c,fontFamily:"'JetBrains Mono'"}}>{v}</div>
-                </div>
-              ))}
-            </div>
-          </div>}
+          {/* 진입전략 — 현재가 기반 실시간 계산 */}
+          {(stock.q[0] > 0 || vcpPv(stock) || stock.p) && (()=>{
+            /* 진입가: VCP 피봇 > q[0] > 현재가 순으로 우선 */
+            const curP = stock.p || 0;
+            const pivot = vcpPv(stock) || 0;
+            const qEntry = stock.q[0] || 0;
+            /* 피봇이 현재가보다 높으면 피봇 대기, 낮으면 현재가 기준 */
+            const entryBase = qEntry > 0 ? qEntry : (pivot > 0 ? pivot : curP);
+            /* 손절/목표는 항상 entryBase 기준 실시간 계산 */
+            const stopP  = stock.k ? Math.round(entryBase*0.93) : +(entryBase*0.93).toFixed(2);
+            const tgt1   = stock.k ? Math.round(entryBase*1.15) : +(entryBase*1.15).toFixed(2);
+            const tgt2   = stock.k ? Math.round(entryBase*1.30) : +(entryBase*1.30).toFixed(2);
+            const rr     = stock.q[4] || 2.1;
+            const wt     = stock.q[5] || '-';
+            /* 현재가 vs 진입가 거리 */
+            const distPct = entryBase>0 ? +((curP-entryBase)/entryBase*100).toFixed(1) : 0;
+            const distColor = distPct>0?'#f85149':distPct<-3?'#3fb950':'#ffd43b';
+            return <div style={{background:'#080818',borderRadius:'10px',padding:'14px',marginBottom:'12px'}}>
+              <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:10}}>
+                <div style={{fontSize:'12px',fontWeight:700,color:'#58a6ff'}}>◈ 진입 전략</div>
+                <div style={{fontSize:10,color:distColor}}>현재가 {distPct>0?'+':''}{distPct}% vs 진입가</div>
+              </div>
+              <div className="strategy-grid" style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:'8px'}}>
+                {[
+                  ['진입가',fP(entryBase,stock.k),'#58a6ff'],
+                  ['손절(-7%)',fP(stopP,stock.k),'#f85149'],
+                  ['1차목표(+15%)',fP(tgt1,stock.k),'#3fb950'],
+                  ['2차목표(+30%)',fP(tgt2,stock.k),'#3fb950'],
+                  ['손익비',rr+':1','#bc8cff'],
+                  ['추천비중',wt+'%','#ff922b'],
+                ].map(([l,v,c])=>(
+                  <div key={l} style={{textAlign:'center',padding:'6px',background:'#0d0d1a',borderRadius:'6px'}}>
+                    <div style={{fontSize:'10px',color:'#666'}}>{l}</div>
+                    <div style={{fontSize:'14px',fontWeight:700,color:c,fontFamily:"'JetBrains Mono'"}}>{v}</div>
+                  </div>
+                ))}
+              </div>
+            </div>;
+          })()}
 
           {/* 등급 전환 히스토리 */}
           {(()=>{
