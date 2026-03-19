@@ -779,14 +779,30 @@ function calcRiskPenalty(sepa, mom, vcp) {
 /* ===== v1.5: Execution Tag ===== */
 function calcExecTag(vcp, vol) {
   if (vol && vol.signalType === 'sell') return 'AVOID';
-  const prox = vcp.proximity;
+  const prox = vcp.proximity; // 양수=피봇까지 남은거리, 음수=피봇 초과
   const mature = vcp.maturity || '';
+
+  // 피봇 20% 이상 초과 → 완전 과열, 진입금지
+  if (prox < -20) return 'AVOID';
+
+  // 피봇 10~20% 초과 → 너무 올라있음, 관망
+  if (prox < -10 && prox >= -20) return 'WATCH';
+
+  // 피봇 5~10% 초과 + 돌파 확인 → 눌림목 대기
+  if (prox < -5 && prox >= -10 && mature.includes('돌파')) return 'BUY ON BREAKOUT';
+
+  // 피봇 0~5% 초과 + 돌파 → 즉시 또는 눌림목 매수
+  if (prox < 0 && prox >= -5 && mature.includes('돌파')) return 'BUY ON BREAKOUT';
+
+  // 피봇 0~3% 아래 + 성숙/돌파 → 즉시 매수 가능
   if (prox >= 0 && prox <= 3 && (mature.includes('성숙') || mature.includes('돌파'))) return 'BUY NOW';
   if (prox >= 0 && prox <= 5 && mature === '성숙🔥') return 'BUY NOW';
+
+  // 피봇 3~10% 아래 + 패턴 형성 → 돌파 대기
   if (prox >= 3 && prox <= 10 && (mature.includes('성숙') || mature.includes('형성'))) return 'BUY ON BREAKOUT';
-  if (prox < 0 && prox >= -5 && mature.includes('돌파')) return 'BUY ON BREAKOUT';
-  if (prox < -5 && prox >= -15) return 'WATCH';
-  if (prox < -15) return 'AVOID';
+
+  // 그 외
+  if (prox < -5) return 'WATCH';
   return 'WATCH';
 }
 

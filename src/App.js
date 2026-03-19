@@ -368,7 +368,7 @@ function getVerdict(d) {
   /* ⑥ 거래량 (12점) - 큰손이 사고 있나 팔고 있나?
      범위: -5 ~ +12 (매도신호는 반드시 감점!)
      고점에서 거래량 터지며 하락 = 세력이탈 → 무조건 마이너스 */
-  let volPt = 6; // 기본 중립 6점
+  let volPt = volData ? 6 : 0; // 분석 전=0, 분석 후 중립=6
   if (volData) {
     if (volData.signalType === 'sell' && volData.surgeDay) volPt = -5;     // 고점이탈+급등일 = 세력탈출! 최악
     else if (volData.signalType === 'sell') volPt = -3;                     // 분배경고/급락주의
@@ -461,7 +461,7 @@ function getVerdict(d) {
   else if (totalPt >= 35) { verdict = '\u{1F7E1}관망'; color = '#ffd600'; stars = 2; }
   else { verdict = '\u26D4위험'; color = '#78909c'; stars = 1; }
 
-  return { verdict, color, stars, totalPt, details: { mfGrade, mfScore, sepaLevel, vcpScore, hasFCF, dm, sepaPt, dmPt, vcpPt, mfPt, cfPt, volPt, crossPt, gatePenalty, gateLabel, riskPenalty } };
+  return { verdict, color, stars, totalPt, details: { mfGrade, mfScore, sepaLevel, vcpScore, hasFCF, dm, sepaPt, dmPt, vcpPt, mfPt, cfPt, volPt, crossPt, gatePenalty, gateLabel, riskPenalty, cfAllWeak: !isETF && cfS(d)<=1 && cfM(d)<=1 && cfL(d)<=1 } };
 }
 
 /* ===== AI 분석 텍스트 생성 ===== */
@@ -1016,10 +1016,10 @@ function StockDetailModal({ stock, onClose, isWatched, onToggleWatch, gradeHisto
                   {vcpMt(stock).includes("성숙")?'✅':vcpMt(stock).includes("돌파")?'🚀':vcpMt(stock)==="형성중"?'⏳':'❌'}
                 </div>
                 <div style={{fontSize:'14px',fontWeight:700,color:vcpMt(stock).includes("성숙")?'#00ff88':vcpMt(stock)==="형성중"?'#ffd43b':'#ff6b6b',marginTop:'4px'}}>
-                  {vcpMt(stock)} ({verdict.details.vcpScore}/10)
+                  {vcpMt(stock)} ({verdict.details.vcpPt}/15)
                 </div>
                 <div style={{margin:'8px auto',width:'80%',height:'6px',background:'#1a1a2e',borderRadius:'3px',overflow:'hidden'}}>
-                  <div style={{width:`${(verdict.details.vcpScore/10)*100}%`,height:'100%',background:vcpMt(stock).includes("성숙")?'#00ff88':vcpMt(stock).includes("돌파")?'#3fb950':vcpMt(stock)==="형성중"?'#ffd43b':'#ff6b6b',borderRadius:'3px'}}/>
+                  <div style={{width:`${(verdict.details.vcpPt/15)*100}%`,height:'100%',background:vcpMt(stock).includes("성숙")?'#00ff88':vcpMt(stock).includes("돌파")?'#3fb950':vcpMt(stock)==="형성중"?'#ffd43b':'#ff6b6b',borderRadius:'3px'}}/>
                 </div>
                 <div style={{marginTop:'8px',display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:'4px'}}>
                   {[['T1',stock.v[0]],['T2',stock.v[1]],['T3',stock.v[2]]].map(([l,v])=>(
