@@ -153,7 +153,7 @@ function calcSEPA(bars) {
   else if (count >= 7) verdict = "워치리스트";
   else if (count >= 5) verdict = "관찰";
   
-  return { count, stage, verdict, conditions, sma50: s50, sma150: s150, sma200: s200, high52: h52, low52: l52, curPrice: cur };
+  return { count, stage, verdict, conditions, sma50: s50, sma150: s150, sma200: s200, sma30: sma(bars,30), high52: h52, low52: l52, curPrice: cur };
 }
 
 /* ===== 듀얼 모멘텀 ===== */
@@ -929,6 +929,7 @@ async function analyzeStock(stock) {
       sma50: +(sepa.sma50||0).toFixed(2),
       sma150: +(sepa.sma150||0).toFixed(2),
       sma200: +(sepa.sma200||0).toFixed(2),
+      sma30: +(sepa.sma30||0).toFixed(2),
       high52: sepa.high52,
       low52: sepa.low52,
       conditions: sepa.conditions
