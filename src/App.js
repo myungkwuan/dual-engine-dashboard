@@ -189,14 +189,15 @@ function SectorChart({trendData,isMobile,onSectorNav,market}){
 /* ===== 듀얼모멘텀 강화 분석 ===== */
 function getDualMomentum(d, b3, b6, b12) {
   const r3m = d.r[0], r6m = d.r[1], secRank = d.r[2];
-  // 12M 수익률: analysis 결과(momDetail)에 있으면 사용, 없으면 0
-  const r12m = (d.a && d.a.momDetail && d.a.momDetail.r12m != null) ? d.a.momDetail.r12m : 0;
+  // 12M 수익률: _momDetail에서 읽기 (d.a.momDetail 버그 수정)
+  const r12m = (d._momDetail && d._momDetail.r12m != null) ? d._momDetail.r12m : 0;
 
-  const spyBench3  = b3  != null ? b3  : 4.2;
-  const spyBench6  = b6  != null ? b6  : 8.7;
+  // 벤치마크: 명시적 전달 > _momDetail 실측값 > 기본값
+  const spyBench3  = b3  != null ? b3  : (d._momDetail?.spyR3  != null ? d._momDetail.spyR3  : 4.2);
+  const spyBench6  = b6  != null ? b6  : (d._momDetail?.spyR6  != null ? d._momDetail.spyR6  : 8.7);
   const spyBench12 = b12 != null ? b12 : 18.0;
   // fallback 여부 표시 (UI 경고용)
-  const benchFallback = (b3 == null || b6 == null);
+  const benchFallback = (b3 == null && d._momDetail?.spyR3 == null);
 
   /* ── 절대 모멘텀 (35점) ── */
   const absM3  = r3m  > 0;
@@ -2353,8 +2354,8 @@ export default function Dashboard(){
                 {label:"나스닥",val:MKT.usIndices?.ixic?.price,chg:MKT.usIndices?.ixic?.chg},
               ].map(idx=>(
                 <div key={idx.label} style={{background:"#0d111766",borderRadius:5,padding:"3px 5px",textAlign:"center"}}>
-                  <div style={{fontSize:11,color:"#e6edf3",fontWeight:700}}>{idx.label}</div>
-                  <div style={{fontSize:10,fontWeight:800,color:"#e6edf3",fontFamily:"'JetBrains Mono'"}}>{idx.val?Math.floor(idx.val).toLocaleString():"-"}</div>
+                  <div style={{fontSize:8,color:"#484f58",fontWeight:700}}>{idx.label}</div>
+                  <div style={{fontSize:10,fontWeight:800,color:"#e6edf3",fontFamily:"'JetBrains Mono'"}}>{idx.val?idx.val.toLocaleString():"-"}</div>
                   <div style={{fontSize:8,color:idx.chg>0?"#3fb950":idx.chg<0?"#f85149":"#8b949e"}}>{idx.chg!=null?(idx.chg>0?"+":"")+idx.chg+"%":"-"}</div>
                 </div>
               ))}
@@ -2383,8 +2384,8 @@ export default function Dashboard(){
                 {label:"KOSDAQ",val:MKT.kosdaqPrice,chg:MKT.kosdaqChg},
               ].map(idx=>(
                 <div key={idx.label} style={{background:"#0d111766",borderRadius:5,padding:"3px 6px",textAlign:"center"}}>
-                  <div style={{fontSize:11,color:"#e6edf3",fontWeight:700}}>{idx.label}</div>
-                  <div style={{fontSize:11,fontWeight:800,color:"#e6edf3",fontFamily:"'JetBrains Mono'"}}>{idx.val?Math.floor(idx.val).toLocaleString():"-"}</div>
+                  <div style={{fontSize:8,color:"#484f58",fontWeight:700}}>{idx.label}</div>
+                  <div style={{fontSize:11,fontWeight:800,color:"#e6edf3",fontFamily:"'JetBrains Mono'"}}>{idx.val?idx.val.toLocaleString():"-"}</div>
                   {idx.chg!=null&&<div style={{fontSize:8,color:idx.chg>0?"#3fb950":idx.chg<0?"#f85149":"#8b949e"}}>{(idx.chg>0?"+":"")+idx.chg+"%"}</div>}
                 </div>
               ))}
@@ -3936,7 +3937,8 @@ export default function Dashboard(){
             <TH onClick={()=>hs("f")} a={sc==="f"} c tip="펀더멘털 종합점수 (A~F). 매출성장·이익률·재무건전성 기반">펀더</TH>
             <TH onClick={()=>hs("vd")} a={sc==="vd"} c tip="6개 엔진 합산 최종 등급 (100점 만점). 최강85+·매수65~84·관심50~64·관망35~49·위험~34">종합</TH>
             {(view==="dual"||view==="mf") && <>
-              <TH c tip="현재가와 30일 이동평균선의 이격도. +면 30일선 위, -면 아래">30일선</TH>
+              <TH onClick={()=>hs("mf")} a={sc==="mf"} c tip="멀티팩터(MF) 점수. EPS성장·FCF·ROE·부채비율 등 펀더멘털 10pt 배점">MF</TH>
+              <TH c tip="MF 추세 방향. 단기·중기·장기 현금흐름 방향성">방향</TH>
             </>}
             {(view==="dual"||view==="sepa") && <>
               <TH onClick={()=>hs("sepa")} a={sc==="sepa"} c tip="Minervini SEPA 트렌드 템플릿. 8개 조건 충족 수 (8/8 = 완벽한 상승추세)">SEPA</TH>
@@ -3994,15 +3996,8 @@ export default function Dashboard(){
                       {vd.details.riskPenalty > 0 && <div style={{fontSize:isMobile?6:7,color:'#ff922b',marginTop:1}}>⚠-{vd.details.riskPenalty}</div>}
                     </td>
                     {(view==="dual"||view==="mf") && <>
-                      <td style={{padding:"6px 5px",textAlign:"center",fontSize:isMobile?9:11,fontFamily:"'JetBrains Mono'"}}>
-                        {(()=>{
-                          const s30=d._sepaDetail?.sma30;
-                          if(!s30||!d.p)return <span style={{color:'#333'}}>-</span>;
-                          const gap=+((d.p/s30-1)*100).toFixed(1);
-                          const clr=gap>0?'#3fb950':'#f85149';
-                          return <span style={{color:clr,fontWeight:700}}>{gap>0?'+':''}{gap}%</span>;
-                        })()}
-                      </td>
+                      <td style={{padding:"6px 5px",textAlign:"center"}}><Badge v={mfTs(d)} g={2.5} r={1.5}/></td>
+                      <td style={{padding:"6px 5px",textAlign:"center"}}><span style={{fontSize:isMobile?10:12,padding:"1px 6px",borderRadius:3,background:mfTd(d)==="매수"?"rgba(63,185,80,.12)":"rgba(248,81,73,.12)",color:mfTd(d)==="매수"?"#3fb950":"#f85149"}}>{mfTd(d)}{mfAl(d)?" ⚡":""}</span></td>
                     </>}
                     {(view==="dual"||view==="sepa") && <>
                       <td style={{padding:"6px 5px",textAlign:"center"}}><Badge v={seTt(d)} g={8} r={7}/></td>
