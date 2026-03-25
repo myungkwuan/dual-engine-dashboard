@@ -3937,8 +3937,7 @@ export default function Dashboard(){
             <TH onClick={()=>hs("f")} a={sc==="f"} c tip="펀더멘털 종합점수 (A~F). 매출성장·이익률·재무건전성 기반">펀더</TH>
             <TH onClick={()=>hs("vd")} a={sc==="vd"} c tip="6개 엔진 합산 최종 등급 (100점 만점). 최강85+·매수65~84·관심50~64·관망35~49·위험~34">종합</TH>
             {(view==="dual"||view==="mf") && <>
-              <TH onClick={()=>hs("mf")} a={sc==="mf"} c tip="멀티팩터(MF) 점수. EPS성장·FCF·ROE·부채비율 등 펀더멘털 10pt 배점">MF</TH>
-              <TH c tip="MF 추세 방향. 단기·중기·장기 현금흐름 방향성">방향</TH>
+              <TH c tip="현재가와 30일 이동평균선의 이격도. +면 30일선 위, -면 아래">30일선</TH>
             </>}
             {(view==="dual"||view==="sepa") && <>
               <TH onClick={()=>hs("sepa")} a={sc==="sepa"} c tip="Minervini SEPA 트렌드 템플릿. 8개 조건 충족 수 (8/8 = 완벽한 상승추세)">SEPA</TH>
@@ -3996,8 +3995,15 @@ export default function Dashboard(){
                       {vd.details.riskPenalty > 0 && <div style={{fontSize:isMobile?6:7,color:'#ff922b',marginTop:1}}>⚠-{vd.details.riskPenalty}</div>}
                     </td>
                     {(view==="dual"||view==="mf") && <>
-                      <td style={{padding:"6px 5px",textAlign:"center"}}><Badge v={mfTs(d)} g={2.5} r={1.5}/></td>
-                      <td style={{padding:"6px 5px",textAlign:"center"}}><span style={{fontSize:isMobile?10:12,padding:"1px 6px",borderRadius:3,background:mfTd(d)==="매수"?"rgba(63,185,80,.12)":"rgba(248,81,73,.12)",color:mfTd(d)==="매수"?"#3fb950":"#f85149"}}>{mfTd(d)}{mfAl(d)?" ⚡":""}</span></td>
+                      <td style={{padding:"6px 5px",textAlign:"center",fontSize:isMobile?9:11,fontFamily:"'JetBrains Mono'"}}>
+                        {(()=>{
+                          const s30=d._sepaDetail?.sma30;
+                          if(!s30||!d.p)return <span style={{color:'#333'}}>-</span>;
+                          const gap=+((d.p/s30-1)*100).toFixed(1);
+                          const clr=gap>0?'#3fb950':'#f85149';
+                          return <span style={{color:clr,fontWeight:700}}>{gap>0?'+':''}{gap}%</span>;
+                        })()}
+                      </td>
                     </>}
                     {(view==="dual"||view==="sepa") && <>
                       <td style={{padding:"6px 5px",textAlign:"center"}}><Badge v={seTt(d)} g={8} r={7}/></td>
