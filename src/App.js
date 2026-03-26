@@ -1624,6 +1624,8 @@ export default function Dashboard(){
             e:a.e||d.e,
             r:[a.r?a.r[0]:d.r[0], a.r?a.r[1]:d.r[1], d.r[2]],
             v:a.v||d.v,
+            _sepaDetail:a.sepaDetail||null,
+            _momDetail:a.momDetail||null,
             _vcpDetail:a.vcpDetail||null,
             _volData:a.volData||null,
             _indicators:a.indicators||null,
@@ -2354,8 +2356,8 @@ export default function Dashboard(){
                 {label:"나스닥",val:MKT.usIndices?.ixic?.price,chg:MKT.usIndices?.ixic?.chg},
               ].map(idx=>(
                 <div key={idx.label} style={{background:"#0d111766",borderRadius:5,padding:"3px 5px",textAlign:"center"}}>
-                  <div style={{fontSize:11,color:"#e6edf3",fontWeight:700}}>{idx.label}</div>
-                  <div style={{fontSize:10,fontWeight:800,color:"#e6edf3",fontFamily:"'JetBrains Mono'"}}>{idx.val?Math.floor(idx.val).toLocaleString():"-"}</div>
+                  <div style={{fontSize:8,color:"#484f58",fontWeight:700}}>{idx.label}</div>
+                  <div style={{fontSize:10,fontWeight:800,color:"#e6edf3",fontFamily:"'JetBrains Mono'"}}>{idx.val?idx.val.toLocaleString():"-"}</div>
                   <div style={{fontSize:8,color:idx.chg>0?"#3fb950":idx.chg<0?"#f85149":"#8b949e"}}>{idx.chg!=null?(idx.chg>0?"+":"")+idx.chg+"%":"-"}</div>
                 </div>
               ))}
@@ -2384,8 +2386,8 @@ export default function Dashboard(){
                 {label:"KOSDAQ",val:MKT.kosdaqPrice,chg:MKT.kosdaqChg},
               ].map(idx=>(
                 <div key={idx.label} style={{background:"#0d111766",borderRadius:5,padding:"3px 6px",textAlign:"center"}}>
-                  <div style={{fontSize:11,color:"#e6edf3",fontWeight:700}}>{idx.label}</div>
-                  <div style={{fontSize:11,fontWeight:800,color:"#e6edf3",fontFamily:"'JetBrains Mono'"}}>{idx.val?Math.floor(idx.val).toLocaleString():"-"}</div>
+                  <div style={{fontSize:8,color:"#484f58",fontWeight:700}}>{idx.label}</div>
+                  <div style={{fontSize:11,fontWeight:800,color:"#e6edf3",fontFamily:"'JetBrains Mono'"}}>{idx.val?idx.val.toLocaleString():"-"}</div>
                   {idx.chg!=null&&<div style={{fontSize:8,color:idx.chg>0?"#3fb950":idx.chg<0?"#f85149":"#8b949e"}}>{(idx.chg>0?"+":"")+idx.chg+"%"}</div>}
                 </div>
               ))}
