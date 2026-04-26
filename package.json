@@ -8,10 +8,10 @@
     "start": "next start"
   },
   "dependencies": {
-    "@vercel/kv": "^3.0.0",
     "next": "^14.2.0",
     "react": "^18.3.0",
     "react-dom": "^18.3.0",
+    "redis": "^5.12.1",
     "yahoo-finance2": "^2.11.0"
   }
 }
