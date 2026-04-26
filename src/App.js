@@ -2005,6 +2005,24 @@ export default function Dashboard(){
       setAnaTime(timeStr);
     }catch(e){}
 
+    /* ── Jang's Analyst 통합용: KV에 totalPt 포함 데이터 저장 ── */
+    /* (실패해도 기존 기능 영향 없음, 백그라운드 실행) */
+    try{
+      const enrichedStocks=computeUpdated(stocks).map(d=>{
+        try{
+          const v=getVerdict(d);
+          return{...d,totalPt:v.totalPt,verdict:v.verdict};
+        }catch(e){return{...d,totalPt:0,verdict:'fail'};}
+      });
+      fetch('/api/save-analysis',{
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({stocks:enrichedStocks,timestamp:new Date().toISOString()})
+      }).then(r=>r.json()).then(j=>{
+        if(j.ok)log(`☁️ 듀얼엔진 데이터 ${j.saved}개 저장됨`,"ok");
+      }).catch(()=>{});
+    }catch(e){}
+
     const elapsed=((Date.now()-t0)/1000).toFixed(1);
     setAnaRt(totalFail===0?"done":"error");setAnaProg(100);
     log(`🏁 분석 완료: ${totalOk}성공 ${totalFail}실패 (${elapsed}s)`,"ok");
