@@ -1,12 +1,24 @@
 /* /pages/api/save-analysis.js
  * 명관 앱에서 분석 완료 후 호출
- * - totalPt 포함된 전체 종목 데이터를 Vercel KV에 저장
+ * - totalPt 포함된 전체 종목 데이터를 Upstash Redis에 저장
  * - Jang's Analyst가 /api/dashboard 호출 시 이 데이터 반환
  */
-import { kv } from '@vercel/kv';
+import { createClient } from 'redis';
+
+// ─── Lazy Redis 클라이언트 (Vercel serverless 재사용) ───
+let _redisClient = null;
+async function getRedis() {
+  if (!_redisClient) {
+    _redisClient = createClient({ url: process.env.REDIS_URL });
+    _redisClient.on('error', err => console.error('[Redis] error:', err.message));
+  }
+  if (!_redisClient.isOpen) {
+    await _redisClient.connect();
+  }
+  return _redisClient;
+}
 
 export default async function handler(req, res) {
-  // CORS (명관 앱 자체에서 호출되므로 사실 불필요하지만 안전장치)
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
@@ -27,7 +39,6 @@ export default async function handler(req, res) {
       return res.status(400).json({ error: 'stocks array required' });
     }
     
-    // 너무 많거나 너무 적으면 거부 (안전장치)
     if (stocks.length < 50 || stocks.length > 1000) {
       return res.status(400).json({ 
         error: `invalid stocks count: ${stocks.length}` 
@@ -45,14 +56,15 @@ export default async function handler(req, res) {
       });
     }
     
-    // KV에 저장 (24시간 TTL)
+    // Redis에 저장 (24시간 TTL) — node-redis는 EX 대문자
     const payload = {
       stocks: validStocks,
       timestamp: timestamp || new Date().toISOString(),
       count: validStocks.length,
     };
     
-    await kv.set('dashboard_analysis', payload, { ex: 86400 }); // 24시간
+    const client = await getRedis();
+    await client.set('dashboard_analysis', JSON.stringify(payload), { EX: 86400 });
     
     return res.status(200).json({ 
       ok: true,

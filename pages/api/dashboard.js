@@ -1,13 +1,26 @@
-/* /pages/api/dashboard.js — v3 (Vercel KV 우선)
+/* /pages/api/dashboard.js — v3 (Upstash Redis)
  * 듀얼엔진 종목 풀 데이터 노출 엔드포인트
  *
  * 우선순위:
- *   1. KV에 저장된 분석 데이터 사용 (명관 앱이 실시간 분석한 totalPt)
+ *   1. Redis에 저장된 분석 데이터 (명관 앱 실시간 분석)
  *      → 명관 화면과 100% 일치
- *   2. KV에 없으면 data.js + 정적 추정 totalPt 사용 (fallback)
+ *   2. Redis에 없으면 data.js + 정적 추정 (fallback)
  */
 import D from '../../src/data';
-import { kv } from '@vercel/kv';
+import { createClient } from 'redis';
+
+// ─── Lazy Redis 클라이언트 (Vercel serverless 재사용) ───
+let _redisClient = null;
+async function getRedis() {
+  if (!_redisClient) {
+    _redisClient = createClient({ url: process.env.REDIS_URL });
+    _redisClient.on('error', err => console.error('[Redis] error:', err.message));
+  }
+  if (!_redisClient.isOpen) {
+    await _redisClient.connect();
+  }
+  return _redisClient;
+}
 
 // ═══════════════════════════════════════════════════════════════
 // 헬퍼 함수들 (App.js에서 복사)
@@ -127,12 +140,17 @@ export default async function handler(req, res) {
   res.setHeader('Cache-Control', 'public, s-maxage=300, stale-while-revalidate=60');
   
   try {
-    // ─── 1순위: KV에 저장된 실시간 분석 데이터 시도 ───
+    // ─── 1순위: Redis에 저장된 실시간 분석 데이터 시도 ───
     let cached = null;
     try {
-      cached = await kv.get('dashboard_analysis');
-    } catch (kvErr) {
-      console.warn('[dashboard] KV 읽기 실패, fallback 진행:', kvErr.message);
+      const client = await getRedis();
+      const raw = await client.get('dashboard_analysis');
+      // node-redis는 string 반환 → JSON.parse 필요
+      if (raw) {
+        cached = typeof raw === 'string' ? JSON.parse(raw) : raw;
+      }
+    } catch (redisErr) {
+      console.warn('[dashboard] Redis 읽기 실패, fallback 진행:', redisErr.message);
     }
     
     if (cached && Array.isArray(cached.stocks) && cached.stocks.length >= 50) {
@@ -149,13 +167,13 @@ export default async function handler(req, res) {
           high_score_count: high80_total,
           timestamp: cached.timestamp,
           version: '3.0',
-          source: 'kv_realtime',  // ⭐ 명관 앱에서 실시간 분석한 데이터
+          source: 'redis_realtime',  // ⭐ 명관 앱 실시간 분석 데이터
           note: '명관 화면과 100% 일치',
         }
       });
     }
     
-    // ─── 2순위: KV에 데이터 없음 → 정적 fallback ───
+    // ─── 2순위: Redis에 데이터 없음 → 정적 fallback ───
     const enriched = D.map(stock => {
       try {
         const v = getStaticVerdict(stock);
