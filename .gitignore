@@ -5,3 +5,6 @@ node_modules/
 test.mjs
 test_yahoo.js
 test_yahoo.mjs
+
+.vercel
+.env*.local
