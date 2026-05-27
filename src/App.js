@@ -1667,6 +1667,87 @@ function GradeAnalyzerTab({gradeHistory,stocks,isMobile}){
 }
 
 
+/* ===== 전환임박 추천 탭 ===== */
+function PreBreakoutTab({stocks,isMobile}){
+  const BUY_PT=65;
+  const candidates=useMemo(()=>{
+    return stocks.map(d=>{
+      const vd=getVerdict(d);
+      if(!vd.verdict.includes('관망')&&!vd.verdict.includes('관심'))return null;
+      const pt=vd.totalPt;
+      const gap=BUY_PT-pt;
+      const dm=getDualMomentum(d);
+      const sepaCount=seTt(d)||0;
+      const vcpState=vcpMt(d)||'미형성';
+      const urgency=gap
+        -(sepaCount>=6?5:sepaCount>=4?2:0)
+        -(dm.signal==='STRONG BUY'?5:dm.signal==='BUY'?3:0)
+        -(vcpState.includes('성숙')||vcpState.includes('돌파')?4:vcpState==='형성중'?2:0);
+      const s30=d._sepaDetail?.sma30;
+      const dev30=s30&&d.p?+((d.p/s30-1)*100).toFixed(1):null;
+      return{...d,vd,pt,gap,urgency,dm,sepaCount,vcpState,dev30};
+    }).filter(Boolean).sort((a,b)=>a.urgency-b.urgency);
+  },[stocks]);
+
+  const interested=candidates.filter(d=>d.vd.verdict.includes('관심'));
+  const watching=candidates.filter(d=>d.vd.verdict.includes('관망'));
+
+  const Row=({d,rank})=>{
+    const isKR=d.k;
+    const price=d.p>0?(isKR?`₩${Math.round(d.p).toLocaleString()}`:`$${d.p.toFixed(2)}`):'−';
+    const dmColor=d.dm.signal==='STRONG BUY'?'#ff4444':d.dm.signal==='BUY'?'#3fb950':d.dm.signal==='HOLD'?'#58a6ff':'#8b949e';
+    const vcpColor=d.vcpState.includes('성숙')||d.vcpState.includes('돌파')?'#3fb950':d.vcpState==='형성중'?'#ffd600':'#484f58';
+    const borderColor=d.gap<=5?'#3fb95066':d.gap<=10?'#ffd60033':'#21262d';
+    return <div style={{background:'#0d1117',borderRadius:8,padding:'10px 12px',border:`1px solid ${borderColor}`,marginBottom:6}}>
+      <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:6}}>
+        <div style={{display:'flex',alignItems:'center',gap:8,minWidth:0,flex:1}}>
+          <span style={{fontSize:10,color:'#484f58',flexShrink:0}}>#{rank}</span>
+          <div style={{minWidth:0}}>
+            <div style={{fontSize:12,fontWeight:800,color:'#e6edf3',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{d.n||d.t}</div>
+            <div style={{fontSize:9,color:'#484f58'}}>{d.t} · {price}</div>
+          </div>
+        </div>
+        <div style={{textAlign:'right',flexShrink:0,marginLeft:8}}>
+          <div style={{fontSize:15,fontWeight:900,color:'#ffd43b'}}>{d.pt}점</div>
+          <div style={{fontSize:9,color:d.gap<=5?'#3fb950':d.gap<=10?'#ffd600':'#8b949e',whiteSpace:'nowrap'}}>매수까지 -{d.gap}pt</div>
+        </div>
+      </div>
+      <div style={{display:'flex',gap:5,flexWrap:'wrap'}}>
+        <span style={{padding:'1px 6px',borderRadius:3,fontSize:9,fontWeight:700,background:dmColor+'15',color:dmColor,whiteSpace:'nowrap'}}>DM:{d.dm.signal}</span>
+        <span style={{padding:'1px 6px',borderRadius:3,fontSize:9,fontWeight:700,background:'#58a6ff15',color:'#58a6ff',whiteSpace:'nowrap'}}>SEPA:{d.sepaCount}/8</span>
+        <span style={{padding:'1px 6px',borderRadius:3,fontSize:9,fontWeight:700,background:vcpColor+'15',color:vcpColor,whiteSpace:'nowrap'}}>VCP:{d.vcpState}</span>
+        {d.dev30!==null&&<span style={{padding:'1px 6px',borderRadius:3,fontSize:9,fontWeight:700,background:d.dev30>=0?'#3fb95015':'#f8514915',color:d.dev30>=0?'#3fb950':'#f85149',whiteSpace:'nowrap'}}>30일:{d.dev30>=0?'+':''}{d.dev30}%</span>}
+      </div>
+    </div>;
+  };
+
+  const Section=({title,color,items})=><div style={{background:'#161b22',border:`1px solid ${color}33`,borderRadius:10,padding:10,marginBottom:10}}>
+    <div style={{fontSize:12,fontWeight:700,color,marginBottom:2}}>{title}</div>
+    <div style={{fontSize:9,color:'#484f58',marginBottom:8}}>매수(65pt) 전환 임박 순 · DM·SEPA·VCP 가중 정렬</div>
+    {items.length===0
+      ?<div style={{fontSize:11,color:'#484f58',textAlign:'center',padding:16}}>해당 종목 없음</div>
+      :items.slice(0,10).map((d,i)=><Row key={d.t} d={d} rank={i+1}/>)
+    }
+  </div>;
+
+  return <div style={{maxWidth:900,margin:'0 auto',padding:isMobile?'8px 10px':'8px 16px'}}>
+    <div style={{fontSize:isMobile?14:16,fontWeight:900,color:'#e6edf3',marginBottom:2}}>🎯 매수 전환 임박 추천</div>
+    <div style={{fontSize:10,color:'#484f58',marginBottom:10}}>관망→관심→매수 패턴 기반 · DM/SEPA/VCP 강도 반영 · 분석 실행 후 최신화</div>
+    <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:6,marginBottom:10}}>
+      {[
+        {label:'관심 종목',val:interested.length,color:'#58a6ff'},
+        {label:'관망 종목',val:watching.length,color:'#ffd600'},
+        {label:'임박 (-8pt이내)',val:candidates.filter(d=>d.gap<=8).length,color:'#3fb950'},
+      ].map(s=><div key={s.label} style={{background:'#161b22',border:'1px solid #21262d',borderRadius:8,padding:'8px',textAlign:'center'}}>
+        <div style={{fontSize:isMobile?16:20,fontWeight:900,color:s.color}}>{s.val}</div>
+        <div style={{fontSize:9,color:'#484f58',marginTop:2}}>{s.label}</div>
+      </div>)}
+    </div>
+    <Section title="🔵 관심 → 매수 임박" color="#58a6ff" items={interested}/>
+    <Section title="🟡 관망 → 관심 임박" color="#ffd600" items={watching}/>
+  </div>;
+}
+
 /* ===== 가이드 탭 헬퍼 컴포넌트 (IIFE 밖에 정의) ===== */
 function GuideSection({icon,title,color,children}){
   return <div style={{background:"#0d1117",border:"1px solid "+color+"33",borderRadius:10,padding:16,marginBottom:12}}>
@@ -2618,7 +2699,7 @@ export default function Dashboard(){
       {/* Tab Nav */}
       <div className="tab-nav" style={{maxWidth:1800,margin:"6px auto",padding:"0 20px"}}>
         <div style={{display:"flex",gap:4,overflowX:"auto",WebkitOverflowScrolling:"touch",paddingBottom:2,scrollbarWidth:"none"}}>
-          {[["main",isMobile?"📊":"📊 메인"],["watch",isMobile?("👁"+watchlist.length):("👁 워치("+watchlist.length+")")],["port",isMobile?"💼":"💼 보유종목"],["filter",isMobile?"🌐":"🌐 시장필터"],["calc",isMobile?"🧮":"🧮 포지션"],["check",isMobile?"✅":"✅ 체크리스트"],["asset",isMobile?"💰":"💰 자산관리"],["grade",isMobile?"📈":"📈 전환분석"],["guide",isMobile?"📖":"📖 가이드"]].map(([k,l])=>
+          {[["main",isMobile?"📊":"📊 메인"],["watch",isMobile?("👁"+watchlist.length):("👁 워치("+watchlist.length+")")],["port",isMobile?"💼":"💼 보유종목"],["filter",isMobile?"🌐":"🌐 시장필터"],["calc",isMobile?"🧮":"🧮 포지션"],["check",isMobile?"✅":"✅ 체크리스트"],["asset",isMobile?"💰":"💰 자산관리"],["grade",isMobile?"📈":"📈 전환분석"],["breakout",isMobile?"🎯":"🎯 전환임박"],["guide",isMobile?"📖":"📖 가이드"]].map(([k,l])=>
             <Tb key={k} label={l} active={tab===k} onClick={()=>setTab(k)}/>
           )}
         </div>
@@ -4567,6 +4648,7 @@ export default function Dashboard(){
       })()}
 
       {tab==="grade" && <GradeAnalyzerTab gradeHistory={gradeHistory} stocks={stocks} isMobile={isMobile}/>}
+      {tab==="breakout" && <PreBreakoutTab stocks={stocks} isMobile={isMobile}/>}
 
       {/* ============ 가이드 탭 ============ */}
       {tab==="guide" && <div style={{maxWidth:900,margin:"0 auto",padding:isMobile?"12px 14px":"20px 24px"}}>
