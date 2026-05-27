@@ -1481,18 +1481,26 @@ function GradeAnalyzerTab({gradeHistory,stocks,isMobile}){
   const gPt=g=>g?.includes('최강')?5:g?.includes('매수')?4:g?.includes('관심')?3:g?.includes('관망')?2:g?.includes('위험')?1:0;
   const gColor=g=>g?.includes('최강')?'#ff4444':g?.includes('매수')?'#3fb950':g?.includes('관심')?'#58a6ff':g?.includes('관망')?'#ffd600':'#f85149';
   const gBg=g=>g?.includes('최강')?'#ff444415':g?.includes('매수')?'#3fb95015':g?.includes('관심')?'#58a6ff15':g?.includes('관망')?'#ffd60015':'#f8514915';
-
-  // 종목명 맵: ticker → 한글명
   const nameMap=useMemo(()=>{const m={};stocks.forEach(d=>{if(d.n)m[d.t]=d.n;});return m;},[stocks]);
   const sName=t=>nameMap[t]||t;
-
   const priceMap=useMemo(()=>{const m={};stocks.forEach(d=>{if(d.p)m[d.t]=d.p;});return m;},[stocks]);
-
+  const firstEntry=useMemo(()=>{try{return JSON.parse(localStorage.getItem('first_entry')||'{}');}catch{return{};}});
+  const allTracking=useMemo(()=>{
+    const now=Date.now();
+    return Object.entries(firstEntry).map(([ticker,entry])=>{
+      const curPrice=priceMap[ticker]||null;
+      const roi=curPrice&&entry.price?+((curPrice-entry.price)/entry.price*100).toFixed(1):null;
+      const daysHeld=Math.floor((now-new Date(entry.date).getTime())/86400000);
+      const stock=stocks.find(d=>d.t===ticker);
+      const curGrade=stock?getVerdict(stock).verdict:null;
+      return{ticker,entryPrice:entry.price,entryDate:entry.date,entryGrade:entry.grade,curGrade,curPrice,roi,daysHeld};
+    }).filter(t=>t.roi!==null).sort((a,b)=>b.roi-a.roi);
+  },[firstEntry,priceMap,stocks]);
   const transitions=useMemo(()=>{
     const arr=[];const now=Date.now();
     Object.entries(gradeHistory||{}).forEach(([ticker,history])=>{
       if(!Array.isArray(history))return;
-      history.forEach((ev,i)=>{
+      history.forEach((ev)=>{
         const fromG=ev.from?.grade||ev.from;const toG=ev.to?.grade||ev.to;
         if(!fromG||!toG||!ev.price)return;
         if(fromG.includes('위험'))return;
@@ -1507,7 +1515,6 @@ function GradeAnalyzerTab({gradeHistory,stocks,isMobile}){
     });
     return arr;
   },[gradeHistory,priceMap]);
-
   const stats=useMemo(()=>{
     const byType={};
     transitions.forEach(t=>{
@@ -1524,8 +1531,6 @@ function GradeAnalyzerTab({gradeHistory,stocks,isMobile}){
       return{...g,avg,win,max,min,avgD,count:g.events.length};
     }).filter(g=>g.count>=3).sort((a,b)=>(b.avg||-999)-(a.avg||-999));
   },[transitions]);
-
-  // 여정: 위험 출발 제외 + 중간 하락 없는 것만 + 종목 중복 제거
   const journeys=useMemo(()=>{
     const arr=[];const now=Date.now();
     Object.entries(gradeHistory||{}).forEach(([ticker,history])=>{
@@ -1533,12 +1538,10 @@ function GradeAnalyzerTab({gradeHistory,stocks,isMobile}){
       const firstG=history[0].from?.grade||history[0].from;
       if(!firstG||firstG.includes('위험'))return;
       if(!history[0].price)return;
-      // 중간에 하락 구간 있으면 제외
       let prevPt=gPt(firstG);let valid=true;
       const path=[shortG(firstG)];
       for(const ev of history){
-        const toG=ev.to?.grade||ev.to;
-        const toPt=gPt(toG);
+        const toG=ev.to?.grade||ev.to;const toPt=gPt(toG);
         if(toPt<prevPt){valid=false;break;}
         const sg=shortG(toG);
         if(path[path.length-1]!==sg)path.push(sg);
@@ -1555,8 +1558,6 @@ function GradeAnalyzerTab({gradeHistory,stocks,isMobile}){
     });
     return arr.sort((a,b)=>(b.roi||0)-(a.roi||0));
   },[gradeHistory,priceMap]);
-
-  // Top5: 종목당 최고 수익 1건만
   const top5=useMemo(()=>{
     const byTicker={};
     transitions.filter(t=>t.roi!==null).forEach(t=>{
@@ -1564,50 +1565,48 @@ function GradeAnalyzerTab({gradeHistory,stocks,isMobile}){
     });
     return Object.values(byTicker).sort((a,b)=>b.roi-a.roi).slice(0,5);
   },[transitions]);
-
   const upTrans=transitions.filter(t=>t.roi!==null);
   const totalAvg=upTrans.length?+(upTrans.reduce((s,t)=>s+t.roi,0)/upTrans.length).toFixed(1):0;
   const totalWin=upTrans.length?+(upTrans.filter(t=>t.roi>0).length/upTrans.length*100).toFixed(0):0;
-
-  if(!gradeHistory||Object.keys(gradeHistory).length===0)return(
-    <div style={{textAlign:'center',padding:40,color:'#484f58',fontSize:13}}>
-      등급전환 히스토리가 없습니다.<br/>🔬 분석을 먼저 실행하면 데이터가 쌓입니다.
-    </div>
-  );
-
   const Bdg=({g})=><span style={{padding:'1px 5px',borderRadius:3,fontSize:10,fontWeight:700,background:gBg(g),color:gColor(g),whiteSpace:'nowrap'}}>{shortG(g)}</span>;
-
   return <div style={{maxWidth:1400,margin:'0 auto',padding:isMobile?'8px 10px':'8px 16px'}}>
     <div style={{fontSize:isMobile?14:16,fontWeight:900,color:'#e6edf3',marginBottom:2}}>📈 등급전환 수익률 분석</div>
-    <div style={{fontSize:10,color:'#484f58',marginBottom:10}}>위험 출발 제외 · 3회 이상 패턴 · 중간하락 여정 제외 · 종목 중복 제거</div>
-
+    <div style={{fontSize:10,color:'#484f58',marginBottom:10}}>위험 출발 제외 · 3회 이상 패턴 · 중간하락 제외 · 종목 중복 제거</div>
     <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:6,marginBottom:10}}>
-      {[
-        {label:'전환 이벤트',val:transitions.length,color:'#58a6ff'},
-        {label:'분석 종목',val:Object.keys(gradeHistory).length,color:'#ffd43b'},
-        {label:'평균 수익률',val:(totalAvg>=0?'+':'')+totalAvg+'%',color:totalAvg>=0?'#3fb950':'#f85149'},
-        {label:'승률',val:totalWin+'%',color:totalWin>=60?'#3fb950':totalWin>=40?'#ffd600':'#f85149'},
-      ].map(s=><div key={s.label} style={{background:'#161b22',border:'1px solid #21262d',borderRadius:8,padding:'8px',textAlign:'center'}}>
+      {[{label:'전환 이벤트',val:transitions.length,color:'#58a6ff'},{label:'추적 종목',val:allTracking.length,color:'#ffd43b'},{label:'전환 평균수익률',val:(totalAvg>=0?'+':'')+totalAvg+'%',color:totalAvg>=0?'#3fb950':'#f85149'},{label:'전환 승률',val:totalWin+'%',color:totalWin>=60?'#3fb950':totalWin>=40?'#ffd600':'#f85149'}].map(s=><div key={s.label} style={{background:'#161b22',border:'1px solid #21262d',borderRadius:8,padding:'8px',textAlign:'center'}}>
         <div style={{fontSize:isMobile?16:20,fontWeight:900,color:s.color}}>{s.val}</div>
         <div style={{fontSize:9,color:'#484f58',marginTop:2}}>{s.label}</div>
       </div>)}
     </div>
-
+    {allTracking.length>0&&<div style={{background:'#161b22',border:'1px solid #3fb95033',borderRadius:10,padding:10,marginBottom:10}}>
+      <div style={{fontSize:12,fontWeight:700,color:'#3fb950',marginBottom:3}}>📊 전체 종목 추적 수익률 (최초 분석가 기준)</div>
+      <div style={{fontSize:9,color:'#484f58',marginBottom:8}}>🔬 분석 최초 실행 시점 가격 대비 현재가 — 등급전환 무관</div>
+      <div style={{display:'flex',flexDirection:'column',gap:3,maxHeight:320,overflowY:'auto'}}>
+        {allTracking.slice(0,20).map((t,i)=><div key={t.ticker} style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'5px 6px',borderRadius:6,background:i%2===0?'transparent':'#ffffff04'}}>
+          <div style={{display:'flex',alignItems:'center',gap:5,minWidth:0,flex:1}}>
+            <span style={{fontSize:10,color:'#484f58',width:18,flexShrink:0}}>{i+1}</span>
+            <span style={{fontSize:11,fontWeight:700,color:'#e6edf3',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis',maxWidth:isMobile?90:160}}>{sName(t.ticker)}</span>
+            {t.entryGrade&&<Bdg g={t.entryGrade}/>}
+            {t.curGrade&&t.curGrade!==t.entryGrade&&<><span style={{fontSize:9,color:'#484f58'}}>→</span><Bdg g={t.curGrade}/></>}
+          </div>
+          <div style={{textAlign:'right',flexShrink:0,marginLeft:8}}>
+            <div style={{fontSize:13,fontWeight:900,color:t.roi>=0?'#3fb950':'#f85149'}}>{t.roi>=0?'+':''}{t.roi}%</div>
+            <div style={{fontSize:9,color:'#484f58'}}>{t.daysHeld}일</div>
+          </div>
+        </div>)}
+      </div>
+    </div>}
     <div style={{background:'#161b22',border:'1px solid #21262d',borderRadius:10,padding:10,marginBottom:10}}>
       <div style={{fontSize:12,fontWeight:700,color:'#e6edf3',marginBottom:8}}>🏆 전환 유형별 수익률 랭킹</div>
       {isMobile
         ?<div style={{display:'flex',flexDirection:'column',gap:6}}>
           {stats.map((g,i)=><div key={g.key} style={{background:'#0d1117',borderRadius:8,padding:'8px 10px',border:'1px solid #21262d'}}>
             <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:4}}>
-              <div style={{display:'flex',alignItems:'center',gap:6}}>
-                <span style={{fontSize:13}}>{i===0?'🥇':i===1?'🥈':i===2?'🥉':`${i+1}`}</span>
-                <Bdg g={g.from}/><span style={{color:'#ffd43b',fontSize:11}}>→</span><Bdg g={g.to}/>
-              </div>
+              <div style={{display:'flex',alignItems:'center',gap:6}}><span style={{fontSize:13}}>{i===0?'🥇':i===1?'🥈':i===2?'🥉':`${i+1}`}</span><Bdg g={g.from}/><span style={{color:'#ffd43b',fontSize:11}}>→</span><Bdg g={g.to}/></div>
               <span style={{fontSize:15,fontWeight:900,color:g.avg===null?'#484f58':g.avg>=10?'#3fb950':g.avg>=0?'#57c479':'#f85149'}}>{g.avg!==null?(g.avg>=0?'+':'')+g.avg+'%':'-'}</span>
             </div>
             <div style={{display:'flex',gap:10,fontSize:10,color:'#484f58'}}>
-              <span>{g.count}회</span>
-              <span>승률 <span style={{color:g.win>=60?'#3fb950':g.win>=40?'#ffd600':'#f85149'}}>{g.win}%</span></span>
+              <span>{g.count}회</span><span>승률 <span style={{color:g.win>=60?'#3fb950':g.win>=40?'#ffd600':'#f85149'}}>{g.win}%</span></span>
               <span>최고 <span style={{color:'#3fb950'}}>{g.max!==null?'+'+g.max+'%':'-'}</span></span>
               <span>최저 <span style={{color:'#f85149'}}>{g.min!==null?g.min+'%':'-'}</span></span>
             </div>
@@ -1615,9 +1614,7 @@ function GradeAnalyzerTab({gradeHistory,stocks,isMobile}){
         </div>
         :<div style={{overflowX:'auto'}}>
           <table style={{width:'100%',borderCollapse:'collapse',fontSize:11}}>
-            <thead><tr style={{borderBottom:'2px solid #21262d'}}>
-              {['순위','전환','횟수','평균수익률','승률','최고','최저','보유일'].map(h=><th key={h} style={{padding:'5px 8px',textAlign:'left',color:'#484f58',fontSize:9,fontWeight:700}}>{h}</th>)}
-            </tr></thead>
+            <thead><tr style={{borderBottom:'2px solid #21262d'}}>{['순위','전환','횟수','평균수익률','승률','최고','최저','보유일'].map(h=><th key={h} style={{padding:'5px 8px',textAlign:'left',color:'#484f58',fontSize:9,fontWeight:700}}>{h}</th>)}</tr></thead>
             <tbody>{stats.map((g,i)=><tr key={g.key} style={{borderBottom:'1px solid #21262d10'}}>
               <td style={{padding:'5px 8px'}}>{i===0?'🥇':i===1?'🥈':i===2?'🥉':`${i+1}`}</td>
               <td style={{padding:'5px 8px'}}><Bdg g={g.from}/><span style={{color:'#ffd43b',margin:'0 4px'}}>→</span><Bdg g={g.to}/></td>
@@ -1632,19 +1629,15 @@ function GradeAnalyzerTab({gradeHistory,stocks,isMobile}){
         </div>
       }
     </div>
-
     {journeys.length>0&&<div style={{background:'#161b22',border:'1px solid #bc8cff33',borderRadius:10,padding:10,marginBottom:10}}>
-      <div style={{fontSize:12,fontWeight:700,color:'#bc8cff',marginBottom:8}}>🚀 2단계 이상 순상승 종목 여정</div>
+      <div style={{fontSize:12,fontWeight:700,color:'#bc8cff',marginBottom:8}}>🚀 2단계 이상 순상승 여정</div>
       <div style={{display:'flex',flexDirection:'column',gap:6}}>
-        {journeys.slice(0,8).map((j,i)=><div key={j.ticker} style={{background:'#0d1117',borderRadius:8,padding:'8px 10px',border:'1px solid #21262d'}}>
+        {journeys.slice(0,8).map((j)=><div key={j.ticker} style={{background:'#0d1117',borderRadius:8,padding:'8px 10px',border:'1px solid #21262d'}}>
           <div style={{display:'flex',alignItems:'center',justifyContent:'space-between'}}>
-            <div style={{display:'flex',alignItems:'center',gap:6,flexWrap:'wrap',flex:1,minWidth:0}}>
+            <div style={{display:'flex',alignItems:'center',gap:5,flexWrap:'wrap',flex:1,minWidth:0}}>
               <span style={{fontWeight:700,color:'#e6edf3',fontSize:11,whiteSpace:'nowrap'}}>{sName(j.ticker)}</span>
               <div style={{display:'flex',alignItems:'center',gap:3,flexWrap:'wrap'}}>
-                {j.path.map((p,pi)=><Fragment key={pi}>
-                  <span style={{padding:'1px 5px',borderRadius:3,fontSize:9,fontWeight:700,background:gBg(p),color:gColor(p)}}>{p}</span>
-                  {pi<j.path.length-1&&<span style={{color:'#ffd43b',fontSize:10}}>→</span>}
-                </Fragment>)}
+                {j.path.map((p,pi)=><Fragment key={pi}><span style={{padding:'1px 5px',borderRadius:3,fontSize:9,fontWeight:700,background:gBg(p),color:gColor(p)}}>{p}</span>{pi<j.path.length-1&&<span style={{color:'#ffd43b',fontSize:10}}>→</span>}</Fragment>)}
               </div>
             </div>
             <span style={{fontSize:14,fontWeight:900,color:j.roi!=null?(j.roi>=0?'#3fb950':'#f85149'):'#484f58',whiteSpace:'nowrap',marginLeft:8}}>{j.roi!=null?(j.roi>=0?'+':'')+j.roi+'%':'-'}</span>
@@ -1653,23 +1646,16 @@ function GradeAnalyzerTab({gradeHistory,stocks,isMobile}){
         </div>)}
       </div>
     </div>}
-
     <div style={{background:'#161b22',border:'1px solid #21262d',borderRadius:10,padding:10,marginBottom:10}}>
-      <div style={{fontSize:12,fontWeight:700,color:'#3fb950',marginBottom:8}}>🏅 최고 수익 Top 5 (종목당 1건)</div>
-      <div style={{display:'flex',flexDirection:'column',gap:4}}>
-        {top5.map((t,i)=><div key={t.ticker} style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'5px 0',borderBottom:'1px solid #21262d10'}}>
-          <div style={{display:'flex',alignItems:'center',gap:6}}>
-            <span style={{fontSize:11,fontWeight:700,color:'#e6edf3'}}>{sName(t.ticker)}</span>
-            <Bdg g={t.fromG}/><span style={{color:'#ffd43b',fontSize:10}}>→</span><Bdg g={t.toG}/>
-          </div>
-          <div style={{textAlign:'right'}}>
-            <div style={{fontSize:13,fontWeight:900,color:'#3fb950'}}>+{t.roi}%</div>
-            <div style={{fontSize:9,color:'#484f58'}}>{t.daysHeld}일</div>
-          </div>
-        </div>)}
-      </div>
+      <div style={{fontSize:12,fontWeight:700,color:'#58a6ff',marginBottom:8}}>🏅 전환 최고수익 Top 5 (종목당 1건)</div>
+      {top5.length===0?<div style={{fontSize:11,color:'#484f58',textAlign:'center',padding:12}}>등급 전환 이력이 쌓이면 표시됩니다</div>
+        :<div style={{display:'flex',flexDirection:'column',gap:4}}>
+          {top5.map((t)=><div key={t.ticker} style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'5px 0',borderBottom:'1px solid #21262d10'}}>
+            <div style={{display:'flex',alignItems:'center',gap:6}}><span style={{fontSize:11,fontWeight:700,color:'#e6edf3'}}>{sName(t.ticker)}</span><Bdg g={t.fromG}/><span style={{color:'#ffd43b',fontSize:10}}>→</span><Bdg g={t.toG}/></div>
+            <div style={{textAlign:'right'}}><div style={{fontSize:13,fontWeight:900,color:t.roi>=0?'#3fb950':'#f85149'}}>{t.roi>=0?'+':''}{t.roi}%</div><div style={{fontSize:9,color:'#484f58'}}>{t.daysHeld}일</div></div>
+          </div>)}
+        </div>}
     </div>
-
     {stats.length>0&&stats[0].avg!==null&&<div style={{background:'#ffd43b08',border:'1px solid #ffd43b33',borderRadius:10,padding:12}}>
       <div style={{fontSize:11,fontWeight:700,color:'#ffd43b',marginBottom:4}}>💡 결론</div>
       <div style={{fontSize:11,color:'#e6edf3',lineHeight:1.8}}>
@@ -1679,6 +1665,7 @@ function GradeAnalyzerTab({gradeHistory,stocks,isMobile}){
     </div>}
   </div>;
 }
+
 
 /* ===== 가이드 탭 헬퍼 컴포넌트 (IIFE 밖에 정의) ===== */
 function GuideSection({icon,title,color,children}){
@@ -2175,11 +2162,16 @@ export default function Dashboard(){
     try{
       const prevGrades=JSON.parse(localStorage.getItem('prev_grades')||'{}');
       const history=JSON.parse(localStorage.getItem('grade_history')||'{}');
+      const firstEntry=JSON.parse(localStorage.getItem('first_entry')||'{}'); // 최초 진입가 기록
       let transCount=0;
       updatedForGrade.forEach(d=>{
         const vd=getVerdict(d);
         const newGrade=vd.verdict;
         const newPt=vd.totalPt;
+        // 최초 추적 기록 (진입가)
+        if(!firstEntry[d.t]&&d.p>0){
+          firstEntry[d.t]={price:d.p,date:new Date().toISOString().slice(0,10),grade:newGrade,pt:newPt};
+        }
         if(prevGrades[d.t]&&prevGrades[d.t].grade!==newGrade){
           if(!history[d.t])history[d.t]=[];
           if(history[d.t].length>=20)history[d.t]=history[d.t].slice(-19);
@@ -2195,6 +2187,7 @@ export default function Dashboard(){
       });
       localStorage.setItem('prev_grades',JSON.stringify(prevGrades));
       localStorage.setItem('grade_history',JSON.stringify(history));
+      localStorage.setItem('first_entry',JSON.stringify(firstEntry));
       setGradeHistory(history);
       if(transCount>0)log(`🔄 등급 전환 ${transCount}종목 감지됨`,"ok");
     }catch(e){}
