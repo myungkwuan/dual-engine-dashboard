@@ -1698,6 +1698,14 @@ function PreBreakoutTab({stocks,isMobile}){
     const dmColor=d.dm.signal==='STRONG BUY'?'#ff4444':d.dm.signal==='BUY'?'#3fb950':d.dm.signal==='HOLD'?'#58a6ff':'#8b949e';
     const vcpColor=d.vcpState.includes('성숙')||d.vcpState.includes('돌파')?'#3fb950':d.vcpState==='형성중'?'#ffd600':'#484f58';
     const borderColor=d.gap<=5?'#3fb95066':d.gap<=10?'#ffd60033':'#21262d';
+    // 보조지표 신호등
+    const bb=d._indicators?.bb?.signal;
+    const macd=d._indicators?.macd?.signal;
+    const obv=d._indicators?.obv?.signal;
+    const bbC=bb==='squeeze'?'#3fb950':bb==='wide'?'#f85149':'#484f58';
+    const macdC=['golden','bullish'].includes(macd)?'#3fb950':['dead','bearish'].includes(macd)?'#f85149':'#484f58';
+    const obvC=['accumulation','confirm'].includes(obv)?'#3fb950':['distribution','confirm_down'].includes(obv)?'#f85149':'#484f58';
+    const dot=c=><span style={{display:'inline-block',width:7,height:7,borderRadius:'50%',background:c,flexShrink:0}}/>;
     return <div style={{background:'#0d1117',borderRadius:8,padding:'10px 12px',border:`1px solid ${borderColor}`,marginBottom:6}}>
       <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:6}}>
         <div style={{display:'flex',alignItems:'center',gap:8,minWidth:0,flex:1}}>
@@ -1712,18 +1720,22 @@ function PreBreakoutTab({stocks,isMobile}){
           <div style={{fontSize:9,color:d.gap<=5?'#3fb950':d.gap<=10?'#ffd600':'#8b949e',whiteSpace:'nowrap'}}>매수까지 -{d.gap}pt</div>
         </div>
       </div>
-      <div style={{display:'flex',gap:5,flexWrap:'wrap'}}>
+      <div style={{display:'flex',gap:5,flexWrap:'wrap',alignItems:'center'}}>
         <span style={{padding:'1px 6px',borderRadius:3,fontSize:9,fontWeight:700,background:dmColor+'15',color:dmColor,whiteSpace:'nowrap'}}>DM:{d.dm.signal}</span>
         <span style={{padding:'1px 6px',borderRadius:3,fontSize:9,fontWeight:700,background:'#58a6ff15',color:'#58a6ff',whiteSpace:'nowrap'}}>SEPA:{d.sepaCount}/8</span>
         <span style={{padding:'1px 6px',borderRadius:3,fontSize:9,fontWeight:700,background:vcpColor+'15',color:vcpColor,whiteSpace:'nowrap'}}>VCP:{d.vcpState}</span>
         {d.dev30!==null&&<span style={{padding:'1px 6px',borderRadius:3,fontSize:9,fontWeight:700,background:d.dev30>=0?'#3fb95015':'#f8514915',color:d.dev30>=0?'#3fb950':'#f85149',whiteSpace:'nowrap'}}>30일:{d.dev30>=0?'+':''}{d.dev30}%</span>}
+        {d._indicators&&<span style={{padding:'1px 6px',borderRadius:3,background:'#ffffff08',display:'inline-flex',alignItems:'center',gap:3,whiteSpace:'nowrap'}}>
+          {dot(bbC)}{dot(macdC)}{dot(obvC)}
+          <span style={{fontSize:8,color:'#484f58',marginLeft:2}}>BB·MACD·OBV</span>
+        </span>}
       </div>
     </div>;
   };
 
   const Section=({title,color,items})=><div style={{background:'#161b22',border:`1px solid ${color}33`,borderRadius:10,padding:10,marginBottom:10}}>
     <div style={{fontSize:12,fontWeight:700,color,marginBottom:2}}>{title}</div>
-    <div style={{fontSize:9,color:'#484f58',marginBottom:8}}>매수(65pt) 전환 임박 순 · DM·SEPA·VCP 가중 정렬</div>
+    <div style={{fontSize:9,color:'#484f58',marginBottom:8}}>매수(65pt) 임박 순 · DM·SEPA·VCP 가중 · 🟢우호 🔴악화 ⚫중립</div>
     {items.length===0
       ?<div style={{fontSize:11,color:'#484f58',textAlign:'center',padding:16}}>해당 종목 없음</div>
       :items.slice(0,10).map((d,i)=><Row key={d.t} d={d} rank={i+1}/>)
@@ -1732,7 +1744,7 @@ function PreBreakoutTab({stocks,isMobile}){
 
   return <div style={{maxWidth:900,margin:'0 auto',padding:isMobile?'8px 10px':'8px 16px'}}>
     <div style={{fontSize:isMobile?14:16,fontWeight:900,color:'#e6edf3',marginBottom:2}}>🎯 매수 전환 임박 추천</div>
-    <div style={{fontSize:10,color:'#484f58',marginBottom:10}}>관망→관심→매수 패턴 기반 · DM/SEPA/VCP 강도 반영 · 분석 실행 후 최신화</div>
+    <div style={{fontSize:10,color:'#484f58',marginBottom:10}}>관망→관심→매수 패턴 기반 · 분석 실행 후 최신화</div>
     <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:6,marginBottom:10}}>
       {[
         {label:'관심 종목',val:interested.length,color:'#58a6ff'},
