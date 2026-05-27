@@ -1481,9 +1481,13 @@ function GradeAnalyzerTab({gradeHistory,stocks,isMobile}){
   const gPt=g=>g?.includes('최강')?5:g?.includes('매수')?4:g?.includes('관심')?3:g?.includes('관망')?2:g?.includes('위험')?1:0;
   const gColor=g=>g?.includes('최강')?'#ff4444':g?.includes('매수')?'#3fb950':g?.includes('관심')?'#58a6ff':g?.includes('관망')?'#ffd600':'#f85149';
   const gBg=g=>g?.includes('최강')?'#ff444415':g?.includes('매수')?'#3fb95015':g?.includes('관심')?'#58a6ff15':g?.includes('관망')?'#ffd60015':'#f8514915';
+
+  // 종목명 맵: ticker → 한글명
+  const nameMap=useMemo(()=>{const m={};stocks.forEach(d=>{if(d.n)m[d.t]=d.n;});return m;},[stocks]);
+  const sName=t=>nameMap[t]||t;
+
   const priceMap=useMemo(()=>{const m={};stocks.forEach(d=>{if(d.p)m[d.t]=d.p;});return m;},[stocks]);
 
-  // 1단계 전환 분석 (위험 출발 제외, 5회 이상만)
   const transitions=useMemo(()=>{
     const arr=[];const now=Date.now();
     Object.entries(gradeHistory||{}).forEach(([ticker,history])=>{
@@ -1491,13 +1495,12 @@ function GradeAnalyzerTab({gradeHistory,stocks,isMobile}){
       history.forEach((ev,i)=>{
         const fromG=ev.from?.grade||ev.from;const toG=ev.to?.grade||ev.to;
         if(!fromG||!toG||!ev.price)return;
-        if(fromG.includes('위험'))return; // 위험 출발 제외
+        if(fromG.includes('위험'))return;
         const fromPt=gPt(fromG);const toPt=gPt(toG);
-        if(toPt<=fromPt)return; // 업그레이드만
+        if(toPt<=fromPt)return;
         const buyPrice=ev.price;
         const daysHeld=Math.floor((now-new Date(ev.date).getTime())/86400000);
-        // 현재가 = 다음 전환가 or 실시간가
-        let curPrice=priceMap[ticker]||null;
+        const curPrice=priceMap[ticker]||null;
         const roi=curPrice?+((curPrice-buyPrice)/buyPrice*100).toFixed(1):null;
         arr.push({ticker,fromG,toG,fromPt,toPt,buyPrice,curPrice,roi,daysHeld,date:ev.date,key:`${shortG(fromG)}→${shortG(toG)}`});
       });
@@ -1522,30 +1525,49 @@ function GradeAnalyzerTab({gradeHistory,stocks,isMobile}){
     }).filter(g=>g.count>=3).sort((a,b)=>(b.avg||-999)-(a.avg||-999));
   },[transitions]);
 
-  // 종목별 여정 추적 (최초 진입~현재)
+  // 여정: 위험 출발 제외 + 중간 하락 없는 것만 + 종목 중복 제거
   const journeys=useMemo(()=>{
     const arr=[];const now=Date.now();
     Object.entries(gradeHistory||{}).forEach(([ticker,history])=>{
       if(!Array.isArray(history)||history.length<2)return;
-      const first=history[0];const last=history[history.length-1];
-      const firstG=first.from?.grade||first.from;
-      const lastG=last.to?.grade||last.to;
-      if(!firstG||!lastG||!first.price)return;
+      const firstG=history[0].from?.grade||history[0].from;
+      if(!firstG||firstG.includes('위험'))return;
+      if(!history[0].price)return;
+      // 중간에 하락 구간 있으면 제외
+      let prevPt=gPt(firstG);let valid=true;
+      const path=[shortG(firstG)];
+      for(const ev of history){
+        const toG=ev.to?.grade||ev.to;
+        const toPt=gPt(toG);
+        if(toPt<prevPt){valid=false;break;}
+        const sg=shortG(toG);
+        if(path[path.length-1]!==sg)path.push(sg);
+        prevPt=toPt;
+      }
+      if(!valid||path.length<3)return;
+      const lastG=history[history.length-1].to?.grade||history[history.length-1].to;
       const steps=gPt(lastG)-gPt(firstG);
-      if(steps<2)return; // 2단계 이상 상승만
+      if(steps<2)return;
       const curPrice=priceMap[ticker]||null;
-      const roi=curPrice?+((curPrice-first.price)/first.price*100).toFixed(1):null;
-      const daysHeld=Math.floor((now-new Date(first.date).getTime())/86400000);
-      const path=history.map((ev,i)=>i===0?shortG(ev.from?.grade||ev.from):shortG(ev.to?.grade||ev.to)).filter((v,i,a)=>a.indexOf(v)===i);
-      arr.push({ticker,firstG,lastG,steps,roi,daysHeld,path,buyPrice:first.price,curPrice});
+      const roi=curPrice?+((curPrice-history[0].price)/history[0].price*100).toFixed(1):null;
+      const daysHeld=Math.floor((now-new Date(history[0].date).getTime())/86400000);
+      arr.push({ticker,firstG,lastG,steps,roi,daysHeld,path,buyPrice:history[0].price,curPrice});
     });
     return arr.sort((a,b)=>(b.roi||0)-(a.roi||0));
   },[gradeHistory,priceMap]);
 
+  // Top5: 종목당 최고 수익 1건만
+  const top5=useMemo(()=>{
+    const byTicker={};
+    transitions.filter(t=>t.roi!==null).forEach(t=>{
+      if(!byTicker[t.ticker]||t.roi>byTicker[t.ticker].roi)byTicker[t.ticker]=t;
+    });
+    return Object.values(byTicker).sort((a,b)=>b.roi-a.roi).slice(0,5);
+  },[transitions]);
+
   const upTrans=transitions.filter(t=>t.roi!==null);
   const totalAvg=upTrans.length?+(upTrans.reduce((s,t)=>s+t.roi,0)/upTrans.length).toFixed(1):0;
   const totalWin=upTrans.length?+(upTrans.filter(t=>t.roi>0).length/upTrans.length*100).toFixed(0):0;
-  const top5=[...upTrans].sort((a,b)=>b.roi-a.roi).slice(0,5);
 
   if(!gradeHistory||Object.keys(gradeHistory).length===0)return(
     <div style={{textAlign:'center',padding:40,color:'#484f58',fontSize:13}}>
@@ -1557,9 +1579,8 @@ function GradeAnalyzerTab({gradeHistory,stocks,isMobile}){
 
   return <div style={{maxWidth:1400,margin:'0 auto',padding:isMobile?'8px 10px':'8px 16px'}}>
     <div style={{fontSize:isMobile?14:16,fontWeight:900,color:'#e6edf3',marginBottom:2}}>📈 등급전환 수익률 분석</div>
-    <div style={{fontSize:10,color:'#484f58',marginBottom:10}}>위험 출발 제외 · 3회 이상 패턴만 · 현재가 기준</div>
+    <div style={{fontSize:10,color:'#484f58',marginBottom:10}}>위험 출발 제외 · 3회 이상 패턴 · 중간하락 여정 제외 · 종목 중복 제거</div>
 
-    {/* 요약 — 모바일 2x2 */}
     <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:6,marginBottom:10}}>
       {[
         {label:'전환 이벤트',val:transitions.length,color:'#58a6ff'},
@@ -1572,76 +1593,73 @@ function GradeAnalyzerTab({gradeHistory,stocks,isMobile}){
       </div>)}
     </div>
 
-    {/* 전환 유형별 랭킹 — 모바일 카드형 */}
     <div style={{background:'#161b22',border:'1px solid #21262d',borderRadius:10,padding:10,marginBottom:10}}>
       <div style={{fontSize:12,fontWeight:700,color:'#e6edf3',marginBottom:8}}>🏆 전환 유형별 수익률 랭킹</div>
       {isMobile
-        ? <div style={{display:'flex',flexDirection:'column',gap:6}}>
-            {stats.map((g,i)=><div key={g.key} style={{background:'#0d1117',borderRadius:8,padding:'8px 10px',border:'1px solid #21262d'}}>
-              <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:4}}>
-                <div style={{display:'flex',alignItems:'center',gap:6}}>
-                  <span style={{fontSize:13}}>{i===0?'🥇':i===1?'🥈':i===2?'🥉':`${i+1}`}</span>
-                  <Bdg g={g.from}/><span style={{color:'#ffd43b',fontSize:11}}>→</span><Bdg g={g.to}/>
-                </div>
-                <span style={{fontSize:15,fontWeight:900,color:g.avg===null?'#484f58':g.avg>=10?'#3fb950':g.avg>=0?'#57c479':'#f85149'}}>{g.avg!==null?(g.avg>=0?'+':'')+g.avg+'%':'-'}</span>
+        ?<div style={{display:'flex',flexDirection:'column',gap:6}}>
+          {stats.map((g,i)=><div key={g.key} style={{background:'#0d1117',borderRadius:8,padding:'8px 10px',border:'1px solid #21262d'}}>
+            <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:4}}>
+              <div style={{display:'flex',alignItems:'center',gap:6}}>
+                <span style={{fontSize:13}}>{i===0?'🥇':i===1?'🥈':i===2?'🥉':`${i+1}`}</span>
+                <Bdg g={g.from}/><span style={{color:'#ffd43b',fontSize:11}}>→</span><Bdg g={g.to}/>
               </div>
-              <div style={{display:'flex',gap:10,fontSize:10,color:'#484f58'}}>
-                <span>{g.count}회</span>
-                <span>승률 <span style={{color:g.win>=60?'#3fb950':g.win>=40?'#ffd600':'#f85149'}}>{g.win}%</span></span>
-                <span>최고 <span style={{color:'#3fb950'}}>{g.max!==null?'+'+g.max+'%':'-'}</span></span>
-                <span>최저 <span style={{color:'#f85149'}}>{g.min!==null?g.min+'%':'-'}</span></span>
-              </div>
-            </div>)}
-          </div>
-        : <div style={{overflowX:'auto'}}>
-            <table style={{width:'100%',borderCollapse:'collapse',fontSize:11}}>
-              <thead><tr style={{borderBottom:'2px solid #21262d'}}>
-                {['순위','전환','횟수','평균수익률','승률','최고','최저','보유일'].map(h=><th key={h} style={{padding:'5px 8px',textAlign:'left',color:'#484f58',fontSize:9,fontWeight:700}}>{h}</th>)}
-              </tr></thead>
-              <tbody>{stats.map((g,i)=><tr key={g.key} style={{borderBottom:'1px solid #21262d10'}}>
-                <td style={{padding:'5px 8px'}}>{i===0?'🥇':i===1?'🥈':i===2?'🥉':`${i+1}`}</td>
-                <td style={{padding:'5px 8px'}}><Bdg g={g.from}/><span style={{color:'#ffd43b',margin:'0 4px'}}>→</span><Bdg g={g.to}/></td>
-                <td style={{padding:'5px 8px',color:'#8b949e'}}>{g.count}회</td>
-                <td style={{padding:'5px 8px',fontSize:14,fontWeight:900,color:g.avg===null?'#484f58':g.avg>=10?'#3fb950':g.avg>=0?'#57c479':'#f85149'}}>{g.avg!==null?(g.avg>=0?'+':'')+g.avg+'%':'-'}</td>
-                <td style={{padding:'5px 8px',color:g.win>=60?'#3fb950':g.win>=40?'#ffd600':'#f85149'}}>{g.win!==null?g.win+'%':'-'}</td>
-                <td style={{padding:'5px 8px',color:'#3fb950'}}>{g.max!==null?'+'+g.max+'%':'-'}</td>
-                <td style={{padding:'5px 8px',color:'#f85149'}}>{g.min!==null?g.min+'%':'-'}</td>
-                <td style={{padding:'5px 8px',color:'#8b949e'}}>{g.avgD}일</td>
-              </tr>)}</tbody>
-            </table>
-          </div>
+              <span style={{fontSize:15,fontWeight:900,color:g.avg===null?'#484f58':g.avg>=10?'#3fb950':g.avg>=0?'#57c479':'#f85149'}}>{g.avg!==null?(g.avg>=0?'+':'')+g.avg+'%':'-'}</span>
+            </div>
+            <div style={{display:'flex',gap:10,fontSize:10,color:'#484f58'}}>
+              <span>{g.count}회</span>
+              <span>승률 <span style={{color:g.win>=60?'#3fb950':g.win>=40?'#ffd600':'#f85149'}}>{g.win}%</span></span>
+              <span>최고 <span style={{color:'#3fb950'}}>{g.max!==null?'+'+g.max+'%':'-'}</span></span>
+              <span>최저 <span style={{color:'#f85149'}}>{g.min!==null?g.min+'%':'-'}</span></span>
+            </div>
+          </div>)}
+        </div>
+        :<div style={{overflowX:'auto'}}>
+          <table style={{width:'100%',borderCollapse:'collapse',fontSize:11}}>
+            <thead><tr style={{borderBottom:'2px solid #21262d'}}>
+              {['순위','전환','횟수','평균수익률','승률','최고','최저','보유일'].map(h=><th key={h} style={{padding:'5px 8px',textAlign:'left',color:'#484f58',fontSize:9,fontWeight:700}}>{h}</th>)}
+            </tr></thead>
+            <tbody>{stats.map((g,i)=><tr key={g.key} style={{borderBottom:'1px solid #21262d10'}}>
+              <td style={{padding:'5px 8px'}}>{i===0?'🥇':i===1?'🥈':i===2?'🥉':`${i+1}`}</td>
+              <td style={{padding:'5px 8px'}}><Bdg g={g.from}/><span style={{color:'#ffd43b',margin:'0 4px'}}>→</span><Bdg g={g.to}/></td>
+              <td style={{padding:'5px 8px',color:'#8b949e'}}>{g.count}회</td>
+              <td style={{padding:'5px 8px',fontSize:14,fontWeight:900,color:g.avg===null?'#484f58':g.avg>=10?'#3fb950':g.avg>=0?'#57c479':'#f85149'}}>{g.avg!==null?(g.avg>=0?'+':'')+g.avg+'%':'-'}</td>
+              <td style={{padding:'5px 8px',color:g.win>=60?'#3fb950':g.win>=40?'#ffd600':'#f85149'}}>{g.win!==null?g.win+'%':'-'}</td>
+              <td style={{padding:'5px 8px',color:'#3fb950'}}>{g.max!==null?'+'+g.max+'%':'-'}</td>
+              <td style={{padding:'5px 8px',color:'#f85149'}}>{g.min!==null?g.min+'%':'-'}</td>
+              <td style={{padding:'5px 8px',color:'#8b949e'}}>{g.avgD}일</td>
+            </tr>)}</tbody>
+          </table>
+        </div>
       }
     </div>
 
-    {/* 다단계 상승 종목 여정 */}
     {journeys.length>0&&<div style={{background:'#161b22',border:'1px solid #bc8cff33',borderRadius:10,padding:10,marginBottom:10}}>
-      <div style={{fontSize:12,fontWeight:700,color:'#bc8cff',marginBottom:8}}>🚀 2단계 이상 상승 종목 여정</div>
+      <div style={{fontSize:12,fontWeight:700,color:'#bc8cff',marginBottom:8}}>🚀 2단계 이상 순상승 종목 여정</div>
       <div style={{display:'flex',flexDirection:'column',gap:6}}>
         {journeys.slice(0,8).map((j,i)=><div key={j.ticker} style={{background:'#0d1117',borderRadius:8,padding:'8px 10px',border:'1px solid #21262d'}}>
           <div style={{display:'flex',alignItems:'center',justifyContent:'space-between'}}>
-            <div style={{display:'flex',alignItems:'center',gap:6,flexWrap:'wrap'}}>
-              <span style={{fontWeight:700,color:'#e6edf3',fontSize:11}}>{j.ticker}</span>
-              <div style={{display:'flex',alignItems:'center',gap:3}}>
+            <div style={{display:'flex',alignItems:'center',gap:6,flexWrap:'wrap',flex:1,minWidth:0}}>
+              <span style={{fontWeight:700,color:'#e6edf3',fontSize:11,whiteSpace:'nowrap'}}>{sName(j.ticker)}</span>
+              <div style={{display:'flex',alignItems:'center',gap:3,flexWrap:'wrap'}}>
                 {j.path.map((p,pi)=><Fragment key={pi}>
                   <span style={{padding:'1px 5px',borderRadius:3,fontSize:9,fontWeight:700,background:gBg(p),color:gColor(p)}}>{p}</span>
                   {pi<j.path.length-1&&<span style={{color:'#ffd43b',fontSize:10}}>→</span>}
                 </Fragment>)}
               </div>
             </div>
-            <span style={{fontSize:14,fontWeight:900,color:j.roi>=0?'#3fb950':'#f85149',whiteSpace:'nowrap',marginLeft:8}}>{j.roi!==null?(j.roi>=0?'+':'')+j.roi+'%':'-'}</span>
+            <span style={{fontSize:14,fontWeight:900,color:j.roi!=null?(j.roi>=0?'#3fb950':'#f85149'):'#484f58',whiteSpace:'nowrap',marginLeft:8}}>{j.roi!=null?(j.roi>=0?'+':'')+j.roi+'%':'-'}</span>
           </div>
           <div style={{fontSize:9,color:'#484f58',marginTop:3}}>{j.daysHeld}일 보유 · {j.steps}단계 상승</div>
         </div>)}
       </div>
     </div>}
 
-    {/* Top5 + 결론 */}
     <div style={{background:'#161b22',border:'1px solid #21262d',borderRadius:10,padding:10,marginBottom:10}}>
-      <div style={{fontSize:12,fontWeight:700,color:'#3fb950',marginBottom:8}}>🏅 최고 수익 Top 5</div>
+      <div style={{fontSize:12,fontWeight:700,color:'#3fb950',marginBottom:8}}>🏅 최고 수익 Top 5 (종목당 1건)</div>
       <div style={{display:'flex',flexDirection:'column',gap:4}}>
-        {top5.map((t,i)=><div key={i} style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'4px 0',borderBottom:'1px solid #21262d10'}}>
+        {top5.map((t,i)=><div key={t.ticker} style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'5px 0',borderBottom:'1px solid #21262d10'}}>
           <div style={{display:'flex',alignItems:'center',gap:6}}>
-            <span style={{fontSize:11,fontWeight:700,color:'#e6edf3'}}>{t.ticker}</span>
+            <span style={{fontSize:11,fontWeight:700,color:'#e6edf3'}}>{sName(t.ticker)}</span>
             <Bdg g={t.fromG}/><span style={{color:'#ffd43b',fontSize:10}}>→</span><Bdg g={t.toG}/>
           </div>
           <div style={{textAlign:'right'}}>
