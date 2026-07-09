@@ -112,6 +112,46 @@ function sma(bars, period) {
   return sum / period;
 }
 
+/* ===== DEMA(60) + 스토캐스틱 %D(60,3) 이중필터 타점 ===== */
+function calcDemaStoch(bars) {
+  if (bars.length < 130) return null;
+  const closes = bars.map(b => b.close);
+  const n = closes.length;
+  // EMA 시리즈
+  const emaArr = (vals, p) => {
+    const k = 2 / (p + 1); const out = [vals[0]];
+    for (let i = 1; i < vals.length; i++) out.push(vals[i] * k + out[i - 1] * (1 - k));
+    return out;
+  };
+  const e1 = emaArr(closes, 60);
+  const e2 = emaArr(e1, 60);
+  const demaArr = e1.map((v, i) => 2 * v - e2[i]);
+  // 스토캐스틱 %K(60) → %D(3)
+  const kArr = new Array(n).fill(null);
+  for (let i = 59; i < n; i++) {
+    let hh = -Infinity, ll = Infinity;
+    for (let j = i - 59; j <= i; j++) { if (bars[j].high > hh) hh = bars[j].high; if (bars[j].low < ll) ll = bars[j].low; }
+    kArr[i] = hh === ll ? 50 : (closes[i] - ll) / (hh - ll) * 100;
+  }
+  const dAt = i => (kArr[i] == null || kArr[i-1] == null || kArr[i-2] == null) ? null : (kArr[i] + kArr[i-1] + kArr[i-2]) / 3;
+  const dNow = dAt(n - 1), dPrev = dAt(n - 2);
+  if (dNow == null || dPrev == null) return null;
+  const cur = closes[n - 1], prev = closes[n - 2];
+  const dema = demaArr[n - 1], demaPrev = demaArr[n - 2];
+  const buyNow = cur > dema && dNow > 50;
+  const sellNow = cur < dema && dNow < 50;
+  const buyPrev = prev > demaPrev && dPrev > 50;
+  const sellPrev = prev < demaPrev && dPrev < 50;
+  const state = buyNow ? "buy" : sellNow ? "sell" : "neutral";
+  const cross = (buyNow && !buyPrev) ? "buy" : (sellNow && !sellPrev) ? "sell" : null;
+  return {
+    state, cross,
+    dema: +dema.toFixed(2),
+    pctD: +dNow.toFixed(1),
+    demaGap: +((cur / dema - 1) * 100).toFixed(1)
+  };
+}
+
 /* ===== SEPA 8조건 템플릿 (Minervini) ===== */
 function calcSEPA(bars) {
   if (bars.length < 200) return { count: 0, stage: "데이터부족", conditions: [] };
@@ -809,10 +849,10 @@ function calcExecTag(vcp, vol) {
 // ── KOSDAQ 종목 집합 (벤치마크 분리용) ──
 const KOSDAQ_SET = new Set([
   "042700","058470","403870","240810","036930","039030","067310","036540",
-  "489790","189300","099320","211270","450190","058610","277810","454910",
+  "189300","099320","211270","450190","058610","277810","454910",
   "098460","108490","022100","196170","253840","237690","247540","066970",
   "278470","214450","257720","192820","214150","041190","112040","094480",
-  "063170","067160","229640","083650","105840","039790","007660","102120",
+  "063170","067160","229640","083650","105840","007660","102120",
   "087010","018290","241710","089030","095340","166090","033100","071970",
   "009420","141080","229200","251340"
 ]);
@@ -922,6 +962,7 @@ async function analyzeStock(stock) {
     riskPenalty: risk.penalty,
     riskReasons: risk.reasons,
     execTag,
+    demaStoch: calcDemaStoch(bars),
     sepaDetail: {
       count: sepa.count,
       stage: sepa.stage,

@@ -2132,6 +2132,7 @@ export default function Dashboard(){
             r:[a.r?a.r[0]:d.r[0], a.r?a.r[1]:d.r[1], d.r[2]],
             v:a.v||d.v,
             _sepaDetail:a.sepaDetail||null,
+            _demaStoch:a.demaStoch||null,
             _momDetail:a.momDetail||null,
             _vcpDetail:a.vcpDetail||null,
             _volData:a.volData||null,
@@ -2460,6 +2461,7 @@ export default function Dashboard(){
         r: [a.r?a.r[0]:d.r[0], a.r?a.r[1]:d.r[1], d.r[2]],
         v: a.v || d.v,
         _sepaDetail: a.sepaDetail,
+        _demaStoch: a.demaStoch,
         _momDetail: a.momDetail,
         _vcpDetail: a.vcpDetail,
         _volData: a.volData,
@@ -4491,6 +4493,7 @@ export default function Dashboard(){
             <TH c tip="EPS성장·매출성장·ROE 요약 배지">성장/재무</TH>
             <TH c tip="거래량 엔진 신호. 바닥매집·돌파상승(+) / 고점이탈·매도압력(-) 패턴 감지">거래량</TH>
             <TH c tip="보조지표 3개 신호등. 볼린저·MACD·OBV 방향 (🟢우호적 / 🔴악화)">신호</TH>
+            <TH c tip="DEMA(60)+스토캐스틱%D(60) 이중필터 타점. 🟢종가>DEMA & %D>50 매수상태 / 🔴종가<DEMA & %D<50 매도상태 / ⚡당일 신규 크로스">타점</TH>
           </tr></thead>
           <tbody>
             {sorted.map((d,i)=>{
@@ -4585,8 +4588,19 @@ export default function Dashboard(){
                         </div>;
                       })() : <span style={{color:'#333'}}>-</span>}
                     </td>
+                    <td style={{padding:"6px 3px",textAlign:"center"}}>
+                      {(()=>{
+                        const ds=d._demaStoch;
+                        if(!ds)return <span style={{color:'#333'}}>-</span>;
+                        const emoji=ds.state==='buy'?'🟢':ds.state==='sell'?'🔴':'⚫';
+                        const tt=`DEMA(60) ${ds.demaGap>=0?'+':''}${ds.demaGap}% · %D ${ds.pctD}`;
+                        return <span title={tt} style={{fontSize:isMobile?10:12,whiteSpace:'nowrap'}}>
+                          {emoji}{ds.cross&&<span style={{fontSize:isMobile?9:11}}>⚡</span>}
+                        </span>;
+                      })()}
+                    </td>
                   </tr>
-                  {isE && <tr><td colSpan={20} style={{padding:0}}><Detail d={d}/></td></tr>}
+                  {isE && <tr><td colSpan={21} style={{padding:0}}><Detail d={d}/></td></tr>}
                 </Fragment>
               );
             })}
