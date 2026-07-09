@@ -4095,9 +4095,9 @@ export default function Dashboard(){
             <span style={{fontSize:12,color:"#8b949e",fontWeight:600}}>➕ 추가:</span>
             <div style={{position:"relative",minWidth:180}}>
               <input type="text" placeholder="🔍 종목명/티커 검색" value={pfAddSearch}
-                onChange={e=>{setPfAddSearch(e.target.value);if(!e.target.value)setPfForm(p=>({...p,ticker:''}));}}
-                style={{padding:"5px 8px",borderRadius:pfAddSearch?"5px 5px 0 0":"5px",border:"1px solid #21262d",background:"#0d1117",color:"#e6edf3",fontSize:12,width:"100%",outline:"none"}}/>
-              {pfAddSearch&&<div style={{position:"absolute",top:"100%",left:0,right:0,maxHeight:200,overflowY:"auto",background:"#161b22",border:"1px solid #21262d",borderTop:"none",borderRadius:"0 0 5px 5px",zIndex:999}}>
+                onChange={e=>{setPfAddSearch(e.target.value);setPfForm(p=>({...p,ticker:''}));}}
+                style={{padding:"5px 8px",borderRadius:(pfAddSearch&&!pfForm.ticker)?"5px 5px 0 0":"5px",border:"1px solid "+(pfForm.ticker?"#3fb950":"#21262d"),background:"#0d1117",color:pfForm.ticker?"#3fb950":"#e6edf3",fontSize:12,width:"100%",outline:"none"}}/>
+              {pfAddSearch&&!pfForm.ticker&&<div style={{position:"absolute",top:"100%",left:0,right:0,maxHeight:200,overflowY:"auto",background:"#161b22",border:"1px solid #21262d",borderTop:"none",borderRadius:"0 0 5px 5px",zIndex:999}}>
                 {stocks.filter(d=>{const q=pfAddSearch.toLowerCase();return d.n.toLowerCase().includes(q)||d.t.toLowerCase().includes(q);}).slice(0,12).map(d=>(
                   <div key={d.t} onClick={()=>{setPfForm(p=>({...p,ticker:d.t}));setPfAddSearch(d.n+" ("+d.t+")");}}
                     style={{padding:"5px 8px",cursor:"pointer",fontSize:12,display:"flex",justifyContent:"space-between"}}
@@ -4119,10 +4119,10 @@ export default function Dashboard(){
           </div>
 
           {portfolio.length===0 ? <div style={{color:"#484f58",fontSize:13,padding:20,textAlign:"center"}}>보유종목이 없습니다. 위에서 종목을 추가하세요.</div> : <>
-            {/* ── KPI 카드 상단 요약 ── */}
+            {/* ── 요약 한줄 바 ── */}
             {(()=>{
               let krBuy=0,krCur=0,usBuy=0,usCur=0;
-              let alertCnt=0,takeProfitCnt=0,holdCnt=0,clearCnt=0;
+              let alertCnt=0,clearCnt=0;
               portfolio.forEach(p=>{
                 const s=stocks.find(d=>d.t===p.ticker);
                 if(!s||!s.p)return;
@@ -4134,33 +4134,20 @@ export default function Dashboard(){
                 const hs=getHoldStatus(sl,pct,vd,s);
                 if(hs.label==='정리검토')clearCnt++;
                 else if(hs.label==='경계')alertCnt++;
-                else if(hs.label==='익절구간')takeProfitCnt++;
-                else holdCnt++;
               });
               const krPnl=krCur-krBuy, usPnl=usCur-usBuy;
-              const totalBuy=krBuy+usBuy, totalPnl=krPnl+usPnl;
-              const totalPct=totalBuy>0?((totalBuy+totalPnl)/totalBuy-1)*100:0;
-              const kpis=[
-                {label:'총 평가',val:'₩'+Math.round(krCur).toLocaleString()+(usCur>0?' + $'+Math.round(usCur).toLocaleString():''),color:'#e6edf3',sub:null},
-                {label:'총 손익',val:(totalPnl>=0?'+':'')+Math.round(totalPnl).toLocaleString(),color:totalPnl>=0?'#3fb950':'#f85149',sub:(totalPct>=0?'+':'')+totalPct.toFixed(2)+'%'},
-                {label:'경계',val:alertCnt+'종목',color:alertCnt>0?'#ffd43b':'#484f58',sub:clearCnt>0?'정리'+clearCnt:null},
-                {label:'익절후보',val:takeProfitCnt+'종목',color:takeProfitCnt>0?'#bc8cff':'#484f58',sub:'보유유지 '+holdCnt},
-              ];
-              return <div style={{display:'grid',gridTemplateColumns:isMobile?'repeat(2,1fr)':'repeat(4,1fr)',gap:8,marginBottom:14}}>
-                {kpis.map(k=><div key={k.label} style={{background:'#161b22',borderRadius:8,padding:'10px 12px',border:'1px solid #21262d'}}>
-                  <div style={{fontSize:10,color:'#484f58',marginBottom:4}}>{k.label}</div>
-                  <div style={{fontSize:isMobile?12:14,fontWeight:900,color:k.color,fontFamily:"'JetBrains Mono'",lineHeight:1.2}}>{k.val}</div>
-                  {k.sub&&<div style={{fontSize:9,color:k.color,opacity:0.8,marginTop:2}}>{k.sub}</div>}
-                </div>)}
+              const krPct=krBuy>0?(krCur/krBuy-1)*100:0;
+              const usPct=usBuy>0?(usCur/usBuy-1)*100:0;
+              const Sep=()=><span style={{color:'#21262d'}}>│</span>;
+              return <div style={{display:'flex',gap:isMobile?8:12,flexWrap:'wrap',alignItems:'center',background:'#161b22',border:'1px solid #21262d',borderRadius:8,padding:'8px 12px',marginBottom:12,fontSize:isMobile?11:12,fontFamily:"'JetBrains Mono'"}}>
+                {krBuy>0&&<span><span style={{color:'#484f58',fontSize:9,marginRight:4}}>🇰🇷</span><span style={{color:'#e6edf3',fontWeight:700}}>₩{Math.round(krCur).toLocaleString()}</span><span style={{color:krPnl>=0?'#3fb950':'#f85149',fontWeight:800,marginLeft:5}}>{krPnl>=0?'+':''}{Math.round(krPnl).toLocaleString()} ({krPct>=0?'+':''}{krPct.toFixed(1)}%)</span></span>}
+                {krBuy>0&&usBuy>0&&<Sep/>}
+                {usBuy>0&&<span><span style={{color:'#484f58',fontSize:9,marginRight:4}}>🇺🇸</span><span style={{color:'#e6edf3',fontWeight:700}}>${Math.round(usCur).toLocaleString()}</span><span style={{color:usPnl>=0?'#3fb950':'#f85149',fontWeight:800,marginLeft:5}}>{usPnl>=0?'+':''}{Math.round(usPnl).toLocaleString()} ({usPct>=0?'+':''}{usPct.toFixed(1)}%)</span></span>}
+                {(clearCnt>0||alertCnt>0)&&<Sep/>}
+                {clearCnt>0&&<span style={{color:'#f85149',fontWeight:800}}>정리검토 {clearCnt}</span>}
+                {alertCnt>0&&<span style={{color:'#ffd43b',fontWeight:800}}>경계 {alertCnt}</span>}
               </div>;
             })()}
-
-            {/* 손절 시스템 설명 */}
-            <div style={{display:"flex",gap:8,marginBottom:12,flexWrap:"wrap"}}>
-              <span style={{fontSize:10,padding:"3px 8px",borderRadius:4,background:"#ff922b15",border:"1px solid #ff922b33",color:"#ff922b"}}>진입손절: 매수가 -7%</span>
-              <span style={{fontSize:10,padding:"3px 8px",borderRadius:4,background:"#bc8cff15",border:"1px solid #bc8cff33",color:"#bc8cff"}}>트레일링: 최고가 -9%</span>
-              <span style={{fontSize:10,padding:"3px 8px",borderRadius:4,background:"#58a6ff15",border:"1px solid #58a6ff33",color:"#58a6ff"}}>활성 = 둘 중 높은 가격</span>
-            </div>
 
             {/* ⚠️ 보유종목 하락 전환 경고 */}
             {(()=>{
