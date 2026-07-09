@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback, useMemo, Fragment } from "react";
 
 import D from "./data";
+import JANG from "./jang";
 
 /* ===== 유틸 ===== */
 const fP=(v,k)=>k?`₩${Math.round(v).toLocaleString()}`:`$${v.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}`;
@@ -873,6 +874,11 @@ function StockDetailModal({ stock, onClose, isWatched, onToggleWatch, gradeHisto
             <div style={{display:'flex',gap:'6px',alignItems:'center',marginBottom:'4px',flexWrap:'wrap'}}>
               <span style={{padding:'2px 8px',borderRadius:4,fontSize:11,background:stock.k?'#ff922b20':'#4dabf720',color:stock.k?'#ff922b':'#4dabf7',fontWeight:700}}>{stock.k?'🇰🇷 KR':'🇺🇸 US'}</span>
               <span style={{padding:'2px 8px',borderRadius:4,fontSize:11,background:'#1a1a2e',color:'#666'}}>{stock.s}</span>
+              {JANG[stock.t]&&(()=>{
+                const jg=JANG[stock.t];
+                const jc=jg.s>=85?'#ff1744':jg.s>=70?'#3fb950':jg.s>=55?'#ffd600':'#f85149';
+                return <span style={{padding:'2px 8px',borderRadius:4,fontSize:11,background:jc+'18',color:jc,fontWeight:800,border:`1px solid ${jc}44`}}>Jang {jg.s}점<span style={{fontSize:9,opacity:0.6,fontWeight:400,marginLeft:3}}>{jg.d?.slice(5)}</span></span>;
+              })()}
             </div>
             <h2 style={{fontSize:'20px',fontWeight:900,color:'#eee',margin:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{stock.n}<span style={{fontSize:'13px',color:'#555',marginLeft:'6px',fontFamily:"'JetBrains Mono'"}}>{stock.t}</span></h2>
             <div style={{fontSize:'18px',fontWeight:700,color:'#fff',marginTop:'4px',fontFamily:"'JetBrains Mono'"}}>
@@ -4461,6 +4467,7 @@ export default function Dashboard(){
             <TH onClick={()=>hs("c")} a={sc==="c"} r>등락</TH>
             <TH onClick={()=>hs("f")} a={sc==="f"} c tip="펀더멘털 종합점수 (A~F). 매출성장·이익률·재무건전성 기반">펀더</TH>
             <TH onClick={()=>hs("vd")} a={sc==="vd"} c tip="6개 엔진 합산 최종 등급 (100점 만점). 최강85+·매수65~84·관심50~64·관망35~49·위험~34">종합</TH>
+            <TH c tip="Jang's Analyst 펀더멘털 점수 (100점 만점). 별도 분석 시스템의 종합점수 — 명관 추세점수와 교차검증용">Jang</TH>
             {(view==="dual"||view==="mf") && <>
               <TH c tip="현재가와 30일 이동평균선의 이격도. +면 30일선 위, -면 아래">30일선</TH>
             </>}
@@ -4518,6 +4525,17 @@ export default function Dashboard(){
                       {/* Gate/Risk — 작게 */}
                       {vd.details.gatePenalty > 0 && <div style={{fontSize:isMobile?6:7,color:'#f85149',marginTop:1}}>Gate-{vd.details.gatePenalty}</div>}
                       {vd.details.riskPenalty > 0 && <div style={{fontSize:isMobile?6:7,color:'#ff922b',marginTop:1}}>⚠-{vd.details.riskPenalty}</div>}
+                    </td>
+                    <td style={{padding:isMobile?"3px 3px":"4px 6px",textAlign:"center"}}>
+                      {(()=>{
+                        const jg=JANG[d.t];
+                        if(!jg)return <span style={{color:'#333',fontSize:isMobile?9:11}}>−</span>;
+                        const jc=jg.s>=85?'#ff1744':jg.s>=70?'#3fb950':jg.s>=55?'#ffd600':'#f85149';
+                        return <div>
+                          <div style={{fontSize:isMobile?10:13,fontWeight:800,color:jc,fontFamily:"'JetBrains Mono'"}}>{jg.s}</div>
+                          {!isMobile&&<div style={{fontSize:7,color:'#484f58'}}>{jg.d?.slice(5)}</div>}
+                        </div>;
+                      })()}
                     </td>
                     {(view==="dual"||view==="mf") && <>
                       <td style={{padding:"6px 5px",textAlign:"center",fontSize:isMobile?9:11,fontFamily:"'JetBrains Mono'"}}>
@@ -4578,7 +4596,7 @@ export default function Dashboard(){
                       })() : <span style={{color:'#333'}}>-</span>}
                     </td>
                   </tr>
-                  {isE && <tr><td colSpan={20} style={{padding:0}}><Detail d={d}/></td></tr>}
+                  {isE && <tr><td colSpan={21} style={{padding:0}}><Detail d={d}/></td></tr>}
                 </Fragment>
               );
             })}
