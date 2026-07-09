@@ -2,6 +2,8 @@ import { useState, useEffect, useRef, useCallback, useMemo, Fragment } from "rea
 
 import D from "./data";
 import JANG from "./jang";
+// Jang's Analyst 펀더점수를 펀더(f)에 반영 — 있는 종목만, 없으면 기존 f 유지
+D.forEach(d=>{if(JANG[d.t]!=null)d.f=JANG[d.t].s;});
 
 /* ===== 유틸 ===== */
 const fP=(v,k)=>k?`₩${Math.round(v).toLocaleString()}`:`$${v.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}`;
@@ -4465,9 +4467,8 @@ export default function Dashboard(){
             {!isMobile&&<TH onClick={()=>hs("s")} a={sc==="s"}>섹터</TH>}
             <TH onClick={()=>hs("p")} a={sc==="p"} r>현재가</TH>
             <TH onClick={()=>hs("c")} a={sc==="c"} r>등락</TH>
-            <TH onClick={()=>hs("f")} a={sc==="f"} c tip="펀더멘털 종합점수 (A~F). 매출성장·이익률·재무건전성 기반">펀더</TH>
+            <TH onClick={()=>hs("f")} a={sc==="f"} c tip="Jang's Analyst 펀더멘털 점수 (100점 만점). 미분석 종목은 기존 펀더점수">펀더</TH>
             <TH onClick={()=>hs("vd")} a={sc==="vd"} c tip="6개 엔진 합산 최종 등급 (100점 만점). 최강85+·매수65~84·관심50~64·관망35~49·위험~34">종합</TH>
-            <TH c tip="Jang's Analyst 펀더멘털 점수 (100점 만점). 별도 분석 시스템의 종합점수 — 명관 추세점수와 교차검증용">Jang</TH>
             {(view==="dual"||view==="mf") && <>
               <TH c tip="현재가와 30일 이동평균선의 이격도. +면 30일선 위, -면 아래">30일선</TH>
             </>}
@@ -4525,17 +4526,6 @@ export default function Dashboard(){
                       {/* Gate/Risk — 작게 */}
                       {vd.details.gatePenalty > 0 && <div style={{fontSize:isMobile?6:7,color:'#f85149',marginTop:1}}>Gate-{vd.details.gatePenalty}</div>}
                       {vd.details.riskPenalty > 0 && <div style={{fontSize:isMobile?6:7,color:'#ff922b',marginTop:1}}>⚠-{vd.details.riskPenalty}</div>}
-                    </td>
-                    <td style={{padding:isMobile?"3px 3px":"4px 6px",textAlign:"center"}}>
-                      {(()=>{
-                        const jg=JANG[d.t];
-                        if(!jg)return <span style={{color:'#333',fontSize:isMobile?9:11}}>−</span>;
-                        const jc=jg.s>=85?'#ff1744':jg.s>=70?'#3fb950':jg.s>=55?'#ffd600':'#f85149';
-                        return <div>
-                          <div style={{fontSize:isMobile?10:13,fontWeight:800,color:jc,fontFamily:"'JetBrains Mono'"}}>{jg.s}</div>
-                          {!isMobile&&<div style={{fontSize:7,color:'#484f58'}}>{jg.d?.slice(5)}</div>}
-                        </div>;
-                      })()}
                     </td>
                     {(view==="dual"||view==="mf") && <>
                       <td style={{padding:"6px 5px",textAlign:"center",fontSize:isMobile?9:11,fontFamily:"'JetBrains Mono'"}}>
@@ -4596,7 +4586,7 @@ export default function Dashboard(){
                       })() : <span style={{color:'#333'}}>-</span>}
                     </td>
                   </tr>
-                  {isE && <tr><td colSpan={21} style={{padding:0}}><Detail d={d}/></td></tr>}
+                  {isE && <tr><td colSpan={20} style={{padding:0}}><Detail d={d}/></td></tr>}
                 </Fragment>
               );
             })}
