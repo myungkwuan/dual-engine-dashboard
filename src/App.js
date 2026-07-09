@@ -4344,6 +4344,48 @@ export default function Dashboard(){
         </div>}
       </div>}
 
+      {/* ============ ⚡ 오늘의 타점 (DEMA60×%D 신규 크로스) ============ */}
+      {tab==="main" && (()=>{
+        const buyCross=stocks.filter(d=>d._demaStoch?.cross==='buy').map(d=>({d,vd:getVerdict(d)})).sort((a,b)=>b.vd.totalPt-a.vd.totalPt);
+        const sellCrossAll=stocks.filter(d=>d._demaStoch?.cross==='sell');
+        const heldSet=new Set((portfolio||[]).map(x=>x.ticker));
+        const sellHeld=sellCrossAll.filter(d=>heldSet.has(d.t));
+        const sellOther=sellCrossAll.filter(d=>!heldSet.has(d.t));
+        if(buyCross.length===0&&sellCrossAll.length===0)return null;
+        const Chip=({d,vd,warn})=>(
+          <span style={{display:'inline-flex',alignItems:'center',gap:4,padding:'3px 8px',borderRadius:6,fontSize:isMobile?10:11,
+            background:warn?'#f8514922':'#0d1117',border:`1px solid ${warn?'#f85149':vd&&vd.totalPt>=65?'#3fb95055':'#21262d'}`,whiteSpace:'nowrap'}}>
+            <span style={{fontWeight:800,color:warn?'#f85149':'#e6edf3'}}>{d.n||d.t}</span>
+            {vd&&<span style={{fontWeight:700,color:vd.color,fontSize:isMobile?9:10}}>{vd.totalPt}점·{vd.verdict}</span>}
+          </span>
+        );
+        return <div style={{maxWidth:1800,margin:"8px auto",padding:"0 20px"}}>
+          <div style={{background:'#161b22',border:'1px solid #ffd43b44',borderRadius:10,padding:'10px 14px'}}>
+            <div style={{fontSize:isMobile?12:13,fontWeight:900,color:'#ffd43b',marginBottom:8}}>⚡ 오늘의 타점 <span style={{fontSize:9,fontWeight:400,color:'#484f58'}}>DEMA60×스토캐스틱%D 신규 크로스 · 분석 시점 기준</span></div>
+            {sellHeld.length>0&&<div style={{background:'#f8514912',border:'1px solid #f8514966',borderRadius:8,padding:'8px 10px',marginBottom:8}}>
+              <div style={{fontSize:11,fontWeight:800,color:'#f85149',marginBottom:5}}>⚠️ 보유종목 매도 크로스 발생 — 청산/축소 검토 ({sellHeld.length})</div>
+              <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
+                {sellHeld.map(d=><Chip key={d.t} d={d} vd={getVerdict(d)} warn/>)}
+              </div>
+            </div>}
+            {buyCross.length>0&&<div style={{marginBottom:sellOther.length>0?7:0}}>
+              <div style={{fontSize:11,fontWeight:700,color:'#3fb950',marginBottom:5}}>🟢 신규 매수 크로스 — 오늘 진입 후보 ({buyCross.length}) <span style={{fontSize:9,color:'#484f58',fontWeight:400}}>종합점수순 · 65점 이상 초록테두리</span></div>
+              <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
+                {buyCross.slice(0,isMobile?8:16).map(({d,vd})=><Chip key={d.t} d={d} vd={vd}/>)}
+                {buyCross.length>(isMobile?8:16)&&<span style={{fontSize:10,color:'#484f58',alignSelf:'center'}}>+{buyCross.length-(isMobile?8:16)}개 (타점 컬럼 ⚡ 참고)</span>}
+              </div>
+            </div>}
+            {sellOther.length>0&&<div>
+              <div style={{fontSize:10,fontWeight:700,color:'#8b949e',marginBottom:4}}>🔴 매도 크로스 — 미보유 참고 ({sellOther.length})</div>
+              <div style={{display:'flex',gap:5,flexWrap:'wrap',opacity:0.65}}>
+                {sellOther.slice(0,isMobile?6:12).map(d=><span key={d.t} style={{fontSize:isMobile?9:10,color:'#8b949e',padding:'2px 7px',borderRadius:5,background:'#0d1117',border:'1px solid #21262d',whiteSpace:'nowrap'}}>{d.n||d.t}</span>)}
+                {sellOther.length>(isMobile?6:12)&&<span style={{fontSize:9,color:'#484f58',alignSelf:'center'}}>+{sellOther.length-(isMobile?6:12)}</span>}
+              </div>
+            </div>}
+          </div>
+        </div>;
+      })()}
+
       {/* ============ AI 추천 ============ */}
       {tab==="main" && (()=>{
         const all=filtered.map(d=>({d,vd:getVerdict(d),dm:getDualMomentum(d)}));
