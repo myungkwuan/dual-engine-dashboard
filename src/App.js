@@ -1703,7 +1703,7 @@ function SectorEngineTab({mkt,mktTime,mktRt,onRefresh,isMobile}){
   const SPDR=Object.keys(SEC_NM);
   const spy=mkt.spyPerf;
   const themes=mkt.themes||[];
-  const secs=(mkt.sectors||[]).filter(s=>SPDR.includes(s.sym)&&s.r1w!=null);
+  const secs=(mkt.secRaw||[]).filter(s=>SPDR.includes(s.sym)&&s.r1w!=null);
   const hasData=!!spy&&themes.length>0&&secs.length>0;
 
   const rows=useMemo(()=>{
@@ -2691,6 +2691,9 @@ export default function Dashboard(){
         vixLevel:d.vix?.level||"-",
         nh:"-",ad:"-",
         sec:(d.sectors||[]).map(s=>[s.sym,s.r3m,s.r1m||0]),
+        secRaw:(d.sectors||[]).map(s=>({sym:s.sym,r3m:s.r3m||0,r1m:s.r1m||0,r1w:s.r1w??null})),
+        themes:d.themes||[],
+        spyPerf:d.spyPerf||null,
         krSectors:(d.krSectors||[]),
         health:d.health||MKT_DEFAULT.health,
         usIndices:d.usIndices||null,
