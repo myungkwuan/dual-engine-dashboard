@@ -2067,6 +2067,8 @@ export default function Dashboard(){
   /* 보유종목 검색 */
   const[pfSearch,setPfSearch]=useState('');
   const[pfAddSearch,setPfAddSearch]=useState('');
+  /* 핵심 모드 (5컬럼 간단 테이블) */
+  const[coreMode,setCoreMode]=useState(()=>{try{return localStorage.getItem('core_mode')==='1';}catch(e){return false;}});
   /* 듀얼모멘텀 필터 */
   const[dmFilter,setDmFilter]=useState("all");
   /* 상세 필터 접기/펼치기 */
@@ -2935,7 +2937,7 @@ export default function Dashboard(){
       {/* Tab Nav */}
       <div className="tab-nav" style={{maxWidth:1800,margin:"6px auto",padding:"0 20px"}}>
         <div style={{display:"flex",gap:4,overflowX:"auto",WebkitOverflowScrolling:"touch",paddingBottom:2,scrollbarWidth:"none"}}>
-          {[["main",isMobile?"📊":"📊 메인"],["watch",isMobile?("👁"+watchlist.length):("👁 워치("+watchlist.length+")")],["port",isMobile?"💼":"💼 보유종목"],["filter",isMobile?"🌐":"🌐 시장필터"],["calc",isMobile?"🧮":"🧮 포지션"],["check",isMobile?"✅":"✅ 체크리스트"],["asset",isMobile?"💰":"💰 자산관리"],["grade",isMobile?"📈":"📈 전환분석"],["breakout",isMobile?"🎯":"🎯 전환임박"],["report",isMobile?"📄":"📄 리포트"],["guide",isMobile?"📖":"📖 가이드"]].map(([k,l])=>
+          {[["main",isMobile?"📊메인":"📊 메인"],["watch",isMobile?("👁워치"+watchlist.length):("👁 워치("+watchlist.length+")")],["port",isMobile?"💼보유":"💼 보유종목"],["filter",isMobile?"🌐시장":"🌐 시장필터"],["calc",isMobile?"🧮포지션":"🧮 포지션"],["check",isMobile?"✅체크":"✅ 체크리스트"],["asset",isMobile?"💰자산":"💰 자산관리"],["grade",isMobile?"📈전환":"📈 전환분석"],["breakout",isMobile?"🎯임박":"🎯 전환임박"],["report",isMobile?"📄리포트":"📄 리포트"],["guide",isMobile?"📖가이드":"📖 가이드"]].map(([k,l])=>
             <Tb key={k} label={l} active={tab===k} onClick={()=>setTab(k)}/>
           )}
         </div>
@@ -4276,7 +4278,8 @@ export default function Dashboard(){
       {(tab==="main"||tab==="filter") && <div className="filter-bar" style={{maxWidth:1800,margin:"0 auto",padding:"0 20px 4px"}}>
         {/* ── 1차 필터: 항상 노출 ── */}
         <div style={{display:"flex",gap:4,alignItems:"center",marginBottom:4,overflowX:"auto",WebkitOverflowScrolling:"touch",scrollbarWidth:"none",paddingBottom:2}}>
-          {[["dual",isMobile?"📊":"📊 듀얼"],["mf",isMobile?"🎯":"🎯 MF"],["sepa",isMobile?"🏆":"🏆 SEPA"],["dm",isMobile?"⚡":"⚡ DM"],["vcp",isMobile?"📉":"📉 VCP"],["cf",isMobile?"📐":"📐 CF"]].map(([k,l])=><Tb key={k} label={l} active={view===k} onClick={()=>setView(k)}/>)}
+          <Tb label={isMobile?"🎯핵심":"🎯 핵심"} active={coreMode} onClick={()=>{const v=!coreMode;setCoreMode(v);try{localStorage.setItem('core_mode',v?'1':'0');}catch(e){}}}/>
+          {!coreMode&&[["dual",isMobile?"📊":"📊 듀얼"],["mf",isMobile?"🎯":"🎯 MF"],["sepa",isMobile?"🏆":"🏆 SEPA"],["dm",isMobile?"⚡":"⚡ DM"],["vcp",isMobile?"📉":"📉 VCP"],["cf",isMobile?"📐":"📐 CF"]].map(([k,l])=><Tb key={k} label={l} active={view===k} onClick={()=>setView(k)}/>)}
           <div style={{width:1,height:18,background:"#21262d",flexShrink:0}}/>
           {[["all",isMobile?"전체":"🌐 전체"],["us",isMobile?"🇺🇸"+usStocks.length:"🇺🇸 미국("+usStocks.length+")"],["kr",isMobile?"🇰🇷"+krStocks.length:"🇰🇷 한국("+krStocks.length+")"]].map(([k,l])=><Tb key={k} label={l} active={mk===k} onClick={()=>setMk(k)}/>)}
           <div style={{width:1,height:18,background:"#21262d",flexShrink:0}}/>
@@ -4491,6 +4494,41 @@ export default function Dashboard(){
 
       {/* ============ Table ============ */}
       {(tab==="main"||tab==="filter") && <div className="tbl-wrap" style={{maxWidth:1800,margin:"0 auto",padding:"0 20px 30px",overflowX:"auto"}}>
+        {coreMode ? (
+        <table style={{borderCollapse:"collapse",fontSize:isMobile?12:14,width:"100%"}}>
+          <thead><tr>
+            <TH onClick={()=>hs("n")} a={sc==="n"}>종목</TH>
+            <TH onClick={()=>hs("p")} a={sc==="p"} r>현재가</TH>
+            <TH onClick={()=>hs("c")} a={sc==="c"} r>등락</TH>
+            <TH onClick={()=>hs("vd")} a={sc==="vd"} c tip="6개 엔진 합산 최종 등급">종합</TH>
+            <TH c tip="DEMA60×%D 이중필터. ⚡=당일 신규 크로스">타점</TH>
+          </tr></thead>
+          <tbody>
+            {sorted.map(d=>{
+              const vd=getVerdict(d);const ds=d._demaStoch;const isE=exp===d.t;
+              return <Fragment key={d.t}>
+                <tr onClick={()=>setExp(isE?null:d.t)} style={{borderBottom:"1px solid rgba(33,38,45,.4)",cursor:"pointer"}}>
+                  <td style={{padding:isMobile?"8px 4px":"8px 6px",maxWidth:isMobile?150:240,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
+                    <span onClick={e=>{e.stopPropagation();toggleWatch(d.t);}} style={{fontSize:10,marginRight:2,cursor:"pointer",opacity:watchlist.includes(d.t)?1:0.25,userSelect:"none"}}>{watchlist.includes(d.t)?'⭐':'☆'}</span>
+                    <span style={{fontSize:10,marginRight:3}}>{d.k?'🇰🇷':'🇺🇸'}</span>
+                    <span onClick={e=>{e.stopPropagation();handleStockClick(d);}} style={{fontWeight:vd.stars>=5?800:600,fontSize:isMobile?12:13,color:vd.stars>=5?"#ff1744":"#e6edf3",cursor:"pointer",borderBottom:"1px dashed "+(vd.stars>=5?"#ff1744":"#484f58")}}>{d.n}</span>
+                  </td>
+                  <td style={{padding:isMobile?"8px 4px":"8px 6px",textAlign:"right",fontFamily:"'JetBrains Mono'",fontSize:isMobile?12:14,color:"#e6edf3"}}>{d.p?fP(d.p,d.k):'-'}</td>
+                  <td style={{padding:isMobile?"8px 4px":"8px 6px",textAlign:"right"}}><Chg v={d.c}/></td>
+                  <td style={{padding:"6px 4px",textAlign:"center",background:vd.color+"12",borderLeft:`2px solid ${vd.color}`,whiteSpace:"nowrap"}}>
+                    <span style={{fontSize:isMobile?11:13,fontWeight:900,color:vd.color}}>{vd.verdict}</span>
+                    <span style={{fontSize:isMobile?9:11,fontWeight:700,color:vd.color,fontFamily:"'JetBrains Mono'",marginLeft:4,opacity:0.85}}>{vd.totalPt}</span>
+                  </td>
+                  <td style={{padding:isMobile?"8px 4px":"8px 6px",textAlign:"center",fontSize:isMobile?12:13,whiteSpace:"nowrap"}}>
+                    {ds?<>{ds.state==='buy'?'🟢':ds.state==='sell'?'🔴':'⚫'}{ds.cross&&<span>⚡</span>}</>:<span style={{color:'#333'}}>-</span>}
+                  </td>
+                </tr>
+                {isE && <tr><td colSpan={5} style={{padding:0}}><Detail d={d}/></td></tr>}
+              </Fragment>;
+            })}
+          </tbody>
+        </table>
+        ) : (
         <table style={{borderCollapse:"collapse",fontSize:isMobile?11:14,width:isMobile?"max-content":"100%"}}>
           <thead><tr>
             {!isMobile&&<TH w={30}>{"#"}</TH>}
@@ -4635,6 +4673,7 @@ export default function Dashboard(){
             })}
           </tbody>
         </table>
+        )}
         {sorted.length===0 && <div style={{textAlign:"center",padding:30,color:"#484f58",fontSize:14}}>결과 없음</div>}
       </div>}
 
