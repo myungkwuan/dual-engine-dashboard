@@ -190,6 +190,28 @@ function SectorChart({trendData,isMobile,onSectorNav,market}){
 }
 
 /* ===== 듀얼모멘텀 강화 분석 ===== */
+/* ===== 섹터순위 동적 계산 =====
+   같은 시장·섹터 내 3M 수익률 순위를 40스케일 백분위로 변환해 r[2]에 반영.
+   기존 secBonus 임계값(≤5:+10 / ≤10:+7 / ≤20:+4)과 "X위/40" 표시 체계 호환.
+   분석 실행·캐시 복원 시마다 자동 재계산 — data.js 정적값 대체 */
+function applySecRank(arr){
+  const groups={};
+  arr.forEach(d=>{
+    if(d.s==='ETF')return;
+    const key=(d.k?'KR':'US')+'|'+d.s;
+    (groups[key]=groups[key]||[]).push(d);
+  });
+  Object.values(groups).forEach(g=>{
+    const sorted=[...g].sort((a,b)=>(b.r?.[0]??-999)-(a.r?.[0]??-999));
+    const n=sorted.length;
+    sorted.forEach((d,i)=>{
+      const scaled=n<=1?20:1+Math.round(i/(n-1)*39); // 1등=1위, 꼴찌=40위 (섹터 크기 무관)
+      d.r=[d.r?.[0]??0,d.r?.[1]??0,scaled];
+    });
+  });
+  return arr;
+}
+
 function getDualMomentum(d, b3, b6, b12) {
   const r3m = d.r[0], r6m = d.r[1], secRank = d.r[2];
   // 12M 수익률: _momDetail에서 읽기 (d.a.momDetail 버그 수정)
@@ -2128,7 +2150,7 @@ export default function Dashboard(){
         const sampleKeys=Object.keys(parsed).slice(0,3);
         const isOldCache=sampleKeys.length>0 && !parsed[sampleKeys[0]]?.gate;
         if(isOldCache) setIsV1Cache(true);
-        setStocks(prev=>prev.map(d=>{
+        setStocks(prev=>applySecRank(prev.map(d=>{
           const a=parsed[d.t];
           if(!a)return d;
           return {...d,
@@ -2146,7 +2168,7 @@ export default function Dashboard(){
             _riskReasons:a.riskReasons||[],
             _execTag:a.execTag||null,
           };
-        }));
+        })));
         log("📂 마지막 분석 결과 로드 ("+anaTime+")","ok");
       }
     }catch(e){}
@@ -2449,7 +2471,7 @@ export default function Dashboard(){
     }
 
     /* stocks에 분석 결과 반영 (동기 계산 + state 업데이트 분리) */
-    const computeUpdated = (prev) => prev.map(d=>{
+    const computeUpdated = (prev) => applySecRank(prev.map(d=>{
       const a=allResults[d.t];
       if(!a)return d;
       return {...d,
@@ -2467,7 +2489,7 @@ export default function Dashboard(){
         _riskReasons: a.riskReasons||[],
         _execTag: a.execTag||null,
       };
-    });
+    }));
 
     /* ── 등급 전환 감지 (동기) ── */
     /* stocks closure 기반으로 업데이트된 종목 배열을 동기 계산 */
