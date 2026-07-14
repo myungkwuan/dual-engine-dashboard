@@ -2395,26 +2395,18 @@ export default function Dashboard(){
         }
       }
     }catch(e){}
-    /* ── KOSPI/KOSDAQ 경량 갱신 (Naver) ── */
+    /* ── KOSPI/KOSDAQ 경량 갱신 (서버 프록시 /api/krindex — CORS 우회) ── */
     try{
-      const fetchKospiIdx=async(sym)=>{
-        const ts=Date.now();
-        const r=await fetch(`https://fchart.stock.naver.com/sise.nhn?symbol=${sym}&timeframe=day&count=3&requestType=0&_=${ts}`,
-          {headers:{"User-Agent":"Mozilla/5.0","Referer":"https://finance.naver.com/"}});
-        if(!r.ok)return null;
-        const xml=await r.text();
-        const items=xml.match(/data="([^"]+)"/g)||[];
-        const closes=items.map(m=>parseFloat(m.split("|")[4])).filter(v=>!isNaN(v));
-        if(closes.length<2)return null;
-        const cur=closes[closes.length-1];const prev2=closes[closes.length-2];
-        return{price:+cur.toFixed(2),chg:prev2?+((cur-prev2)/prev2*100).toFixed(2):0};
-      };
-      const [kpi,kqi]=await Promise.all([fetchKospiIdx("KOSPI"),fetchKospiIdx("KOSDAQ")]);
-      setMKT(prev=>({...prev,
-        kospiPrice:kpi?.price||prev.kospiPrice,
-        kosdaqPrice:kqi?.price||prev.kosdaqPrice,
-        kosdaqChg:kqi?.chg??prev.kosdaqChg,
-      }));
+      const r=await fetch(`/api/krindex?_=${Date.now()}`);
+      if(r.ok){
+        const j=await r.json();
+        setMKT(prev=>({...prev,
+          kospiPrice:j.kospi?.price||prev.kospiPrice,
+          kospiDayChg:j.kospi?.chg??prev.kospiDayChg,
+          kosdaqPrice:j.kosdaq?.price||prev.kosdaqPrice,
+          kosdaqChg:j.kosdaq?.chg??prev.kosdaqChg,
+        }));
+      }
     }catch(e){}
     busy.current=false;
   },[stocks,log]);
