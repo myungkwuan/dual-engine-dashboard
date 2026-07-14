@@ -1730,6 +1730,22 @@ function SectorEngineTab({mkt,mktTime,mktRt,onRefresh,isMobile}){
   },[mkt,hasData]);
 
   const accel=rows.filter(r=>r.badge==="🔥유입가속");
+
+  /* 판단 가이드 자동 생성 */
+  const guide=useMemo(()=>{
+    if(rows.length===0)return null;
+    const top3=rows.slice(0,3);
+    const outflow=rows.filter(r=>r.badge==="🔻유출");
+    const inflowCnt=rows.filter(r=>r.badge==="🟢유입"||r.badge==="🔥유입가속").length;
+    const defensive=["XLP","XLU","XLV"];
+    const defTopCnt=rows.slice(0,6).filter(r=>defensive.includes(r.sym)).length;
+    let tone,toneColor;
+    if(defTopCnt>=2){tone="⚠️ 방어 섹터(필수소비·유틸·헬스케어)가 상위권 — 시장이 위험을 피하는 중. 공격적 신규 진입 자제";toneColor="#ffd43b";}
+    else if(inflowCnt>=outflow.length*2&&inflowCnt>=6){tone="✅ 유입 우세 — 위험선호 환경. 주도 섹터 공략에 유리한 구간";toneColor="#3fb950";}
+    else if(outflow.length>inflowCnt){tone="🔻 유출 우세 — 자금이 빠지는 장. 현금 비중 유지, 신규 진입 최소화";toneColor="#f85149";}
+    else{tone="↔️ 혼조 — 섹터별 차별화 장세. 🔥가속 섹터만 선별 대응";toneColor="#8b949e";}
+    return {top3,outflow,tone,toneColor,inflowCnt,outflowCnt:outflow.length};
+  },[rows]);
   const Pct=({v})=><span style={{color:v>0?"#3fb950":v<0?"#f85149":"#8b949e",fontFamily:"'JetBrains Mono'",fontWeight:700,fontSize:isMobile?10:11}}>{v>0?"+":""}{(+v).toFixed(1)}%</span>;
 
   return <div style={{maxWidth:1100,margin:"0 auto",padding:isMobile?"8px 10px":"8px 16px"}}>
@@ -1751,6 +1767,32 @@ function SectorEngineTab({mkt,mktTime,mktRt,onRefresh,isMobile}){
       {accel.length>0&&<div style={{background:"#ff922b0d",border:"1px solid #ff922b44",borderRadius:10,padding:"9px 12px",marginBottom:10}}>
         <span style={{fontSize:11,fontWeight:800,color:"#ff922b"}}>🔥 자금 유입 가속 감지: </span>
         <span style={{fontSize:11,color:"#e6edf3",fontWeight:700}}>{accel.map(a=>`${a.nm}(3M ${a.rank3m}위→1W ${a.rank1w}위)`).join(" · ")}</span>
+      </div>}
+
+      {/* 💡 오늘의 판단 가이드 */}
+      {guide&&<div style={{background:"#161b22",border:"1px solid #21262d",borderRadius:10,padding:"11px 14px",marginBottom:10}}>
+        <div style={{fontSize:12,fontWeight:900,color:"#e6edf3",marginBottom:8}}>💡 오늘의 판단</div>
+        <div style={{display:"flex",flexDirection:"column",gap:7,fontSize:isMobile?11:12,lineHeight:1.5}}>
+          <div>
+            <span style={{color:"#484f58",fontSize:10,fontWeight:700,marginRight:6}}>① 주도 섹터</span>
+            <span style={{color:"#e6edf3",fontWeight:700}}>{guide.top3.map(r=>`${r.nm}(RS ${r.rs})`).join(" · ")}</span>
+            <span style={{color:"#8b949e"}}> → 신규 매수는 이 섹터 소속 종목 우선</span>
+          </div>
+          {accel.length>0&&<div>
+            <span style={{color:"#ff922b",fontSize:10,fontWeight:700,marginRight:6}}>② 🔥 유입 시작</span>
+            <span style={{color:"#ff922b",fontWeight:800}}>{accel.map(a=>a.nm).join(" · ")}</span>
+            <span style={{color:"#8b949e"}}> → 관련주 워치 등록 후 ⚡타점 발생 시 진입 검토</span>
+          </div>}
+          {guide.outflow.length>0&&<div>
+            <span style={{color:"#f85149",fontSize:10,fontWeight:700,marginRight:6}}>③ 피할 곳</span>
+            <span style={{color:"#f85149",fontWeight:700}}>{guide.outflow.map(r=>r.nm).join(" · ")}</span>
+            <span style={{color:"#8b949e"}}> → 소속 종목 신규 진입 보류 (싸 보여도 자금 이탈 중)</span>
+          </div>}
+          <div style={{padding:"7px 10px",borderRadius:7,background:guide.toneColor+"12",border:`1px solid ${guide.toneColor}44`}}>
+            <span style={{color:"#484f58",fontSize:10,fontWeight:700,marginRight:6}}>시장 톤 (유입{guide.inflowCnt}·유출{guide.outflowCnt})</span>
+            <span style={{color:guide.toneColor,fontWeight:800,fontSize:isMobile?11:12}}>{guide.tone}</span>
+          </div>
+        </div>
       </div>}
 
       {/* 랭킹 테이블 */}
