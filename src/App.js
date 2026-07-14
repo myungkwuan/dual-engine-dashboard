@@ -2939,7 +2939,7 @@ export default function Dashboard(){
       {/* Tab Nav */}
       <div className="tab-nav" style={{maxWidth:1800,margin:"6px auto",padding:"0 20px"}}>
         <div style={{display:"flex",gap:4,overflowX:"auto",WebkitOverflowScrolling:"touch",paddingBottom:2,scrollbarWidth:"none"}}>
-          {[["main",isMobile?"📊메인":"📊 메인"],["watch",isMobile?("👁워치"+watchlist.length):("👁 워치("+watchlist.length+")")],["port",isMobile?"💼보유":"💼 보유종목"],["filter",isMobile?"🌐시장":"🌐 시장필터"],["calc",isMobile?"🧮포지션":"🧮 포지션"],["check",isMobile?"✅체크":"✅ 체크리스트"],["asset",isMobile?"💰자산":"💰 자산관리"],["grade",isMobile?"📈전환":"📈 전환분석"],["breakout",isMobile?"🎯임박":"🎯 전환임박"],["report",isMobile?"📄리포트":"📄 리포트"],["guide",isMobile?"📖가이드":"📖 가이드"]].map(([k,l])=>
+          {[["main",isMobile?"📊메인":"📊 메인"],["watch",isMobile?("👁워치"+watchlist.length):("👁 워치("+watchlist.length+")")],["port",isMobile?"💼보유":"💼 보유종목"],["filter",isMobile?"🌐시장":"🌐 시장필터"],["asset",isMobile?"💰자산":"💰 자산관리"],["grade",isMobile?"📈전환":"📈 전환분석"],["breakout",isMobile?"🎯임박":"🎯 전환임박"],["report",isMobile?"📄리포트":"📄 리포트"],["guide",isMobile?"📖가이드":"📖 가이드"]].map(([k,l])=>
             <Tb key={k} label={l} active={tab===k} onClick={()=>setTab(k)}/>
           )}
         </div>
