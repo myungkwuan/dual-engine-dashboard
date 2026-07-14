@@ -207,9 +207,10 @@ export default async function handler(req, res) {
           const bars = await fetchChart(sym, "6mo");
           const r3m = returnPct(bars, 63);
           const r1m = returnPct(bars, 21);
-          return { sym, r3m: r3m || 0, r1m: r1m || 0 };
+          const r1w = returnPct(bars, 5);
+          return { sym, r3m: r3m || 0, r1m: r1m || 0, r1w: r1w || 0 };
         } catch {
-          return { sym, r3m: 0, r1m: 0 };
+          return { sym, r3m: 0, r1m: 0, r1w: 0 };
         }
       });
       const batchResults = await Promise.all(promises);
@@ -257,6 +258,30 @@ export default async function handler(req, res) {
     }
     krSectorResults.sort((a, b) => b.r3m - a.r3m);
     results.krSectors = krSectorResults;
+
+    /* ── 4-C. 테마 ETF 스캔 (섹터엔진 카드1용 — 신규, 기존 로직 무관) ── */
+    const themeETFs = [
+      ["SMH","반도체"],["URA","우라늄"],["NLR","원자력"],["GRID","전력망"],
+      ["ARKX","우주"],["ITA","방산"],["IBB","바이오"],["HACK","보안"],
+      ["BOTZ","로봇"],["TAN","태양광"],["PAVE","인프라"],["IGV","소프트웨어"]
+    ];
+    const themeResults = [];
+    for (let i = 0; i < themeETFs.length; i += 5) {
+      const batch = themeETFs.slice(i, i + 5);
+      const pr = batch.map(async ([sym, nm]) => {
+        try {
+          const bars = await fetchChart(sym, "6mo");
+          return { sym, nm, r1w: returnPct(bars, 5) || 0, r1m: returnPct(bars, 21) || 0, r3m: returnPct(bars, 63) || 0 };
+        } catch {
+          return { sym, nm, r1w: 0, r1m: 0, r3m: 0 };
+        }
+      });
+      themeResults.push(...(await Promise.all(pr)));
+      if (i + 5 < themeETFs.length) await sleep(1000);
+    }
+    results.themes = themeResults;
+    /* SPY 1W/1M/3M — 섹터엔진 RS 기준 */
+    results.spyPerf = { r1w: returnPct(spyBars, 5) || 0, r1m: returnPct(spyBars, 21) || 0, r3m: spy3m || 0 };
 
     /* ── 5. 시장 건강도 판정 (미국/한국 동일 구조 v2) ── */
     const vixVal = results.vix?.value || 20;

@@ -1697,6 +1697,97 @@ function GradeAnalyzerTab({gradeHistory,stocks,isMobile}){
 }
 
 
+/* ===== 섹터 엔진 탭 — 자금흐름 랭킹 (Phase 1) ===== */
+function SectorEngineTab({mkt,mktTime,mktRt,onRefresh,isMobile}){
+  const SEC_NM={XLK:"기술",XLC:"커뮤니케이션",XLI:"산업재",XLY:"임의소비재",XLV:"헬스케어",XLU:"유틸리티",XLE:"에너지",XLF:"금융",XLB:"소재",XLP:"필수소비재",XLRE:"부동산"};
+  const SPDR=Object.keys(SEC_NM);
+  const spy=mkt.spyPerf;
+  const themes=mkt.themes||[];
+  const secs=(mkt.sectors||[]).filter(s=>SPDR.includes(s.sym)&&s.r1w!=null);
+  const hasData=!!spy&&themes.length>0&&secs.length>0;
+
+  const rows=useMemo(()=>{
+    if(!hasData)return[];
+    const wm=x=>(x.r1w||0)*0.5+(x.r1m||0)*0.3+(x.r3m||0)*0.2; // 단기 가중 모멘텀 (조기포착)
+    const spyWm=wm(spy);
+    const all=[
+      ...secs.map(s=>({sym:s.sym,nm:SEC_NM[s.sym]||s.sym,type:"섹터",r1w:s.r1w||0,r1m:s.r1m||0,r3m:s.r3m||0})),
+      ...themes.map(t=>({sym:t.sym,nm:t.nm,type:"테마",r1w:t.r1w||0,r1m:t.r1m||0,r3m:t.r3m||0})),
+    ].map(x=>({...x,rs:Math.max(0,Math.min(100,Math.round(50+(wm(x)-spyWm)*3)))}));
+    const rank1w={},rank3m={};
+    [...all].sort((a,b)=>b.r1w-a.r1w).forEach((x,i)=>rank1w[x.sym]=i+1);
+    [...all].sort((a,b)=>b.r3m-a.r3m).forEach((x,i)=>rank3m[x.sym]=i+1);
+    return all.map(x=>{
+      const j1=rank1w[x.sym],j3=rank3m[x.sym];
+      const jump=j3-j1; // +면 최근 순위 급상승
+      let badge,bc;
+      if(jump>=5&&j1<=8){badge="🔥유입가속";bc="#ff922b";}
+      else if(x.r1w>spy.r1w&&x.r1m>spy.r1m){badge="🟢유입";bc="#3fb950";}
+      else if(x.r1w<0&&x.r1m<0&&x.rs<45){badge="🔻유출";bc="#f85149";}
+      else{badge="⚪중립";bc="#8b949e";}
+      return{...x,rank1w:j1,rank3m:j3,jump,badge,bc};
+    }).sort((a,b)=>b.rs-a.rs);
+  },[mkt,hasData]);
+
+  const accel=rows.filter(r=>r.badge==="🔥유입가속");
+  const Pct=({v})=><span style={{color:v>0?"#3fb950":v<0?"#f85149":"#8b949e",fontFamily:"'JetBrains Mono'",fontWeight:700,fontSize:isMobile?10:11}}>{v>0?"+":""}{(+v).toFixed(1)}%</span>;
+
+  return <div style={{maxWidth:1100,margin:"0 auto",padding:isMobile?"8px 10px":"8px 16px"}}>
+    <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:8,flexWrap:"wrap",marginBottom:10}}>
+      <div>
+        <div style={{fontSize:isMobile?15:17,fontWeight:900,color:"#e6edf3"}}>🌊 섹터 엔진 — 자금흐름 랭킹</div>
+        <div style={{fontSize:10,color:"#484f58",marginTop:2}}>SPDR 11섹터 + 테마 12 ETF · 단기가중 RS(1W 50%·1M 30%·3M 20%) · 마지막 조회 {mktTime||"-"}</div>
+      </div>
+      <button onClick={onRefresh} disabled={mktRt==="fetching"}
+        style={{padding:"6px 14px",borderRadius:6,border:"1px solid #58a6ff",background:mktRt==="fetching"?"#21262d":"#58a6ff15",color:mktRt==="fetching"?"#484f58":"#58a6ff",cursor:mktRt==="fetching"?"wait":"pointer",fontSize:12,fontWeight:700,whiteSpace:"nowrap"}}>
+        {mktRt==="fetching"?"조회 중...":"🔄 재조회"}
+      </button>
+    </div>
+
+    {!hasData?<div style={{background:"#161b22",border:"1px solid #21262d",borderRadius:10,padding:24,textAlign:"center",color:"#8b949e",fontSize:12}}>
+      테마 ETF 데이터가 아직 없습니다.<br/><span style={{fontSize:11,color:"#484f58"}}>🔄 재조회를 눌러 최신 시장 데이터를 받아오세요 (약 30초 소요)</span>
+    </div>:<>
+      {/* 🔥 가속 요약 */}
+      {accel.length>0&&<div style={{background:"#ff922b0d",border:"1px solid #ff922b44",borderRadius:10,padding:"9px 12px",marginBottom:10}}>
+        <span style={{fontSize:11,fontWeight:800,color:"#ff922b"}}>🔥 자금 유입 가속 감지: </span>
+        <span style={{fontSize:11,color:"#e6edf3",fontWeight:700}}>{accel.map(a=>`${a.nm}(3M ${a.rank3m}위→1W ${a.rank1w}위)`).join(" · ")}</span>
+      </div>}
+
+      {/* 랭킹 테이블 */}
+      <div style={{background:"#161b22",border:"1px solid #21262d",borderRadius:10,padding:10,overflowX:"auto"}}>
+        <table style={{width:"100%",borderCollapse:"collapse",fontSize:isMobile?10:12}}>
+          <thead><tr style={{borderBottom:"2px solid #21262d"}}>
+            {["#","섹터/테마","1W","1M","3M","RS","상태"].map(h=><th key={h} style={{padding:isMobile?"4px 4px":"5px 8px",textAlign:h==="섹터/테마"?"left":"center",color:"#484f58",fontSize:9,fontWeight:700,whiteSpace:"nowrap"}}>{h}</th>)}
+          </tr></thead>
+          <tbody>
+            {rows.map((r,i)=><tr key={r.sym} style={{borderBottom:"1px solid #21262d22",background:r.badge==="🔥유입가속"?"#ff922b08":"transparent"}}>
+              <td style={{padding:isMobile?"6px 4px":"6px 8px",textAlign:"center",color:"#484f58",fontSize:10,fontFamily:"'JetBrains Mono'"}}>{i+1}</td>
+              <td style={{padding:isMobile?"6px 4px":"6px 8px",whiteSpace:"nowrap"}}>
+                <span style={{fontWeight:800,color:"#e6edf3",fontSize:isMobile?11:12}}>{r.nm}</span>
+                <span style={{fontSize:8,color:"#484f58",marginLeft:4}}>{r.sym}·{r.type}</span>
+                {r.jump>=5&&<span style={{fontSize:8,color:"#ff922b",marginLeft:4}}>↑{r.jump}</span>}
+              </td>
+              <td style={{padding:"6px 4px",textAlign:"center"}}><Pct v={r.r1w}/></td>
+              <td style={{padding:"6px 4px",textAlign:"center"}}><Pct v={r.r1m}/></td>
+              <td style={{padding:"6px 4px",textAlign:"center"}}><Pct v={r.r3m}/></td>
+              <td style={{padding:"6px 4px",textAlign:"center"}}>
+                <span style={{fontWeight:900,fontFamily:"'JetBrains Mono'",fontSize:isMobile?11:13,color:r.rs>=70?"#ff922b":r.rs>=55?"#3fb950":r.rs>=45?"#8b949e":"#f85149"}}>{r.rs}</span>
+              </td>
+              <td style={{padding:"6px 4px",textAlign:"center"}}>
+                <span style={{fontSize:isMobile?9:10,fontWeight:700,color:r.bc,whiteSpace:"nowrap"}}>{r.badge}</span>
+              </td>
+            </tr>)}
+          </tbody>
+        </table>
+      </div>
+      <div style={{fontSize:9,color:"#484f58",marginTop:8,lineHeight:1.7}}>
+        🔥유입가속 = 3M 순위 대비 1W 순위 5계단↑ 급상승 & 1W 상위 8위 이내 — 자금이 <b style={{color:"#8b949e"}}>이제 막 들어오기 시작한</b> 곳<br/>
+        🟢유입 = 1W·1M 모두 SPY 초과 · 🔻유출 = 1W·1M 모두 마이너스 & RS 45 미만 · RS 50 = SPY 동일 수준
+      </div>
+    </>}
+  </div>;
+}
+
 /* ===== 일일 리포트 탭 (PDF 저장 지원) ===== */
 function ReportTab({stocks,anaTime,mkt,isMobile}){
   const[filter,setFilter]=useState("all");
@@ -2953,7 +3044,7 @@ export default function Dashboard(){
       {/* Tab Nav */}
       <div className="tab-nav" style={{maxWidth:1800,margin:"6px auto",padding:"0 20px"}}>
         <div style={{display:"flex",gap:4,overflowX:"auto",WebkitOverflowScrolling:"touch",paddingBottom:2,scrollbarWidth:"none"}}>
-          {[["main",isMobile?"📊메인":"📊 메인"],["watch",isMobile?("👁워치"+watchlist.length):("👁 워치("+watchlist.length+")")],["port",isMobile?"💼보유":"💼 보유종목"],["filter",isMobile?"🌐시장":"🌐 시장필터"],["asset",isMobile?"💰자산":"💰 자산관리"],["grade",isMobile?"📈전환":"📈 전환분석"],["breakout",isMobile?"🎯임박":"🎯 전환임박"],["report",isMobile?"📄리포트":"📄 리포트"],["guide",isMobile?"📖가이드":"📖 가이드"]].map(([k,l])=>
+          {[["main",isMobile?"📊메인":"📊 메인"],["watch",isMobile?("👁워치"+watchlist.length):("👁 워치("+watchlist.length+")")],["port",isMobile?"💼보유":"💼 보유종목"],["filter",isMobile?"🌐시장":"🌐 시장필터"],["sector",isMobile?"🌊섹터":"🌊 섹터엔진"],["asset",isMobile?"💰자산":"💰 자산관리"],["grade",isMobile?"📈전환":"📈 전환분석"],["breakout",isMobile?"🎯임박":"🎯 전환임박"],["report",isMobile?"📄리포트":"📄 리포트"],["guide",isMobile?"📖가이드":"📖 가이드"]].map(([k,l])=>
             <Tb key={k} label={l} active={tab===k} onClick={()=>setTab(k)}/>
           )}
         </div>
@@ -4986,6 +5077,7 @@ export default function Dashboard(){
       })()}
 
       {tab==="grade" && <GradeAnalyzerTab gradeHistory={gradeHistory} stocks={stocks} isMobile={isMobile}/>}
+      {tab==="sector" && <SectorEngineTab mkt={MKT} mktTime={mktTime} mktRt={mktRt} onRefresh={doMarketFilter} isMobile={isMobile}/>}
       {tab==="breakout" && <PreBreakoutTab stocks={stocks} isMobile={isMobile}/>}
       {tab==="report" && <ReportTab stocks={stocks} anaTime={anaTime} mkt={MKT} isMobile={isMobile}/>}
 
