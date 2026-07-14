@@ -2069,6 +2069,8 @@ export default function Dashboard(){
   const[pfAddSearch,setPfAddSearch]=useState('');
   /* 핵심 모드 (5컬럼 간단 테이블) */
   const[coreMode,setCoreMode]=useState(()=>{try{return localStorage.getItem('core_mode')==='1';}catch(e){return false;}});
+  /* AI 추천 카드 접기 (기본 접힘) */
+  const[aiOpen,setAiOpen]=useState(()=>{try{return localStorage.getItem('ai_open')==='1';}catch(e){return false;}});
   /* 듀얼모멘텀 필터 */
   const[dmFilter,setDmFilter]=useState("all");
   /* 상세 필터 접기/펼치기 */
@@ -4437,7 +4439,13 @@ export default function Dashboard(){
           </div>
         );
         return <div style={{maxWidth:1800,margin:'0 auto',padding:'0 20px 12px'}}>
-          <div style={{display:'flex',gap:10,flexWrap:'wrap'}}>
+          <div onClick={()=>{const v=!aiOpen;setAiOpen(v);try{localStorage.setItem('ai_open',v?'1':'0');}catch(e){}}}
+            style={{display:'flex',alignItems:'center',gap:8,padding:'7px 12px',background:'#161b22',border:'1px solid #21262d',borderRadius:8,cursor:'pointer',marginBottom:aiOpen?8:0,userSelect:'none'}}>
+            <span style={{fontSize:12,fontWeight:800,color:'#8b949e'}}>🤖 AI 추천</span>
+            <span style={{fontSize:10,color:'#484f58',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>🔥{buyNowAll.length} · 👀{soonBreakAll.length} · 📈{silentAll.length} · 🎯{tripleGreenAll.length}</span>
+            <span style={{marginLeft:'auto',fontSize:10,color:'#484f58',whiteSpace:'nowrap'}}>{aiOpen?'▲ 접기':'▼ 펼치기'}</span>
+          </div>
+          {aiOpen&&<div style={{display:'flex',gap:10,flexWrap:'wrap'}}>
             <Card icon="🔥" title="즉시 검토 후보" color="#ff1744" cardKey="buyNow" allItems={buyNowAll} items={buyNow} sortLabel="점수순"
               getTag={(d,vd)=>{
                 const vm=vcpMt(d);return vm.includes('성숙')?'VCP성숙':vm.includes('돌파')?'돌파완료':vd.details.volPt>=9?'매집중':'최강';
@@ -4488,7 +4496,7 @@ export default function Dashboard(){
                 return parts.join(' · ');
               }}
             />
-          </div>
+          </div>}
         </div>;
       })()}
 
